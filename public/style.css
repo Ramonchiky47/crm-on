@@ -456,6 +456,36 @@ button:hover {
   font-weight: 600;
 }
 
+.reporte-almacenamiento {
+  max-width: 480px;
+  margin-top: 0.5rem;
+}
+
+.barra-almacenamiento-fondo {
+  background: var(--fondo-suave);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  height: 20px;
+  overflow: hidden;
+}
+
+.barra-almacenamiento {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.barra-almacenamiento-ok {
+  background: var(--exito);
+}
+
+.barra-almacenamiento-alerta {
+  background: #e6a817;
+}
+
+.barra-almacenamiento-critico {
+  background: var(--peligro);
+}
+
 .resultados {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

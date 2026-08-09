@@ -1781,6 +1781,40 @@ tablaActividades.addEventListener('click', async (e) => {
   }
 });
 
+// ---------- Almacenamiento de la base de datos (solo admin) ----------
+
+const tabAlmacenamiento = document.getElementById('tab-almacenamiento');
+const reporteAlmacenamiento = document.getElementById('reporte-almacenamiento');
+const btnActualizarAlmacenamiento = document.getElementById('btn-actualizar-almacenamiento');
+
+function formatearBytes(bytes) {
+  if (bytes >= 1024 ** 3) return (bytes / 1024 ** 3).toFixed(2) + ' GB';
+  return (bytes / 1024 ** 2).toFixed(1) + ' MB';
+}
+
+async function cargarAlmacenamiento() {
+  reporteAlmacenamiento.innerHTML = '<p>Cargando...</p>';
+  const res = await fetch('/api/sistema/almacenamiento');
+  if (!res.ok) {
+    reporteAlmacenamiento.innerHTML = '<p>No se pudo obtener el tamaño de la base de datos.</p>';
+    return;
+  }
+  const { bytesUsados, bytesLimite, plan } = await res.json();
+  const porcentaje = Math.min(100, (bytesUsados / bytesLimite) * 100);
+  let clase = 'barra-almacenamiento-ok';
+  if (porcentaje >= 90) clase = 'barra-almacenamiento-critico';
+  else if (porcentaje >= 70) clase = 'barra-almacenamiento-alerta';
+  reporteAlmacenamiento.innerHTML = `
+    <p><strong>${formatearBytes(bytesUsados)}</strong> usados de <strong>${formatearBytes(bytesLimite)}</strong> (plan ${escaparHtml(plan)}) — ${porcentaje.toFixed(1)}%</p>
+    <div class="barra-almacenamiento-fondo">
+      <div class="barra-almacenamiento ${clase}" style="width: ${porcentaje.toFixed(1)}%"></div>
+    </div>
+    ${porcentaje >= 90 ? '<p class="estatus-vencido">La base de datos está cerca del límite del plan. Considera liberar espacio o mejorar el plan de Supabase.</p>' : ''}
+  `;
+}
+
+btnActualizarAlmacenamiento.addEventListener('click', cargarAlmacenamiento);
+
 promesaAuth.then((sesion) => {
   if (!sesion) return;
   permisosCatalogos = sesion.permisos.catalogos;
@@ -1817,7 +1851,9 @@ promesaAuth.then((sesion) => {
   if (sesion.esAdmin) {
     cargarUsuarios();
     cargarRepresentantes();
+    cargarAlmacenamiento();
   } else {
     tabUsuarios.hidden = true;
+    tabAlmacenamiento.hidden = true;
   }
 });

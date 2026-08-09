@@ -23,6 +23,7 @@
       <button type="button" class="tab-catalogo" data-tab="productos">Productos</button>
       <button type="button" class="tab-catalogo" data-tab="etapa-negocio">Etapa del Negocio</button>
       <button type="button" class="tab-catalogo" data-tab="actividades">Actividades</button>
+      <button type="button" class="tab-catalogo" data-tab="almacenamiento" id="tab-almacenamiento">Almacenamiento</button>
     </div>
 
     <section data-panel="destinos">
@@ -412,6 +413,15 @@
         <thead><tr><th>Actividad</th><th>Acciones</th></tr></thead>
         <tbody id="tabla-actividades"></tbody>
       </table>
+    </section>
+
+    <section data-panel="almacenamiento" hidden>
+      <h2>Almacenamiento de la base de datos</h2>
+      <p class="pista">Tamaño actual de la base de datos (Supabase) contra el límite del plan, para evitar que el proyecto entre en modo de solo lectura.</p>
+      <div id="reporte-almacenamiento" class="reporte-almacenamiento"></div>
+      <div class="acciones-form">
+        <button type="button" id="btn-actualizar-almacenamiento">Actualizar</button>
+      </div>
     </section>
   </div>
 

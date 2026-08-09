@@ -195,6 +195,21 @@ app.get('/api/me', ar(async (req, res) => {
   });
 }));
 
+// ---------- Almacenamiento de la base de datos (solo admin) ----------
+
+// Limite de "database size" del plan Free de Supabase: al superarlo el proyecto entra
+// en modo de solo lectura. Si el proyecto cambia de plan, actualizar este valor.
+const LIMITE_BYTES_ALMACENAMIENTO_BD = 500 * 1024 * 1024;
+
+app.get('/api/sistema/almacenamiento', requireAdmin, ar(async (req, res) => {
+  const fila = await db.prepare('SELECT sum(pg_database_size(datname))::bigint AS bytes FROM pg_database').get();
+  res.json({
+    bytesUsados: Number(fila.bytes || 0),
+    bytesLimite: LIMITE_BYTES_ALMACENAMIENTO_BD,
+    plan: 'Free',
+  });
+}));
+
 // ---------- Administracion de usuarios (solo admin) ----------
 
 app.get('/api/usuarios', requireAdmin, ar(async (req, res) => {

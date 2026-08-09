@@ -1,0 +1,9 @@
+node_modules/
+catalogo.db
+catalogo.backup.*.db
+npm-debug.log*
+.env
+.env.*
+.vercel
+.env*
+Reporte_NetSuite_Gonpal.xlsx

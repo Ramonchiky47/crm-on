@@ -2710,8 +2710,19 @@ app.post('/api/google-tasks/desconectar', requireAdmin, ar(async (req, res) => {
 // esta completada o ya no existe, borra el pendiente del CRM (se considera resuelto).
 app.post('/api/pendientes/sincronizar-google', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
   const conexion = await obtenerConexionGoogle();
-  if (!conexion || !conexion.tasklist_id) return res.json({ conectado: false, eliminados: [] });
+  if (!conexion || !conexion.tasklist_id) return res.json({ conectado: false, eliminados: [], exportados: 0 });
 
+  // Push: pendientes que todavia no tienen tarea en Google (creados antes de conectar, o cuando
+  // la conexion estaba caida) se exportan ahora.
+  const pendientesSinGoogle = await db.prepare(
+    'SELECT id_pendiente FROM pendientes WHERE google_task_id IS NULL'
+  ).all();
+  for (const p of pendientesSinGoogle) {
+    await sincronizarCreacionPendienteGoogle(await pendienteConActividades(p.id_pendiente));
+  }
+
+  // Pull: pendientes ya enlazados cuya tarea en Google ya se completo o se borro, se dan por
+  // resueltos y se borran del CRM.
   const pendientesConGoogle = await db.prepare(
     'SELECT id_pendiente, nombre, google_task_id FROM pendientes WHERE google_task_id IS NOT NULL'
   ).all();
@@ -2725,7 +2736,7 @@ app.post('/api/pendientes/sincronizar-google', requirePermiso('catalogos', 'edit
       eliminados.push({ id_pendiente: p.id_pendiente, nombre: p.nombre });
     }
   }
-  res.json({ conectado: true, eliminados });
+  res.json({ conectado: true, eliminados, exportados: pendientesSinGoogle.length });
 }));
 
 // ---------- Tareas: Actividades (catalogo) y Pendientes ----------

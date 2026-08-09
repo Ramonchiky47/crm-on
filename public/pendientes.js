@@ -105,6 +105,7 @@ const pendienteFechaCompromiso = document.getElementById('pendiente-fecha-compro
 const btnGuardarPendiente = document.getElementById('btn-guardar-pendiente');
 const btnCancelarPendiente = document.getElementById('btn-cancelar-pendiente');
 const tablaPendientes = document.getElementById('tabla-pendientes');
+const btnSincronizarGoogleTasks = document.getElementById('btn-sincronizar-google-tasks');
 
 // ---------- Multi-select de Actividades (mismo patron que Contacto-Destinos en Catalogos) ----------
 
@@ -231,6 +232,27 @@ async function cargarPendientes() {
   const res = await fetch('/api/pendientes');
   const pendientes = await res.json();
   ordenadorPendientes.actualizarDatos(pendientes);
+}
+
+// Trae de Google Tasks las tareas que ya se completaron o se borraron alla (Google Tasks no
+// tiene forma de avisar en tiempo real, asi que esto se llama al abrir Tareas y con el boton).
+async function sincronizarConGoogleTasks() {
+  if (!btnSincronizarGoogleTasks || btnSincronizarGoogleTasks.hidden) return;
+  const textoOriginal = btnSincronizarGoogleTasks.textContent;
+  btnSincronizarGoogleTasks.disabled = true;
+  btnSincronizarGoogleTasks.textContent = 'Sincronizando...';
+  try {
+    const res = await fetch('/api/pendientes/sincronizar-google', { method: 'POST' });
+    if (res.ok) {
+      const resultado = await res.json();
+      if (resultado.eliminados && resultado.eliminados.length) {
+        await cargarPendientes();
+      }
+    }
+  } finally {
+    btnSincronizarGoogleTasks.disabled = false;
+    btnSincronizarGoogleTasks.textContent = textoOriginal;
+  }
 }
 
 function limpiarFormPendiente() {
@@ -657,7 +679,11 @@ promesaAuth.then(async (sesion) => {
   }
 
   formPendiente.hidden = !permisosCatalogos.editar;
+  btnSincronizarGoogleTasks.hidden = !permisosCatalogos.editar;
 
   await cargarPanelActividades();
-  cargarPendientes();
+  await cargarPendientes();
+  if (permisosCatalogos.editar) sincronizarConGoogleTasks();
 });
+
+btnSincronizarGoogleTasks.addEventListener('click', sincronizarConGoogleTasks);

@@ -2498,6 +2498,236 @@ app.post('/api/ordenes/importar-csv', requirePermiso('ordenes', 'editar'), ar(as
   res.json({ total: registros.length, ...resultado });
 }));
 
+// ---------- Integracion con Google Tasks ----------
+//
+// Sincroniza las Tareas (pendientes) del CRM con una sola lista de Google Tasks compartida
+// (una unica cuenta de Google autoriza el acceso, ver /api/google-tasks/conectar). La Tasks API
+// de Google no tiene webhooks/notificaciones push, asi que el sentido CRM->Google es inmediato
+// (al crear/editar/borrar un pendiente) y el sentido Google->CRM se resuelve bajo demanda via
+// POST /api/pendientes/sincronizar-google (se llama al abrir Tareas y con el boton "Sincronizar").
+// Borrar un pendiente en el CRM (= ya se resolvio) marca la tarea como completada en Google, no la
+// borra. Completar una tarea en Google (o borrarla) se traduce a borrar el pendiente en el CRM.
+// Tareas creadas directo en Google (sin pasar por el CRM) se ignoran: un pendiente del CRM
+// requiere Negocio y Actividades, datos que esas tareas no tienen.
+
+const GOOGLE_TASKS_SCOPE = 'https://www.googleapis.com/auth/tasks';
+const GOOGLE_TASKS_NOMBRE_LISTA = 'CRM-ON';
+
+function googleTasksConfigurado() {
+  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+}
+
+function googleRedirectUri(req) {
+  return `${req.protocol}://${req.get('host')}/api/google-tasks/callback`;
+}
+
+async function obtenerConexionGoogle() {
+  return db.prepare('SELECT * FROM google_tasks_conexion WHERE id = 1').get();
+}
+
+// Devuelve un access_token vigente (lo refresca si esta por expirar). null si no hay conexion.
+async function accessTokenGoogleValido() {
+  const conexion = await obtenerConexionGoogle();
+  if (!conexion || !conexion.refresh_token) return null;
+
+  const expiraEn = conexion.token_expira_en ? new Date(conexion.token_expira_en).getTime() : 0;
+  if (conexion.access_token && expiraEn > Date.now() + 60000) return conexion.access_token;
+
+  const resp = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      refresh_token: conexion.refresh_token,
+      grant_type: 'refresh_token',
+    }),
+  });
+  if (!resp.ok) {
+    console.error('No se pudo refrescar el token de Google Tasks:', await resp.text().catch(() => ''));
+    return null;
+  }
+  const datos = await resp.json();
+  const expiraEnNueva = new Date(Date.now() + datos.expires_in * 1000);
+  await db.prepare('UPDATE google_tasks_conexion SET access_token = ?, token_expira_en = ? WHERE id = 1')
+    .run(datos.access_token, expiraEnNueva.toISOString());
+  return datos.access_token;
+}
+
+async function googleTasksApi(metodo, ruta, cuerpo) {
+  const token = await accessTokenGoogleValido();
+  if (!token) return null;
+  const resp = await fetch(`https://tasks.googleapis.com/tasks/v1${ruta}`, {
+    method: metodo,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+  });
+  if (resp.status === 404 || resp.status === 410) return { noEncontrada: true };
+  if (!resp.ok) {
+    console.error(`Google Tasks API ${metodo} ${ruta} -> ${resp.status}:`, await resp.text().catch(() => ''));
+    return null;
+  }
+  if (resp.status === 204) return {};
+  return resp.json();
+}
+
+function fechaLimiteGoogle(fechaCompromiso) {
+  return fechaCompromiso ? `${fechaCompromiso}T00:00:00.000Z` : null;
+}
+
+function notasTareaGoogle(pendiente) {
+  const actividades = (pendiente.actividades || []).map((a) => a.actividad).join(', ');
+  return `Sincronizado desde CRM-ON (ID ${pendiente.id_pendiente})${actividades ? `\nActividades: ${actividades}` : ''}`;
+}
+
+// Las siguientes tres funciones son "best-effort": si Google no esta conectado o la llamada
+// falla, no deben interrumpir el flujo normal del CRM (solo queda sin sincronizar esa tarea).
+
+async function sincronizarCreacionPendienteGoogle(pendiente) {
+  const conexion = await obtenerConexionGoogle();
+  if (!conexion || !conexion.tasklist_id) return;
+  try {
+    const tarea = await googleTasksApi('POST', `/lists/${conexion.tasklist_id}/tasks`, {
+      title: pendiente.nombre,
+      notes: notasTareaGoogle(pendiente),
+      due: fechaLimiteGoogle(pendiente.fecha_compromiso),
+    });
+    if (tarea && tarea.id) {
+      await db.prepare('UPDATE pendientes SET google_task_id = ? WHERE id_pendiente = ?').run(tarea.id, pendiente.id_pendiente);
+    }
+  } catch (e) {
+    console.error('No se pudo crear la tarea en Google Tasks:', e);
+  }
+}
+
+async function sincronizarEdicionPendienteGoogle(pendiente) {
+  if (!pendiente.google_task_id) return sincronizarCreacionPendienteGoogle(pendiente);
+  const conexion = await obtenerConexionGoogle();
+  if (!conexion || !conexion.tasklist_id) return;
+  try {
+    await googleTasksApi('PATCH', `/lists/${conexion.tasklist_id}/tasks/${pendiente.google_task_id}`, {
+      title: pendiente.nombre,
+      notes: notasTareaGoogle(pendiente),
+      due: fechaLimiteGoogle(pendiente.fecha_compromiso),
+    });
+  } catch (e) {
+    console.error('No se pudo actualizar la tarea en Google Tasks:', e);
+  }
+}
+
+async function sincronizarBorradoPendienteGoogle(googleTaskId) {
+  if (!googleTaskId) return;
+  const conexion = await obtenerConexionGoogle();
+  if (!conexion || !conexion.tasklist_id) return;
+  try {
+    await googleTasksApi('PATCH', `/lists/${conexion.tasklist_id}/tasks/${googleTaskId}`, { status: 'completed' });
+  } catch (e) {
+    console.error('No se pudo marcar como completada la tarea en Google Tasks:', e);
+  }
+}
+
+app.get('/api/google-tasks/estado', requireAdmin, ar(async (req, res) => {
+  const conexion = await obtenerConexionGoogle();
+  res.json({
+    disponible: googleTasksConfigurado(),
+    conectado: Boolean(conexion && conexion.refresh_token),
+    conectadoPor: conexion?.conectado_por || null,
+    conectadoEn: conexion?.conectado_en || null,
+  });
+}));
+
+app.get('/api/google-tasks/conectar', requireAdmin, (req, res) => {
+  if (!googleTasksConfigurado()) {
+    return res.status(400).send('Google Tasks no esta configurado (faltan las variables de entorno GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).');
+  }
+  const state = crypto.randomBytes(16).toString('hex');
+  req.session.googleOauthState = state;
+  const params = new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    redirect_uri: googleRedirectUri(req),
+    response_type: 'code',
+    scope: GOOGLE_TASKS_SCOPE,
+    access_type: 'offline',
+    prompt: 'consent',
+    state,
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+app.get('/api/google-tasks/callback', requireAdmin, ar(async (req, res) => {
+  const { code, state, error } = req.query;
+  if (error) return res.redirect('/configuracion.html?google_tasks=error');
+  if (!code || !state || state !== req.session.googleOauthState) {
+    return res.status(400).send('Solicitud invalida (state no coincide).');
+  }
+  delete req.session.googleOauthState;
+
+  const resp = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      code,
+      grant_type: 'authorization_code',
+      redirect_uri: googleRedirectUri(req),
+    }),
+  });
+  if (!resp.ok) {
+    console.error('Error al intercambiar el codigo de Google:', await resp.text().catch(() => ''));
+    return res.redirect('/configuracion.html?google_tasks=error');
+  }
+  const datos = await resp.json();
+  const expiraEn = new Date(Date.now() + datos.expires_in * 1000);
+
+  await db.prepare(`
+    INSERT INTO google_tasks_conexion (id, access_token, refresh_token, token_expira_en, conectado_por, conectado_en)
+    VALUES (1, ?, ?, ?, ?, now())
+    ON CONFLICT (id) DO UPDATE SET
+      access_token = EXCLUDED.access_token,
+      refresh_token = COALESCE(EXCLUDED.refresh_token, google_tasks_conexion.refresh_token),
+      token_expira_en = EXCLUDED.token_expira_en,
+      conectado_por = EXCLUDED.conectado_por,
+      conectado_en = now()
+  `).run(datos.access_token, datos.refresh_token || null, expiraEn.toISOString(), req.session.usuario || null);
+
+  const listas = await googleTasksApi('GET', '/users/@me/lists');
+  let lista = listas?.items?.find((l) => l.title === GOOGLE_TASKS_NOMBRE_LISTA);
+  if (!lista) lista = await googleTasksApi('POST', '/users/@me/lists', { title: GOOGLE_TASKS_NOMBRE_LISTA });
+  if (lista && lista.id) {
+    await db.prepare('UPDATE google_tasks_conexion SET tasklist_id = ? WHERE id = 1').run(lista.id);
+  }
+
+  res.redirect('/configuracion.html?google_tasks=ok');
+}));
+
+app.post('/api/google-tasks/desconectar', requireAdmin, ar(async (req, res) => {
+  await db.prepare('DELETE FROM google_tasks_conexion WHERE id = 1').run();
+  res.status(204).end();
+}));
+
+// Sentido Google -> CRM: revisa cada pendiente ya enlazado a una tarea de Google; si esa tarea
+// esta completada o ya no existe, borra el pendiente del CRM (se considera resuelto).
+app.post('/api/pendientes/sincronizar-google', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const conexion = await obtenerConexionGoogle();
+  if (!conexion || !conexion.tasklist_id) return res.json({ conectado: false, eliminados: [] });
+
+  const pendientesConGoogle = await db.prepare(
+    'SELECT id_pendiente, nombre, google_task_id FROM pendientes WHERE google_task_id IS NOT NULL'
+  ).all();
+
+  const eliminados = [];
+  for (const p of pendientesConGoogle) {
+    const tarea = await googleTasksApi('GET', `/lists/${conexion.tasklist_id}/tasks/${p.google_task_id}`);
+    const resuelta = !tarea || tarea.noEncontrada || tarea.status === 'completed';
+    if (resuelta) {
+      await db.prepare('DELETE FROM pendientes WHERE id_pendiente = ?').run(p.id_pendiente);
+      eliminados.push({ id_pendiente: p.id_pendiente, nombre: p.nombre });
+    }
+  }
+  res.json({ conectado: true, eliminados });
+}));
+
 // ---------- Tareas: Actividades (catalogo) y Pendientes ----------
 
 app.get('/api/actividades', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
@@ -2623,6 +2853,8 @@ app.post('/api/pendientes', requirePermiso('catalogos', 'editar'), ar(async (req
     INSERT INTO pendientes (id_pendiente, nombre, fecha_compromiso, negocio_id, orden_id) VALUES (?, ?, ?, ?, ?)
   `).run(id, nombre, req.body.fecha_compromiso || null, req.body.negocio_id || null, req.body.orden_id || null);
   await reemplazarActividadesPendiente(id, req.body.actividades);
+  const pendiente = await pendienteConActividades(id);
+  await sincronizarCreacionPendienteGoogle(pendiente);
   res.status(201).json(await pendienteConActividades(id));
 }));
 
@@ -2640,12 +2872,16 @@ app.put('/api/pendientes/:id', requirePermiso('catalogos', 'editar'), ar(async (
     UPDATE pendientes SET nombre = ?, fecha_compromiso = ? WHERE id_pendiente = ?
   `).run(nombre, req.body.fecha_compromiso || null, req.params.id);
   await reemplazarActividadesPendiente(req.params.id, req.body.actividades);
+  const pendiente = await pendienteConActividades(req.params.id);
+  await sincronizarEdicionPendienteGoogle(pendiente);
   res.json(await pendienteConActividades(req.params.id));
 }));
 
 app.delete('/api/pendientes/:id', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
-  const info = await db.prepare('DELETE FROM pendientes WHERE id_pendiente = ?').run(req.params.id);
-  if (info.changes === 0) return res.status(404).json({ error: 'Pendiente no encontrado' });
+  const existente = await db.prepare('SELECT google_task_id FROM pendientes WHERE id_pendiente = ?').get(req.params.id);
+  if (!existente) return res.status(404).json({ error: 'Pendiente no encontrado' });
+  await db.prepare('DELETE FROM pendientes WHERE id_pendiente = ?').run(req.params.id);
+  await sincronizarBorradoPendienteGoogle(existente.google_task_id);
   res.status(204).end();
 }));
 

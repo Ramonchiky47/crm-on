@@ -65,6 +65,7 @@ async function abrirDetalle(id) {
 
   modalContenido.innerHTML = `
     <h2>${escaparHtml(orden.id)}</h2>
+    ${permisosOrdenes.editar ? `<button type="button" class="btn-editar-orden-modal" data-id="${escaparHtml(orden.id)}">Editar</button>` : ''}
     <div class="ficha-detalle">
       ${campoFicha('Fecha', orden.fecha)}
       ${campoFicha('Nombre', orden.nombre)}
@@ -115,6 +116,15 @@ function cerrarModal() {
 modalCerrar.addEventListener('click', cerrarModal);
 modalOverlay.addEventListener('click', (e) => {
   if (e.target === modalOverlay) cerrarModal();
+});
+
+modalContenido.addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('btn-editar-orden-modal')) return;
+  const id = e.target.dataset.id;
+  const res = await fetch(`/api/ordenes/${encodeURIComponent(id)}`);
+  const o = await res.json();
+  cerrarModal();
+  cargarOrdenEnFormulario(o);
 });
 
 // ---------- Alta rapida de Destino/Contacto (cuando no existen en el desplegable) ----------
@@ -426,31 +436,34 @@ tabla.addEventListener('click', async (e) => {
   if (e.target.classList.contains('btn-editar')) {
     const res = await fetch(`/api/ordenes/${encodeURIComponent(id)}`);
     const o = await res.json();
-
-    inputIdOriginal.value = o.id;
-    campos.id.value = o.id;
-    campos.id.disabled = true;
-    campos.fecha.value = o.fecha || '';
-    campos.imprimir.value = o.imprimir || '';
-    campos.nombre.value = o.nombre || '';
-    campos.numero_oc.value = o.numero_oc || '';
-    campos.estatus_sistema.value = o.estatus_sistema || '';
-    campos.numero_seguimiento.value = o.numero_seguimiento || '';
-    campos.estatus_id.value = o.estatus_id ?? '';
-    campos.moneda.value = o.moneda ?? '';
-    campos.importe_moneda_extranjera.value = o.importe_moneda_extranjera ?? '';
-    campos.importe.value = o.importe ?? '';
-    campos.estado_entrega_id.value = o.estado_entrega_id ?? '';
-    campos.destino_id.value = o.destino_id ?? '';
-    campos.contacto_id.value = o.contacto_id ?? '';
-    campos.nota.value = o.nota || '';
-    campos.observaciones.value = o.observaciones || '';
-
-    btnGuardar.textContent = 'Guardar cambios';
-    abrirFormulario();
-    campos.fecha.focus();
+    cargarOrdenEnFormulario(o);
   }
 });
+
+function cargarOrdenEnFormulario(o) {
+  inputIdOriginal.value = o.id;
+  campos.id.value = o.id;
+  campos.id.disabled = true;
+  campos.fecha.value = o.fecha || '';
+  campos.imprimir.value = o.imprimir || '';
+  campos.nombre.value = o.nombre || '';
+  campos.numero_oc.value = o.numero_oc || '';
+  campos.estatus_sistema.value = o.estatus_sistema || '';
+  campos.numero_seguimiento.value = o.numero_seguimiento || '';
+  campos.estatus_id.value = o.estatus_id ?? '';
+  campos.moneda.value = o.moneda ?? '';
+  campos.importe_moneda_extranjera.value = o.importe_moneda_extranjera ?? '';
+  campos.importe.value = o.importe ?? '';
+  campos.estado_entrega_id.value = o.estado_entrega_id ?? '';
+  campos.destino_id.value = o.destino_id ?? '';
+  campos.contacto_id.value = o.contacto_id ?? '';
+  campos.nota.value = o.nota || '';
+  campos.observaciones.value = o.observaciones || '';
+
+  btnGuardar.textContent = 'Guardar cambios';
+  abrirFormulario();
+  campos.fecha.focus();
+}
 
 tabla.addEventListener('click', (e) => {
   if (e.target.closest('button') || e.target.classList.contains('check-orden')) return;

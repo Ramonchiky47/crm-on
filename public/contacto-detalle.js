@@ -56,7 +56,7 @@ async function cargarContacto() {
   document.getElementById('lista-destinos-contacto').innerHTML = (contactoActual.destinos || []).length
     ? contactoActual.destinos.map((d) => `
         <div class="tarjeta-item">
-          <span>${escaparHtml(d.destino)}</span>
+          <a href="destino-detalle.html?id=${d.id_destino}">${escaparHtml(d.destino)}</a>
           ${permisosCatalogos.editar ? `<button type="button" class="btn-mini btn-quitar-destino" data-id="${d.id_destino}">Quitar</button>` : ''}
         </div>
       `).join('')

@@ -15,7 +15,7 @@ function insertarBarraUsuario(datos) {
   barra.className = 'barra-usuario';
   barra.innerHTML = `
     <form id="form-buscador-global" class="buscador-global" role="search">
-      <input type="search" autocomplete="off" id="buscador-global-input" placeholder="Buscar contacto, hotel/local u orden..." />
+      <input type="text" autocomplete="off" id="buscador-global-input" placeholder="Buscar contacto, hotel/local u orden..." />
     </form>
     <span>${datos.usuario}${datos.esAdmin ? ' (admin)' : ''}</span>
     <button type="button" id="btn-cerrar-sesion">Cerrar sesión</button>

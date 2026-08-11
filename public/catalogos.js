@@ -131,7 +131,7 @@ function crearMultiSelectCatalogo({ wrapId, btnId, panelId, etiquetaVacio, etiqu
   function renderizar() {
     panel.innerHTML = opciones.length
       ? `
-        <input type="search" autocomplete="off" class="multi-select-buscador" placeholder="Buscar..." />
+        <input type="text" autocomplete="off" class="multi-select-buscador" placeholder="Buscar..." />
         <div class="multi-select-opciones">
           ${opciones.map((nombre) => `
             <label class="multi-select-opcion">
@@ -639,7 +639,7 @@ async function cargarPanelDestinosContacto() {
   const destinos = await res.json();
   contactoDestinosPanel.innerHTML = destinos.length
     ? `
-      <input type="search" autocomplete="off" class="multi-select-buscador" placeholder="Buscar hotel/local..." />
+      <input type="text" autocomplete="off" class="multi-select-buscador" placeholder="Buscar hotel/local..." />
       <div class="multi-select-opciones">
         ${destinos.map((d) => `
           <label class="multi-select-opcion">

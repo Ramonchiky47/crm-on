@@ -299,11 +299,16 @@ function limpiarFormDestino() {
 }
 
 // El catalogo de Contactos depende de Destinos (select de Hoteles/Locales del formulario,
-// y la columna "Hoteles/Locales" de su tabla): se refresca cada vez que Destinos cambia,
-// para que un catalogo actualizado se refleje de inmediato en el otro.
+// y la columna "Hoteles/Locales" de su tabla), y las tablas de Plaza/Grupo/Cadena muestran un
+// conteo de "Hoteles/Locales asociados": todo eso se refresca cada vez que Destinos cambia
+// (alta, edicion, borrado o unificar), para que quede reflejado de inmediato en las demas
+// secciones de esta misma pantalla sin necesidad de recargarla.
 function refrescarDependientesDeDestinos() {
   cargarPanelDestinosContacto();
   cargarContactos();
+  cargarPlazas();
+  cargarGrupos();
+  cargarCadenas();
 }
 
 formDestino.addEventListener('submit', async (e) => {

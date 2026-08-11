@@ -100,17 +100,170 @@ document.querySelectorAll('.tab-catalogo').forEach((boton) => {
 const tabDesdeUrl = new URLSearchParams(window.location.search).get('tab');
 if (tabDesdeUrl) activarTabCatalogo(tabDesdeUrl);
 
-// ---------- Destinos (con empresas asociadas) ----------
+// ---------- Destinos (con Plaza, Grupo y Cadena asociados) ----------
 
 const formDestino = document.getElementById('form-destino');
 const destinoId = document.getElementById('destino-id');
 const destinoNombre = document.getElementById('destino-nombre');
-const destinoEmpresas = document.getElementById('destino-empresas');
 const btnCancelarDestino = document.getElementById('btn-cancelar-destino');
 const tablaDestinos = document.getElementById('tabla-destinos');
 
 let permisosCatalogos = { ver: true, editar: true, borrar: true };
 let esAdminActual = false;
+
+// Widget reutilizable: boton + panel de checkboxes (buscable) para elegir uno o mas valores
+// de un catalogo (Plaza/Grupo/Cadena) dentro del formulario de Destino. Rastrea la seleccion
+// por nombre (no por id) porque el backend crea/enlaza por nombre, igual que antes con el
+// campo de texto libre de Empresas.
+function crearMultiSelectCatalogo({ wrapId, btnId, panelId, etiquetaVacio, etiquetaVarios }) {
+  const wrap = document.getElementById(wrapId);
+  const btn = document.getElementById(btnId);
+  const panel = document.getElementById(panelId);
+  const seleccionados = new Set();
+  let opciones = [];
+
+  function actualizarBoton() {
+    if (seleccionados.size === 0) btn.textContent = etiquetaVacio;
+    else if (seleccionados.size === 1) btn.textContent = [...seleccionados][0];
+    else btn.textContent = `${seleccionados.size} ${etiquetaVarios}`;
+  }
+
+  function renderizar() {
+    panel.innerHTML = opciones.length
+      ? `
+        <input type="search" autocomplete="off" class="multi-select-buscador" placeholder="Buscar..." />
+        <div class="multi-select-opciones">
+          ${opciones.map((nombre) => `
+            <label class="multi-select-opcion">
+              <input type="checkbox" value="${escaparHtml(nombre)}" ${seleccionados.has(nombre) ? 'checked' : ''} /> <span>${escaparHtml(nombre)}</span>
+            </label>
+          `).join('')}
+        </div>
+      `
+      : `<p class="pista">Nada capturado todavía. Usa el botón "+" para agregar.</p>`;
+  }
+
+  panel.addEventListener('input', (e) => {
+    if (!e.target.classList.contains('multi-select-buscador')) return;
+    const filtro = e.target.value.trim().toLowerCase();
+    panel.querySelectorAll('.multi-select-opcion').forEach((label) => {
+      label.hidden = !label.textContent.toLowerCase().includes(filtro);
+    });
+  });
+
+  btn.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      const buscador = panel.querySelector('.multi-select-buscador');
+      if (buscador) {
+        buscador.value = '';
+        panel.querySelectorAll('.multi-select-opcion').forEach((label) => { label.hidden = false; });
+        buscador.focus();
+      }
+    }
+  });
+
+  panel.addEventListener('change', (e) => {
+    if (e.target.type !== 'checkbox') return;
+    if (e.target.checked) seleccionados.add(e.target.value);
+    else seleccionados.delete(e.target.value);
+    actualizarBoton();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target)) panel.hidden = true;
+  });
+
+  return {
+    async cargar(url, campoNombre) {
+      const res = await fetch(url);
+      const filas = await res.json();
+      opciones = filas.map((f) => f[campoNombre]);
+      renderizar();
+      actualizarBoton();
+    },
+    marcar(nombres) {
+      seleccionados.clear();
+      for (const n of nombres || []) seleccionados.add(n);
+      renderizar();
+      actualizarBoton();
+    },
+    obtenerSeleccionados() {
+      return [...seleccionados];
+    },
+    agregarSeleccionado(nombre) {
+      if (!opciones.includes(nombre)) opciones.push(nombre);
+      seleccionados.add(nombre);
+      renderizar();
+      actualizarBoton();
+    },
+  };
+}
+
+const multiSelectPlaza = crearMultiSelectCatalogo({ wrapId: 'destino-plaza-wrap', btnId: 'destino-plaza-btn', panelId: 'destino-plaza-panel', etiquetaVacio: 'Sin plazas', etiquetaVarios: 'plazas seleccionadas' });
+const multiSelectGrupo = crearMultiSelectCatalogo({ wrapId: 'destino-grupo-wrap', btnId: 'destino-grupo-btn', panelId: 'destino-grupo-panel', etiquetaVacio: 'Sin grupos', etiquetaVarios: 'grupos seleccionados' });
+const multiSelectCadena = crearMultiSelectCatalogo({ wrapId: 'destino-cadena-wrap', btnId: 'destino-cadena-btn', panelId: 'destino-cadena-panel', etiquetaVacio: 'Sin cadenas', etiquetaVarios: 'cadenas seleccionadas' });
+
+function refrescarMultiSelectsDestino() {
+  multiSelectPlaza.cargar('/api/empresas', 'empresa');
+  multiSelectGrupo.cargar('/api/grupos', 'grupo');
+  multiSelectCadena.cargar('/api/cadenas', 'cadena');
+}
+
+// ---- Alta rapida de Plaza/Grupo/Cadena (boton "+" junto a cada multi-select) ----
+
+const modalRapidoCatalogoDestinoOverlay = document.getElementById('modal-rapido-catalogo-destino-overlay');
+const modalRapidoCatalogoDestinoCerrar = document.getElementById('modal-rapido-catalogo-destino-cerrar');
+const modalRapidoCatalogoDestinoTitulo = document.getElementById('modal-rapido-catalogo-destino-titulo');
+const modalRapidoCatalogoDestinoNombre = document.getElementById('modal-rapido-catalogo-destino-nombre');
+const formRapidoCatalogoDestino = document.getElementById('form-rapido-catalogo-destino');
+
+const CATALOGOS_DESTINO = {
+  plaza: { titulo: 'Nueva plaza', url: '/api/empresas', campo: 'empresa', multiSelect: multiSelectPlaza, recargarTabla: () => cargarPlazas() },
+  grupo: { titulo: 'Nuevo grupo', url: '/api/grupos', campo: 'grupo', multiSelect: multiSelectGrupo, recargarTabla: () => cargarGrupos() },
+  cadena: { titulo: 'Nueva cadena', url: '/api/cadenas', campo: 'cadena', multiSelect: multiSelectCadena, recargarTabla: () => cargarCadenas() },
+};
+let catalogoDestinoActual = null;
+
+document.querySelectorAll('.btn-agregar-catalogo').forEach((boton) => {
+  boton.addEventListener('click', () => {
+    catalogoDestinoActual = boton.dataset.catalogo;
+    modalRapidoCatalogoDestinoTitulo.textContent = CATALOGOS_DESTINO[catalogoDestinoActual].titulo;
+    formRapidoCatalogoDestino.reset();
+    modalRapidoCatalogoDestinoOverlay.hidden = false;
+    modalRapidoCatalogoDestinoNombre.focus();
+  });
+});
+
+function cerrarModalRapidoCatalogoDestino() {
+  modalRapidoCatalogoDestinoOverlay.hidden = true;
+}
+modalRapidoCatalogoDestinoCerrar.addEventListener('click', cerrarModalRapidoCatalogoDestino);
+modalRapidoCatalogoDestinoOverlay.addEventListener('click', (e) => {
+  if (e.target === modalRapidoCatalogoDestinoOverlay) cerrarModalRapidoCatalogoDestino();
+});
+
+formRapidoCatalogoDestino.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = modalRapidoCatalogoDestinoNombre.value.trim();
+  if (!nombre || !catalogoDestinoActual) return;
+  const config = CATALOGOS_DESTINO[catalogoDestinoActual];
+
+  const res = await fetch(config.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [config.campo]: nombre }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  const creado = await res.json();
+  config.multiSelect.agregarSeleccionado(creado[config.campo]);
+  config.recargarTabla();
+  cerrarModalRapidoCatalogoDestino();
+});
 
 async function cargarDestinos() {
   const res = await fetch('/api/destinos');
@@ -119,15 +272,16 @@ async function cargarDestinos() {
   for (const d of destinos) {
     const tr = document.createElement('tr');
     tr.dataset.id = d.id_destino;
-    const empresasTexto = (d.empresas || []).join(', ');
     tr.innerHTML = `
       <td>${escaparHtml(d.destino)}</td>
-      <td>${escaparHtml(empresasTexto)}</td>
+      <td>${escaparHtml((d.empresas || []).join(', '))}</td>
+      <td>${escaparHtml((d.grupos || []).join(', '))}</td>
+      <td>${escaparHtml((d.cadenas || []).join(', '))}</td>
       <td>${d.cotizaciones_count ? `<button type="button" class="btn-mini btn-ver-asociados" data-entidad="destinos" data-id="${d.id_destino}" data-tipo="cotizaciones">${d.cotizaciones_count}</button>` : '0'}</td>
       <td>${d.ordenes_count ? `<button type="button" class="btn-mini btn-ver-asociados" data-entidad="destinos" data-id="${d.id_destino}" data-tipo="ordenes">${d.ordenes_count}</button>` : '0'}</td>
       <td>${d.tareas_count ? `<button type="button" class="btn-mini btn-ver-asociados" data-entidad="destinos" data-id="${d.id_destino}" data-tipo="tareas">${d.tareas_count}</button>` : '0'}</td>
       <td class="acciones">
-        ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${d.id_destino}" data-nombre="${escaparHtml(d.destino)}" data-empresas="${escaparHtml(empresasTexto)}">Editar</button>` : ''}
+        ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${d.id_destino}">Editar</button>` : ''}
         ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${d.id_destino}">Borrar</button>` : ''}
       </td>
     `;
@@ -138,6 +292,9 @@ async function cargarDestinos() {
 function limpiarFormDestino() {
   destinoId.value = '';
   formDestino.reset();
+  multiSelectPlaza.marcar([]);
+  multiSelectGrupo.marcar([]);
+  multiSelectCadena.marcar([]);
   btnCancelarDestino.hidden = true;
 }
 
@@ -153,7 +310,9 @@ formDestino.addEventListener('submit', async (e) => {
   e.preventDefault();
   const payload = {
     destino: destinoNombre.value.trim(),
-    empresas: destinoEmpresas.value.split(',').map((s) => s.trim()).filter(Boolean),
+    empresas: multiSelectPlaza.obtenerSeleccionados(),
+    grupos: multiSelectGrupo.obtenerSeleccionados(),
+    cadenas: multiSelectCadena.obtenerSeleccionados(),
   };
   const id = destinoId.value;
   const res = await fetch(id ? `/api/destinos/${id}` : '/api/destinos', {
@@ -181,7 +340,9 @@ async function editarDestino(id) {
 
   destinoId.value = d.id_destino;
   destinoNombre.value = d.destino;
-  destinoEmpresas.value = (d.empresas || []).join(', ');
+  multiSelectPlaza.marcar(d.empresas);
+  multiSelectGrupo.marcar(d.grupos);
+  multiSelectCadena.marcar(d.cadenas);
   btnCancelarDestino.hidden = false;
   destinoNombre.focus();
 }
@@ -207,7 +368,7 @@ const btnUnificarDestinos = document.getElementById('btn-unificar-destinos');
 const reporteUnificarDestinos = document.getElementById('reporte-unificar-destinos');
 
 btnUnificarDestinos.addEventListener('click', async () => {
-  if (!confirm('¿Unificar hoteles/locales duplicados (mismo nombre y mismas empresas)? Esta acción no se puede deshacer.')) return;
+  if (!confirm('¿Unificar hoteles/locales duplicados (mismo nombre y mismas plazas/grupos/cadenas)? Esta acción no se puede deshacer.')) return;
 
   btnUnificarDestinos.disabled = true;
   btnUnificarDestinos.textContent = 'Unificando...';
@@ -233,6 +394,218 @@ btnUnificarDestinos.addEventListener('click', async () => {
   } finally {
     btnUnificarDestinos.disabled = false;
     btnUnificarDestinos.textContent = 'Unificar hoteles/locales duplicados';
+  }
+});
+
+// ---- Plaza ----
+// Estas tres funciones tambien refrescan los multi-select del formulario de Destino y su
+// tabla, porque muestran los mismos nombres de Plaza/Grupo/Cadena.
+
+const formPlaza = document.getElementById('form-plaza');
+const plazaId = document.getElementById('plaza-id');
+const plazaNombre = document.getElementById('plaza-nombre');
+const btnCancelarPlaza = document.getElementById('btn-cancelar-plaza');
+const tablaPlazas = document.getElementById('tabla-plazas');
+
+async function cargarPlazas() {
+  const res = await fetch('/api/empresas');
+  const plazas = await res.json();
+  tablaPlazas.innerHTML = plazas.map((p) => `
+    <tr>
+      <td>${escaparHtml(p.id_empresa)}</td>
+      <td>${escaparHtml(p.empresa)}</td>
+      <td>${p.destinos_asociados}</td>
+      <td class="acciones">
+        ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${p.id_empresa}" data-nombre="${escaparHtml(p.empresa)}">Editar</button>` : ''}
+        ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${p.id_empresa}">Borrar</button>` : ''}
+      </td>
+    </tr>
+  `).join('');
+  return plazas;
+}
+
+function limpiarFormPlaza() {
+  plazaId.value = '';
+  formPlaza.reset();
+  btnCancelarPlaza.hidden = true;
+}
+
+formPlaza.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = { empresa: plazaNombre.value.trim() };
+  const id = plazaId.value;
+  const res = await fetch(id ? `/api/empresas/${id}` : '/api/empresas', {
+    method: id ? 'PUT' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  limpiarFormPlaza();
+  cargarPlazas();
+  cargarDestinos();
+  refrescarMultiSelectsDestino();
+});
+
+btnCancelarPlaza.addEventListener('click', limpiarFormPlaza);
+
+tablaPlazas.addEventListener('click', async (e) => {
+  const id = e.target.dataset.id;
+  if (!id) return;
+
+  if (e.target.classList.contains('btn-borrar')) {
+    if (!confirmarDoble('¿Borrar esta plaza?')) return;
+    await eliminarYRecargar(`/api/empresas/${id}`, () => { cargarPlazas(); cargarDestinos(); refrescarMultiSelectsDestino(); });
+  }
+
+  if (e.target.classList.contains('btn-editar')) {
+    plazaId.value = id;
+    plazaNombre.value = e.target.dataset.nombre;
+    btnCancelarPlaza.hidden = false;
+    plazaNombre.focus();
+  }
+});
+
+// ---- Grupo ----
+
+const formGrupo = document.getElementById('form-grupo');
+const grupoId = document.getElementById('grupo-id');
+const grupoNombre = document.getElementById('grupo-nombre');
+const btnCancelarGrupo = document.getElementById('btn-cancelar-grupo');
+const tablaGrupos = document.getElementById('tabla-grupos');
+
+async function cargarGrupos() {
+  const res = await fetch('/api/grupos');
+  const grupos = await res.json();
+  tablaGrupos.innerHTML = grupos.map((g) => `
+    <tr>
+      <td>${escaparHtml(g.id_grupo)}</td>
+      <td>${escaparHtml(g.grupo)}</td>
+      <td>${g.destinos_asociados}</td>
+      <td class="acciones">
+        ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${g.id_grupo}" data-nombre="${escaparHtml(g.grupo)}">Editar</button>` : ''}
+        ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${g.id_grupo}">Borrar</button>` : ''}
+      </td>
+    </tr>
+  `).join('');
+  return grupos;
+}
+
+function limpiarFormGrupo() {
+  grupoId.value = '';
+  formGrupo.reset();
+  btnCancelarGrupo.hidden = true;
+}
+
+formGrupo.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = { grupo: grupoNombre.value.trim() };
+  const id = grupoId.value;
+  const res = await fetch(id ? `/api/grupos/${id}` : '/api/grupos', {
+    method: id ? 'PUT' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  limpiarFormGrupo();
+  cargarGrupos();
+  cargarDestinos();
+  refrescarMultiSelectsDestino();
+});
+
+btnCancelarGrupo.addEventListener('click', limpiarFormGrupo);
+
+tablaGrupos.addEventListener('click', async (e) => {
+  const id = e.target.dataset.id;
+  if (!id) return;
+
+  if (e.target.classList.contains('btn-borrar')) {
+    if (!confirmarDoble('¿Borrar este grupo?')) return;
+    await eliminarYRecargar(`/api/grupos/${id}`, () => { cargarGrupos(); cargarDestinos(); refrescarMultiSelectsDestino(); });
+  }
+
+  if (e.target.classList.contains('btn-editar')) {
+    grupoId.value = id;
+    grupoNombre.value = e.target.dataset.nombre;
+    btnCancelarGrupo.hidden = false;
+    grupoNombre.focus();
+  }
+});
+
+// ---- Cadena ----
+
+const formCadena = document.getElementById('form-cadena');
+const cadenaId = document.getElementById('cadena-id');
+const cadenaNombre = document.getElementById('cadena-nombre');
+const btnCancelarCadena = document.getElementById('btn-cancelar-cadena');
+const tablaCadenas = document.getElementById('tabla-cadenas');
+
+async function cargarCadenas() {
+  const res = await fetch('/api/cadenas');
+  const cadenas = await res.json();
+  tablaCadenas.innerHTML = cadenas.map((c) => `
+    <tr>
+      <td>${escaparHtml(c.id_cadena)}</td>
+      <td>${escaparHtml(c.cadena)}</td>
+      <td>${c.destinos_asociados}</td>
+      <td class="acciones">
+        ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${c.id_cadena}" data-nombre="${escaparHtml(c.cadena)}">Editar</button>` : ''}
+        ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${c.id_cadena}">Borrar</button>` : ''}
+      </td>
+    </tr>
+  `).join('');
+  return cadenas;
+}
+
+function limpiarFormCadena() {
+  cadenaId.value = '';
+  formCadena.reset();
+  btnCancelarCadena.hidden = true;
+}
+
+formCadena.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = { cadena: cadenaNombre.value.trim() };
+  const id = cadenaId.value;
+  const res = await fetch(id ? `/api/cadenas/${id}` : '/api/cadenas', {
+    method: id ? 'PUT' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  limpiarFormCadena();
+  cargarCadenas();
+  cargarDestinos();
+  refrescarMultiSelectsDestino();
+});
+
+btnCancelarCadena.addEventListener('click', limpiarFormCadena);
+
+tablaCadenas.addEventListener('click', async (e) => {
+  const id = e.target.dataset.id;
+  if (!id) return;
+
+  if (e.target.classList.contains('btn-borrar')) {
+    if (!confirmarDoble('¿Borrar esta cadena?')) return;
+    await eliminarYRecargar(`/api/cadenas/${id}`, () => { cargarCadenas(); cargarDestinos(); refrescarMultiSelectsDestino(); });
+  }
+
+  if (e.target.classList.contains('btn-editar')) {
+    cadenaId.value = id;
+    cadenaNombre.value = e.target.dataset.nombre;
+    btnCancelarCadena.hidden = false;
+    cadenaNombre.focus();
   }
 });
 
@@ -1650,6 +2023,9 @@ promesaAuth.then((sesion) => {
   esAdminActual = sesion.esAdmin;
 
   formDestino.hidden = !permisosCatalogos.editar;
+  formPlaza.hidden = !permisosCatalogos.editar;
+  formGrupo.hidden = !permisosCatalogos.editar;
+  formCadena.hidden = !permisosCatalogos.editar;
   formContacto.hidden = !permisosCatalogos.editar;
   formEstatus.hidden = !permisosCatalogos.editar;
   formEstadoEntrega.hidden = !permisosCatalogos.editar;
@@ -1667,6 +2043,10 @@ promesaAuth.then((sesion) => {
   btnPlantillaContactos.hidden = !permisosCatalogos.editar;
 
   cargarDestinos();
+  cargarPlazas();
+  cargarGrupos();
+  cargarCadenas();
+  refrescarMultiSelectsDestino();
   cargarPanelDestinosContacto().then(() => cargarContactos());
   cargarEstatusCatalogo();
   cargarEstadosEntrega();

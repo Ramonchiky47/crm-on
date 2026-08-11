@@ -29,7 +29,157 @@ const btnEditarDestino = document.getElementById('btn-editar-destino');
 const formEditarDestino = document.getElementById('form-editar-destino');
 const btnCancelarEditarDestino = document.getElementById('btn-cancelar-editar-destino');
 const editarDestinoNombre = document.getElementById('editar-destino-nombre');
-const editarDestinoEmpresas = document.getElementById('editar-destino-empresas');
+
+// Mismo widget reutilizable de catalogos.js: boton + panel de checkboxes buscable para elegir
+// uno o mas valores de un catalogo (Plaza/Grupo/Cadena), con seleccion rastreada por nombre.
+function crearMultiSelectCatalogo({ wrapId, btnId, panelId, etiquetaVacio, etiquetaVarios }) {
+  const wrap = document.getElementById(wrapId);
+  const btn = document.getElementById(btnId);
+  const panel = document.getElementById(panelId);
+  const seleccionados = new Set();
+  let opciones = [];
+
+  function actualizarBoton() {
+    if (seleccionados.size === 0) btn.textContent = etiquetaVacio;
+    else if (seleccionados.size === 1) btn.textContent = [...seleccionados][0];
+    else btn.textContent = `${seleccionados.size} ${etiquetaVarios}`;
+  }
+
+  function renderizar() {
+    panel.innerHTML = opciones.length
+      ? `
+        <input type="search" autocomplete="off" class="multi-select-buscador" placeholder="Buscar..." />
+        <div class="multi-select-opciones">
+          ${opciones.map((nombre) => `
+            <label class="multi-select-opcion">
+              <input type="checkbox" value="${escaparHtml(nombre)}" ${seleccionados.has(nombre) ? 'checked' : ''} /> <span>${escaparHtml(nombre)}</span>
+            </label>
+          `).join('')}
+        </div>
+      `
+      : `<p class="pista">Nada capturado todavía. Usa el botón "+" para agregar.</p>`;
+  }
+
+  panel.addEventListener('input', (e) => {
+    if (!e.target.classList.contains('multi-select-buscador')) return;
+    const filtro = e.target.value.trim().toLowerCase();
+    panel.querySelectorAll('.multi-select-opcion').forEach((label) => {
+      label.hidden = !label.textContent.toLowerCase().includes(filtro);
+    });
+  });
+
+  btn.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      const buscador = panel.querySelector('.multi-select-buscador');
+      if (buscador) {
+        buscador.value = '';
+        panel.querySelectorAll('.multi-select-opcion').forEach((label) => { label.hidden = false; });
+        buscador.focus();
+      }
+    }
+  });
+
+  panel.addEventListener('change', (e) => {
+    if (e.target.type !== 'checkbox') return;
+    if (e.target.checked) seleccionados.add(e.target.value);
+    else seleccionados.delete(e.target.value);
+    actualizarBoton();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target)) panel.hidden = true;
+  });
+
+  return {
+    async cargar(url, campoNombre) {
+      const res = await fetch(url);
+      const filas = await res.json();
+      opciones = filas.map((f) => f[campoNombre]);
+      renderizar();
+      actualizarBoton();
+    },
+    marcar(nombres) {
+      seleccionados.clear();
+      for (const n of nombres || []) seleccionados.add(n);
+      renderizar();
+      actualizarBoton();
+    },
+    obtenerSeleccionados() {
+      return [...seleccionados];
+    },
+    agregarSeleccionado(nombre) {
+      if (!opciones.includes(nombre)) opciones.push(nombre);
+      seleccionados.add(nombre);
+      renderizar();
+      actualizarBoton();
+    },
+  };
+}
+
+const multiSelectPlaza = crearMultiSelectCatalogo({ wrapId: 'editar-destino-plaza-wrap', btnId: 'editar-destino-plaza-btn', panelId: 'editar-destino-plaza-panel', etiquetaVacio: 'Sin plazas', etiquetaVarios: 'plazas seleccionadas' });
+const multiSelectGrupo = crearMultiSelectCatalogo({ wrapId: 'editar-destino-grupo-wrap', btnId: 'editar-destino-grupo-btn', panelId: 'editar-destino-grupo-panel', etiquetaVacio: 'Sin grupos', etiquetaVarios: 'grupos seleccionados' });
+const multiSelectCadena = crearMultiSelectCatalogo({ wrapId: 'editar-destino-cadena-wrap', btnId: 'editar-destino-cadena-btn', panelId: 'editar-destino-cadena-panel', etiquetaVacio: 'Sin cadenas', etiquetaVarios: 'cadenas seleccionadas' });
+
+function refrescarMultiSelectsDestino() {
+  multiSelectPlaza.cargar('/api/empresas', 'empresa');
+  multiSelectGrupo.cargar('/api/grupos', 'grupo');
+  multiSelectCadena.cargar('/api/cadenas', 'cadena');
+}
+
+// ---- Alta rapida de Plaza/Grupo/Cadena (boton "+" junto a cada multi-select) ----
+
+const modalRapidoCatalogoDestinoOverlay = document.getElementById('modal-rapido-catalogo-destino-overlay');
+const modalRapidoCatalogoDestinoCerrar = document.getElementById('modal-rapido-catalogo-destino-cerrar');
+const modalRapidoCatalogoDestinoTitulo = document.getElementById('modal-rapido-catalogo-destino-titulo');
+const modalRapidoCatalogoDestinoNombre = document.getElementById('modal-rapido-catalogo-destino-nombre');
+const formRapidoCatalogoDestino = document.getElementById('form-rapido-catalogo-destino');
+
+const CATALOGOS_DESTINO = {
+  plaza: { titulo: 'Nueva plaza', url: '/api/empresas', campo: 'empresa', multiSelect: multiSelectPlaza },
+  grupo: { titulo: 'Nuevo grupo', url: '/api/grupos', campo: 'grupo', multiSelect: multiSelectGrupo },
+  cadena: { titulo: 'Nueva cadena', url: '/api/cadenas', campo: 'cadena', multiSelect: multiSelectCadena },
+};
+let catalogoDestinoActual = null;
+
+document.querySelectorAll('.btn-agregar-catalogo').forEach((boton) => {
+  boton.addEventListener('click', () => {
+    catalogoDestinoActual = boton.dataset.catalogo;
+    modalRapidoCatalogoDestinoTitulo.textContent = CATALOGOS_DESTINO[catalogoDestinoActual].titulo;
+    formRapidoCatalogoDestino.reset();
+    modalRapidoCatalogoDestinoOverlay.hidden = false;
+    modalRapidoCatalogoDestinoNombre.focus();
+  });
+});
+
+function cerrarModalRapidoCatalogoDestino() {
+  modalRapidoCatalogoDestinoOverlay.hidden = true;
+}
+modalRapidoCatalogoDestinoCerrar.addEventListener('click', cerrarModalRapidoCatalogoDestino);
+modalRapidoCatalogoDestinoOverlay.addEventListener('click', (e) => {
+  if (e.target === modalRapidoCatalogoDestinoOverlay) cerrarModalRapidoCatalogoDestino();
+});
+
+formRapidoCatalogoDestino.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = modalRapidoCatalogoDestinoNombre.value.trim();
+  if (!nombre || !catalogoDestinoActual) return;
+  const config = CATALOGOS_DESTINO[catalogoDestinoActual];
+
+  const res = await fetch(config.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [config.campo]: nombre }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  const creado = await res.json();
+  config.multiSelect.agregarSeleccionado(creado[config.campo]);
+  cerrarModalRapidoCatalogoDestino();
+});
 
 async function cargarDestino() {
   const res = await fetch(`/api/destinos/${encodeURIComponent(idDestino)}`);
@@ -42,13 +192,17 @@ async function cargarDestino() {
   document.title = `${destinoActual.destino} · CRM-ON`;
   destinoFicha.innerHTML = `
     ${campoFicha('Nombre', destinoActual.destino)}
-    ${campoFicha('Empresas', (destinoActual.empresas || []).join(', '))}
+    ${campoFicha('Plaza', (destinoActual.empresas || []).join(', '))}
+    ${campoFicha('Grupo', (destinoActual.grupos || []).join(', '))}
+    ${campoFicha('Cadena', (destinoActual.cadenas || []).join(', '))}
   `;
 }
 
 btnEditarDestino.addEventListener('click', () => {
   editarDestinoNombre.value = destinoActual.destino || '';
-  editarDestinoEmpresas.value = (destinoActual.empresas || []).join(', ');
+  multiSelectPlaza.marcar(destinoActual.empresas);
+  multiSelectGrupo.marcar(destinoActual.grupos);
+  multiSelectCadena.marcar(destinoActual.cadenas);
   formEditarDestino.hidden = false;
   btnEditarDestino.hidden = true;
 });
@@ -62,7 +216,9 @@ formEditarDestino.addEventListener('submit', async (e) => {
   e.preventDefault();
   const payload = {
     destino: editarDestinoNombre.value.trim(),
-    empresas: editarDestinoEmpresas.value.split(',').map((s) => s.trim()).filter(Boolean),
+    empresas: multiSelectPlaza.obtenerSeleccionados(),
+    grupos: multiSelectGrupo.obtenerSeleccionados(),
+    cadenas: multiSelectCadena.obtenerSeleccionados(),
   };
   const res = await fetch(`/api/destinos/${encodeURIComponent(idDestino)}`, {
     method: 'PUT',
@@ -279,6 +435,7 @@ promesaAuth.then(async (sesion) => {
   document.querySelector('.tarjeta-buscador-wrap').hidden = !permisosCatalogos.editar;
 
   await Promise.all([cargarContactosDisponibles(), cargarActividadesCache()]);
+  refrescarMultiSelectsDestino();
   await cargarDestino();
   await cargarAsociados();
 });

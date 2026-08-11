@@ -28,26 +28,118 @@
 
     <section data-panel="destinos">
       <h2>Hoteles / Locales</h2>
-      <form id="form-destino" class="form-catalogo form-catalogo-vertical">
-        <input type="hidden" id="destino-id" />
-        <input type="text" id="destino-nombre" placeholder="Nombre del hotel/local" required />
-        <input type="text" id="destino-empresas" placeholder="Empresas asociadas (separadas por coma)" />
-        <div class="acciones-form">
-          <button type="submit">Agregar</button>
-          <button type="button" id="btn-cancelar-destino" hidden>Cancelar</button>
-        </div>
-      </form>
 
-      <div class="acciones-form">
-        <button type="button" id="btn-unificar-destinos">Unificar hoteles/locales duplicados</button>
+      <div class="tarjetas-subcatalogo" id="destinos-subnav">
+        <button type="button" class="tarjeta-subcatalogo activo" data-subtab="lista">
+          <h3>Hoteles / Locales</h3>
+          <p>Nombre, plaza, grupo y cadena asociados</p>
+        </button>
+        <button type="button" class="tarjeta-subcatalogo" data-subtab="plaza">
+          <h3>Plaza</h3>
+          <p>Catálogo de plazas</p>
+        </button>
+        <button type="button" class="tarjeta-subcatalogo" data-subtab="grupo">
+          <h3>Grupo</h3>
+          <p>Catálogo de grupos</p>
+        </button>
+        <button type="button" class="tarjeta-subcatalogo" data-subtab="cadena">
+          <h3>Cadena</h3>
+          <p>Catálogo de cadenas</p>
+        </button>
       </div>
-      <p class="pista">Combina hoteles/locales con el mismo nombre y las mismas empresas asociadas (sin importar mayúsculas, acentos o espacios de más), reasignando sus órdenes.</p>
-      <div id="reporte-unificar-destinos" hidden></div>
 
-      <div class="tabla-scroll">
+      <div data-subpanel="lista">
+        <form id="form-destino" class="form-catalogo form-catalogo-vertical">
+          <input type="hidden" id="destino-id" />
+          <input type="text" id="destino-nombre" placeholder="Nombre del hotel/local" required />
+          <div class="fila">
+            <label>
+              Plaza
+              <span class="campo-con-boton">
+                <div class="multi-select" id="destino-plaza-wrap">
+                  <button type="button" id="destino-plaza-btn" class="multi-select-btn">Sin plazas</button>
+                  <div id="destino-plaza-panel" class="multi-select-panel" hidden></div>
+                </div>
+                <button type="button" class="btn-mini btn-agregar-catalogo" data-catalogo="plaza" title="Agregar plaza nueva">+</button>
+              </span>
+            </label>
+            <label>
+              Grupo
+              <span class="campo-con-boton">
+                <div class="multi-select" id="destino-grupo-wrap">
+                  <button type="button" id="destino-grupo-btn" class="multi-select-btn">Sin grupos</button>
+                  <div id="destino-grupo-panel" class="multi-select-panel" hidden></div>
+                </div>
+                <button type="button" class="btn-mini btn-agregar-catalogo" data-catalogo="grupo" title="Agregar grupo nuevo">+</button>
+              </span>
+            </label>
+            <label>
+              Cadena
+              <span class="campo-con-boton">
+                <div class="multi-select" id="destino-cadena-wrap">
+                  <button type="button" id="destino-cadena-btn" class="multi-select-btn">Sin cadenas</button>
+                  <div id="destino-cadena-panel" class="multi-select-panel" hidden></div>
+                </div>
+                <button type="button" class="btn-mini btn-agregar-catalogo" data-catalogo="cadena" title="Agregar cadena nueva">+</button>
+              </span>
+            </label>
+          </div>
+          <div class="acciones-form">
+            <button type="submit">Agregar</button>
+            <button type="button" id="btn-cancelar-destino" hidden>Cancelar</button>
+          </div>
+        </form>
+
+        <div class="acciones-form">
+          <button type="button" id="btn-unificar-destinos">Unificar hoteles/locales duplicados</button>
+        </div>
+        <p class="pista">Combina hoteles/locales con el mismo nombre y las mismas plazas/grupos/cadenas asociadas (sin importar mayúsculas, acentos o espacios de más), reasignando sus órdenes.</p>
+        <div id="reporte-unificar-destinos" hidden></div>
+
+        <div class="tabla-scroll">
+          <table>
+            <thead><tr><th>Hotel / Local</th><th>Plaza</th><th>Grupo</th><th>Cadena</th><th>Cotizaciones</th><th>Órdenes</th><th>Tareas</th><th>Acciones</th></tr></thead>
+            <tbody id="tabla-destinos"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div data-subpanel="plaza" hidden>
+        <form id="form-plaza" class="form-catalogo">
+          <input type="hidden" id="plaza-id" />
+          <input type="text" id="plaza-nombre" placeholder="Nombre de la plaza" required />
+          <button type="submit">Agregar</button>
+          <button type="button" id="btn-cancelar-plaza" hidden>Cancelar</button>
+        </form>
         <table>
-          <thead><tr><th>Hotel / Local</th><th>Empresas</th><th>Cotizaciones</th><th>Órdenes</th><th>Tareas</th><th>Acciones</th></tr></thead>
-          <tbody id="tabla-destinos"></tbody>
+          <thead><tr><th>ID</th><th>Plaza</th><th>Hoteles/Locales asociados</th><th>Acciones</th></tr></thead>
+          <tbody id="tabla-plazas"></tbody>
+        </table>
+      </div>
+
+      <div data-subpanel="grupo" hidden>
+        <form id="form-grupo" class="form-catalogo">
+          <input type="hidden" id="grupo-id" />
+          <input type="text" id="grupo-nombre" placeholder="Nombre del grupo" required />
+          <button type="submit">Agregar</button>
+          <button type="button" id="btn-cancelar-grupo" hidden>Cancelar</button>
+        </form>
+        <table>
+          <thead><tr><th>ID</th><th>Grupo</th><th>Hoteles/Locales asociados</th><th>Acciones</th></tr></thead>
+          <tbody id="tabla-grupos"></tbody>
+        </table>
+      </div>
+
+      <div data-subpanel="cadena" hidden>
+        <form id="form-cadena" class="form-catalogo">
+          <input type="hidden" id="cadena-id" />
+          <input type="text" id="cadena-nombre" placeholder="Nombre de la cadena" required />
+          <button type="submit">Agregar</button>
+          <button type="button" id="btn-cancelar-cadena" hidden>Cancelar</button>
+        </form>
+        <table>
+          <thead><tr><th>ID</th><th>Cadena</th><th>Hoteles/Locales asociados</th><th>Acciones</th></tr></thead>
+          <tbody id="tabla-cadenas"></tbody>
         </table>
       </div>
     </section>
@@ -423,6 +515,19 @@
         <button type="button" id="btn-actualizar-almacenamiento">Actualizar</button>
       </div>
     </section>
+
+    <div id="modal-rapido-catalogo-destino-overlay" class="modal-overlay" hidden>
+      <div class="modal-caja modal-caja-chica" role="dialog" aria-modal="true">
+        <button type="button" id="modal-rapido-catalogo-destino-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
+        <h3 id="modal-rapido-catalogo-destino-titulo">Agregar</h3>
+        <form id="form-rapido-catalogo-destino">
+          <input type="text" id="modal-rapido-catalogo-destino-nombre" required autofocus />
+          <div class="acciones-form">
+            <button type="submit">Agregar</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
   <script src="auth.js"></script>

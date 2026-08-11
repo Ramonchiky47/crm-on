@@ -22,7 +22,38 @@
 
         <form id="form-editar-destino" class="form-catalogo form-catalogo-vertical" hidden>
           <input type="text" id="editar-destino-nombre" placeholder="Nombre del hotel/local" required />
-          <input type="text" id="editar-destino-empresas" placeholder="Empresas asociadas (separadas por coma)" />
+          <div class="fila">
+            <label>
+              Plaza
+              <span class="campo-con-boton">
+                <div class="multi-select" id="editar-destino-plaza-wrap">
+                  <button type="button" id="editar-destino-plaza-btn" class="multi-select-btn">Sin plazas</button>
+                  <div id="editar-destino-plaza-panel" class="multi-select-panel" hidden></div>
+                </div>
+                <button type="button" class="btn-mini btn-agregar-catalogo" data-catalogo="plaza" title="Agregar plaza nueva">+</button>
+              </span>
+            </label>
+            <label>
+              Grupo
+              <span class="campo-con-boton">
+                <div class="multi-select" id="editar-destino-grupo-wrap">
+                  <button type="button" id="editar-destino-grupo-btn" class="multi-select-btn">Sin grupos</button>
+                  <div id="editar-destino-grupo-panel" class="multi-select-panel" hidden></div>
+                </div>
+                <button type="button" class="btn-mini btn-agregar-catalogo" data-catalogo="grupo" title="Agregar grupo nuevo">+</button>
+              </span>
+            </label>
+            <label>
+              Cadena
+              <span class="campo-con-boton">
+                <div class="multi-select" id="editar-destino-cadena-wrap">
+                  <button type="button" id="editar-destino-cadena-btn" class="multi-select-btn">Sin cadenas</button>
+                  <div id="editar-destino-cadena-panel" class="multi-select-panel" hidden></div>
+                </div>
+                <button type="button" class="btn-mini btn-agregar-catalogo" data-catalogo="cadena" title="Agregar cadena nueva">+</button>
+              </span>
+            </label>
+          </div>
           <div class="acciones-form">
             <button type="submit">Guardar</button>
             <button type="button" id="btn-cancelar-editar-destino">Cancelar</button>
@@ -73,6 +104,19 @@
           </form>
           <p id="pista-tarea-sin-orden" class="pista" hidden>Necesitas al menos una orden asociada a este hotel/local para poder agregar tareas.</p>
         </div>
+      </div>
+    </div>
+
+    <div id="modal-rapido-catalogo-destino-overlay" class="modal-overlay" hidden>
+      <div class="modal-caja modal-caja-chica" role="dialog" aria-modal="true">
+        <button type="button" id="modal-rapido-catalogo-destino-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
+        <h3 id="modal-rapido-catalogo-destino-titulo">Agregar</h3>
+        <form id="form-rapido-catalogo-destino">
+          <input type="text" id="modal-rapido-catalogo-destino-nombre" required autofocus />
+          <div class="acciones-form">
+            <button type="submit">Agregar</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

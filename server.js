@@ -540,7 +540,12 @@ async function empresasDeDestino(destinoId) {
 async function destinoConEmpresas(id) {
   const d = await db.prepare('SELECT * FROM destinos WHERE id_destino = ?').get(id);
   if (!d) return null;
-  return { ...d, empresas: await empresasDeDestino(id) };
+  const [empresas, grupos, cadenas] = await Promise.all([
+    empresasDeDestino(id),
+    gruposDeDestino(id),
+    cadenasDeDestino(id),
+  ]);
+  return { ...d, empresas, grupos, cadenas };
 }
 
 // Version en lote de empresasDeDestino: una sola consulta para todos los destinos en vez de
@@ -593,18 +598,112 @@ async function reemplazarEmpresasDestino(destinoId, empresas) {
   }
 }
 
+// Grupo y Cadena son catalogos independientes adicionales al de Plaza (tabla empresas), con el
+// mismo patron de 3 tablas cada uno: Grupos/Destino_Grupos y Cadenas/Destino_Cadenas.
+async function obtenerOCrearGrupo(nombre, fuente = db) {
+  const limpio = quitarAcentos(String(nombre || '').trim());
+  if (!limpio) return null;
+  const existente = await fuente.prepare('SELECT id_grupo FROM grupos WHERE grupo = ?').get(limpio);
+  if (existente) return existente.id_grupo;
+  return (await fuente.prepare('INSERT INTO grupos (grupo) VALUES (?)').run(limpio)).lastInsertRowid;
+}
+
+async function gruposDeDestino(destinoId) {
+  const filas = await db.prepare(`
+    SELECT g.grupo FROM destino_grupos dg
+    JOIN grupos g ON g.id_grupo = dg.grupo_id
+    WHERE dg.destino_id = ?
+    ORDER BY dg.id
+  `).all(destinoId);
+  return filas.map((r) => r.grupo);
+}
+
+async function gruposDeDestinosBatch(destinoIds) {
+  const mapa = new Map();
+  if (!destinoIds.length) return mapa;
+  const filas = await db.prepare(`
+    SELECT dg.destino_id, g.grupo FROM destino_grupos dg
+    JOIN grupos g ON g.id_grupo = dg.grupo_id
+    WHERE dg.destino_id = ANY(?)
+    ORDER BY dg.id
+  `).all(destinoIds);
+  for (const f of filas) {
+    if (!mapa.has(f.destino_id)) mapa.set(f.destino_id, []);
+    mapa.get(f.destino_id).push(f.grupo);
+  }
+  return mapa;
+}
+
+async function reemplazarGruposDestino(destinoId, grupos) {
+  await db.prepare('DELETE FROM destino_grupos WHERE destino_id = ?').run(destinoId);
+  for (const grupo of grupos || []) {
+    const grupoId = await obtenerOCrearGrupo(grupo);
+    if (grupoId) {
+      await db.prepare('INSERT INTO destino_grupos (destino_id, grupo_id) VALUES (?, ?) ON CONFLICT (destino_id, grupo_id) DO NOTHING').run(destinoId, grupoId);
+    }
+  }
+}
+
+async function obtenerOCrearCadena(nombre, fuente = db) {
+  const limpio = quitarAcentos(String(nombre || '').trim());
+  if (!limpio) return null;
+  const existente = await fuente.prepare('SELECT id_cadena FROM cadenas WHERE cadena = ?').get(limpio);
+  if (existente) return existente.id_cadena;
+  return (await fuente.prepare('INSERT INTO cadenas (cadena) VALUES (?)').run(limpio)).lastInsertRowid;
+}
+
+async function cadenasDeDestino(destinoId) {
+  const filas = await db.prepare(`
+    SELECT c.cadena FROM destino_cadenas dc
+    JOIN cadenas c ON c.id_cadena = dc.cadena_id
+    WHERE dc.destino_id = ?
+    ORDER BY dc.id
+  `).all(destinoId);
+  return filas.map((r) => r.cadena);
+}
+
+async function cadenasDeDestinosBatch(destinoIds) {
+  const mapa = new Map();
+  if (!destinoIds.length) return mapa;
+  const filas = await db.prepare(`
+    SELECT dc.destino_id, c.cadena FROM destino_cadenas dc
+    JOIN cadenas c ON c.id_cadena = dc.cadena_id
+    WHERE dc.destino_id = ANY(?)
+    ORDER BY dc.id
+  `).all(destinoIds);
+  for (const f of filas) {
+    if (!mapa.has(f.destino_id)) mapa.set(f.destino_id, []);
+    mapa.get(f.destino_id).push(f.cadena);
+  }
+  return mapa;
+}
+
+async function reemplazarCadenasDestino(destinoId, cadenas) {
+  await db.prepare('DELETE FROM destino_cadenas WHERE destino_id = ?').run(destinoId);
+  for (const cadena of cadenas || []) {
+    const cadenaId = await obtenerOCrearCadena(cadena);
+    if (cadenaId) {
+      await db.prepare('INSERT INTO destino_cadenas (destino_id, cadena_id) VALUES (?, ?) ON CONFLICT (destino_id, cadena_id) DO NOTHING').run(destinoId, cadenaId);
+    }
+  }
+}
+
 app.get('/api/destinos', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const destinos = req.session.esAdmin
     ? await db.prepare('SELECT * FROM destinos ORDER BY destino').all()
     : await db.prepare('SELECT * FROM destinos WHERE usuario_id = ? ORDER BY destino').all(req.session.usuarioId);
   const destinoIds = destinos.map((d) => d.id_destino);
-  const [empresasPorDestino, conteos] = await Promise.all([
+  const [empresasPorDestino, gruposPorDestino, cadenasPorDestino, conteos] = await Promise.all([
     empresasDeDestinosBatch(destinoIds),
+    gruposDeDestinosBatch(destinoIds),
+    cadenasDeDestinosBatch(destinoIds),
     conteosAsociadosDestinosBatch(destinoIds),
   ]);
   res.json(destinos.map((d) => ({
     ...d,
     empresas: empresasPorDestino.get(d.id_destino) || [],
+    grupos: gruposPorDestino.get(d.id_destino) || [],
+    cadenas: cadenasPorDestino.get(d.id_destino) || [],
     cotizaciones_count: conteos.cotizaciones.get(d.id_destino) || 0,
     ordenes_count: conteos.ordenes.get(d.id_destino) || 0,
     tareas_count: conteos.tareas.get(d.id_destino) || 0,
@@ -671,8 +770,9 @@ app.delete('/api/destinos/:id/contactos/:contactoId', requirePermiso('catalogos'
   res.status(204).end();
 }));
 
-// Catalogo independiente de empresas (tabla propia); se administra escribiendo
-// nombres en el formulario de Destino, que crea/enlaza automaticamente.
+// Catalogos independientes de Plaza (tabla empresas), Grupo y Cadena: se administran tanto desde
+// su propia pantalla de catalogo (alta/edicion/borrado) como escribiendo nombres nuevos en el
+// formulario de Destino (o con el "+" de alta rapida), que los crea/enlaza automaticamente.
 app.get('/api/empresas', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const empresas = await db.prepare(`
     SELECT e.id_empresa, e.empresa, COUNT(de.id) AS destinos_asociados
@@ -684,6 +784,127 @@ app.get('/api/empresas', requirePermiso('catalogos', 'ver'), ar(async (req, res)
   res.json(empresas);
 }));
 
+app.post('/api/empresas', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const empresa = quitarAcentos((req.body.empresa || '').trim());
+  if (!empresa) return res.status(400).json({ errores: ['empresa (plaza) es requerida'] });
+  try {
+    const info = await db.prepare('INSERT INTO empresas (empresa) VALUES (?)').run(empresa);
+    res.status(201).json({ id_empresa: info.lastInsertRowid, empresa, destinos_asociados: 0 });
+  } catch (e) {
+    res.status(400).json({ errores: ['Esa plaza ya existe'] });
+  }
+}));
+
+app.put('/api/empresas/:id', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const empresa = quitarAcentos((req.body.empresa || '').trim());
+  if (!empresa) return res.status(400).json({ errores: ['empresa (plaza) es requerida'] });
+  try {
+    const info = await db.prepare('UPDATE empresas SET empresa = ? WHERE id_empresa = ?').run(empresa, req.params.id);
+    if (info.changes === 0) return res.status(404).json({ error: 'Plaza no encontrada' });
+    res.json({ id_empresa: Number(req.params.id), empresa });
+  } catch (e) {
+    res.status(400).json({ errores: ['Esa plaza ya existe'] });
+  }
+}));
+
+app.delete('/api/empresas/:id', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {
+  const enUso = await db.prepare('SELECT COUNT(*) c FROM destino_empresas WHERE empresa_id = ?').get(req.params.id);
+  if (Number(enUso.c) > 0) {
+    return res.status(400).json({ errores: [`No se puede borrar: ${enUso.c} hotel(es)/local(es) usan esta plaza.`] });
+  }
+  const info = await db.prepare('DELETE FROM empresas WHERE id_empresa = ?').run(req.params.id);
+  if (info.changes === 0) return res.status(404).json({ error: 'Plaza no encontrada' });
+  res.status(204).end();
+}));
+
+app.get('/api/grupos', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const grupos = await db.prepare(`
+    SELECT g.id_grupo, g.grupo, COUNT(dg.id) AS destinos_asociados
+    FROM grupos g
+    LEFT JOIN destino_grupos dg ON dg.grupo_id = g.id_grupo
+    GROUP BY g.id_grupo
+    ORDER BY g.grupo
+  `).all();
+  res.json(grupos);
+}));
+
+app.post('/api/grupos', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const grupo = quitarAcentos((req.body.grupo || '').trim());
+  if (!grupo) return res.status(400).json({ errores: ['grupo es requerido'] });
+  try {
+    const info = await db.prepare('INSERT INTO grupos (grupo) VALUES (?)').run(grupo);
+    res.status(201).json({ id_grupo: info.lastInsertRowid, grupo, destinos_asociados: 0 });
+  } catch (e) {
+    res.status(400).json({ errores: ['Ese grupo ya existe'] });
+  }
+}));
+
+app.put('/api/grupos/:id', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const grupo = quitarAcentos((req.body.grupo || '').trim());
+  if (!grupo) return res.status(400).json({ errores: ['grupo es requerido'] });
+  try {
+    const info = await db.prepare('UPDATE grupos SET grupo = ? WHERE id_grupo = ?').run(grupo, req.params.id);
+    if (info.changes === 0) return res.status(404).json({ error: 'Grupo no encontrado' });
+    res.json({ id_grupo: Number(req.params.id), grupo });
+  } catch (e) {
+    res.status(400).json({ errores: ['Ese grupo ya existe'] });
+  }
+}));
+
+app.delete('/api/grupos/:id', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {
+  const enUso = await db.prepare('SELECT COUNT(*) c FROM destino_grupos WHERE grupo_id = ?').get(req.params.id);
+  if (Number(enUso.c) > 0) {
+    return res.status(400).json({ errores: [`No se puede borrar: ${enUso.c} hotel(es)/local(es) usan este grupo.`] });
+  }
+  const info = await db.prepare('DELETE FROM grupos WHERE id_grupo = ?').run(req.params.id);
+  if (info.changes === 0) return res.status(404).json({ error: 'Grupo no encontrado' });
+  res.status(204).end();
+}));
+
+app.get('/api/cadenas', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const cadenas = await db.prepare(`
+    SELECT c.id_cadena, c.cadena, COUNT(dc.id) AS destinos_asociados
+    FROM cadenas c
+    LEFT JOIN destino_cadenas dc ON dc.cadena_id = c.id_cadena
+    GROUP BY c.id_cadena
+    ORDER BY c.cadena
+  `).all();
+  res.json(cadenas);
+}));
+
+app.post('/api/cadenas', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const cadena = quitarAcentos((req.body.cadena || '').trim());
+  if (!cadena) return res.status(400).json({ errores: ['cadena es requerida'] });
+  try {
+    const info = await db.prepare('INSERT INTO cadenas (cadena) VALUES (?)').run(cadena);
+    res.status(201).json({ id_cadena: info.lastInsertRowid, cadena, destinos_asociados: 0 });
+  } catch (e) {
+    res.status(400).json({ errores: ['Esa cadena ya existe'] });
+  }
+}));
+
+app.put('/api/cadenas/:id', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const cadena = quitarAcentos((req.body.cadena || '').trim());
+  if (!cadena) return res.status(400).json({ errores: ['cadena es requerida'] });
+  try {
+    const info = await db.prepare('UPDATE cadenas SET cadena = ? WHERE id_cadena = ?').run(cadena, req.params.id);
+    if (info.changes === 0) return res.status(404).json({ error: 'Cadena no encontrada' });
+    res.json({ id_cadena: Number(req.params.id), cadena });
+  } catch (e) {
+    res.status(400).json({ errores: ['Esa cadena ya existe'] });
+  }
+}));
+
+app.delete('/api/cadenas/:id', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {
+  const enUso = await db.prepare('SELECT COUNT(*) c FROM destino_cadenas WHERE cadena_id = ?').get(req.params.id);
+  if (Number(enUso.c) > 0) {
+    return res.status(400).json({ errores: [`No se puede borrar: ${enUso.c} hotel(es)/local(es) usan esta cadena.`] });
+  }
+  const info = await db.prepare('DELETE FROM cadenas WHERE id_cadena = ?').run(req.params.id);
+  if (info.changes === 0) return res.status(404).json({ error: 'Cadena no encontrada' });
+  res.status(204).end();
+}));
+
 app.post('/api/destinos', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
   const destino = quitarAcentos((req.body.destino || '').trim());
   if (!destino) return res.status(400).json({ errores: ['destino es requerido'] });
@@ -691,6 +912,8 @@ app.post('/api/destinos', requirePermiso('catalogos', 'editar'), ar(async (req, 
   try {
     const info = await db.prepare('INSERT INTO destinos (destino, usuario_id) VALUES (?, ?)').run(destino, req.session.usuarioId);
     await reemplazarEmpresasDestino(info.lastInsertRowid, req.body.empresas);
+    await reemplazarGruposDestino(info.lastInsertRowid, req.body.grupos);
+    await reemplazarCadenasDestino(info.lastInsertRowid, req.body.cadenas);
     res.status(201).json(await destinoConEmpresas(info.lastInsertRowid));
   } catch (e) {
     res.status(400).json({ errores: ['Ese hotel/local ya existe'] });
@@ -707,6 +930,8 @@ app.put('/api/destinos/:id', requirePermiso('catalogos', 'editar'), ar(async (re
   try {
     await db.prepare('UPDATE destinos SET destino = ? WHERE id_destino = ?').run(destino, req.params.id);
     if (req.body.empresas !== undefined) await reemplazarEmpresasDestino(req.params.id, req.body.empresas);
+    if (req.body.grupos !== undefined) await reemplazarGruposDestino(req.params.id, req.body.grupos);
+    if (req.body.cadenas !== undefined) await reemplazarCadenasDestino(req.params.id, req.body.cadenas);
     res.json(await destinoConEmpresas(req.params.id));
   } catch (e) {
     res.status(400).json({ errores: ['Ese hotel/local ya existe'] });
@@ -726,7 +951,7 @@ app.delete('/api/destinos/:id', requirePermiso('catalogos', 'borrar'), ar(async 
   res.status(204).end();
 }));
 
-// Unifica destinos "casi iguales": mismo nombre y mismas empresas ignorando
+// Unifica destinos "casi iguales": mismo nombre y mismas plazas/grupos/cadenas ignorando
 // mayusculas/minusculas, acentos y espacios repetidos (ej. "Alof Guadalajara" y
 // "ALOF  Guadalajara " se consideran el mismo destino).
 // Conserva el de menor id, reasigna las ordenes que apuntaban al duplicado y borra el duplicado.
@@ -734,14 +959,16 @@ app.post('/api/destinos/unificar', requirePermiso('catalogos', 'borrar'), ar(asy
   const destinos = req.session.esAdmin
     ? await db.prepare('SELECT * FROM destinos').all()
     : await db.prepare('SELECT * FROM destinos WHERE usuario_id = ?').all(req.session.usuarioId);
-  const grupos = new Map();
+  const clavesAgrupadas = new Map();
 
   for (const d of destinos) {
     const empresas = (await empresasDeDestino(d.id_destino)).map(normalizarParaComparar).sort();
+    const grupos = (await gruposDeDestino(d.id_destino)).map(normalizarParaComparar).sort();
+    const cadenas = (await cadenasDeDestino(d.id_destino)).map(normalizarParaComparar).sort();
     // La clave incluye usuario_id para nunca unificar destinos de distintos duenos entre si.
-    const clave = `${d.usuario_id}|${normalizarParaComparar(d.destino)} ${empresas.join(' ')}`;
-    if (!grupos.has(clave)) grupos.set(clave, []);
-    grupos.get(clave).push(d);
+    const clave = `${d.usuario_id}|${normalizarParaComparar(d.destino)} ${empresas.join(' ')}|${grupos.join(' ')}|${cadenas.join(' ')}`;
+    if (!clavesAgrupadas.has(clave)) clavesAgrupadas.set(clave, []);
+    clavesAgrupadas.get(clave).push(d);
   }
 
   const resultado = await transaction(async (db) => {
@@ -750,7 +977,7 @@ app.post('/api/destinos/unificar', requirePermiso('catalogos', 'borrar'), ar(asy
     let ordenesReasignadas = 0;
     const detalle = [];
 
-    for (const grupo of grupos.values()) {
+    for (const grupo of clavesAgrupadas.values()) {
       if (grupo.length < 2) continue;
 
       grupo.sort((a, b) => a.id_destino - b.id_destino);
@@ -760,6 +987,8 @@ app.post('/api/destinos/unificar', requirePermiso('catalogos', 'borrar'), ar(asy
         const info = await db.prepare('UPDATE ordenes SET destino_id = ? WHERE destino_id = ?').run(sobreviviente.id_destino, dup.id_destino);
         ordenesReasignadas += info.changes;
         await db.prepare('DELETE FROM destino_empresas WHERE destino_id = ?').run(dup.id_destino);
+        await db.prepare('DELETE FROM destino_grupos WHERE destino_id = ?').run(dup.id_destino);
+        await db.prepare('DELETE FROM destino_cadenas WHERE destino_id = ?').run(dup.id_destino);
         await db.prepare('DELETE FROM destinos WHERE id_destino = ?').run(dup.id_destino);
         duplicadosEliminados++;
       }

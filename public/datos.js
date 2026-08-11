@@ -67,6 +67,8 @@ async function cargarDestinos() {
       <td>${d.id_destino}</td>
       <td>${escaparHtml(d.destino)}</td>
       <td>${escaparHtml((d.empresas || []).join(', '))}</td>
+      <td>${escaparHtml((d.grupos || []).join(', '))}</td>
+      <td>${escaparHtml((d.cadenas || []).join(', '))}</td>
     </tr>
   `).join('');
 }
@@ -96,6 +98,36 @@ async function cargarEmpresas() {
       <td>${e.id_empresa}</td>
       <td>${escaparHtml(e.empresa)}</td>
       <td>${e.destinos_asociados}</td>
+    </tr>
+  `).join('');
+}
+
+async function cargarGrupos() {
+  const res = await fetch('/api/grupos');
+  const grupos = await res.json();
+  document.getElementById('conteo-grupos').textContent = grupos.length;
+
+  const tabla = document.getElementById('tabla-grupos');
+  tabla.innerHTML = grupos.map((g) => `
+    <tr>
+      <td>${g.id_grupo}</td>
+      <td>${escaparHtml(g.grupo)}</td>
+      <td>${g.destinos_asociados}</td>
+    </tr>
+  `).join('');
+}
+
+async function cargarCadenas() {
+  const res = await fetch('/api/cadenas');
+  const cadenas = await res.json();
+  document.getElementById('conteo-cadenas').textContent = cadenas.length;
+
+  const tabla = document.getElementById('tabla-cadenas');
+  tabla.innerHTML = cadenas.map((c) => `
+    <tr>
+      <td>${c.id_cadena}</td>
+      <td>${escaparHtml(c.cadena)}</td>
+      <td>${c.destinos_asociados}</td>
     </tr>
   `).join('');
 }
@@ -142,12 +174,16 @@ promesaAuth.then((sesion) => {
     cargarDestinos();
     cargarContactos();
     cargarEmpresas();
+    cargarGrupos();
+    cargarCadenas();
     cargarEstatusCatalogo();
     cargarEstadosEntrega();
   } else {
     document.getElementById('tabla-destinos').closest('section').hidden = true;
     document.getElementById('tabla-contactos').closest('section').hidden = true;
     document.getElementById('tabla-empresas').closest('section').hidden = true;
+    document.getElementById('tabla-grupos').closest('section').hidden = true;
+    document.getElementById('tabla-cadenas').closest('section').hidden = true;
     document.getElementById('tabla-estatus').closest('section').hidden = true;
     document.getElementById('tabla-estado-entrega').closest('section').hidden = true;
   }

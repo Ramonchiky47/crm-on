@@ -1339,6 +1339,7 @@ formRapidoContacto.addEventListener('submit', async (e) => {
 
   const creado = await res.json();
   await poblarSelectsCotizacion();
+  await poblarSelectsNegocio();
   cotizacionContacto.value = creado.id_contacto;
   actualizarCampoVacio(cotizacionContacto);
 

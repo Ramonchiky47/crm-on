@@ -1698,6 +1698,62 @@ function refrescarDependientesDeProductoCatalogo() {
   cargarProductos(productosBuscador.value.trim());
 }
 
+// ---- Alta rapida de Categoria/Linea/Marca (boton "+" junto a cada select del formulario de Producto) ----
+
+const modalRapidoCatalogoProductoOverlay = document.getElementById('modal-rapido-catalogo-producto-overlay');
+const modalRapidoCatalogoProductoCerrar = document.getElementById('modal-rapido-catalogo-producto-cerrar');
+const modalRapidoCatalogoProductoTitulo = document.getElementById('modal-rapido-catalogo-producto-titulo');
+const modalRapidoCatalogoProductoNombre = document.getElementById('modal-rapido-catalogo-producto-nombre');
+const formRapidoCatalogoProducto = document.getElementById('form-rapido-catalogo-producto');
+
+const CATALOGOS_PRODUCTO = {
+  categoria: { titulo: 'Nueva categoría', url: '/api/categorias', campo: 'categoria', campoId: 'id_categoria', select: productoCategoria, recargarTabla: () => cargarCategorias() },
+  linea: { titulo: 'Nueva línea', url: '/api/lineas', campo: 'linea', campoId: 'id_linea', select: productoLinea, recargarTabla: () => cargarLineas() },
+  marca: { titulo: 'Nueva marca', url: '/api/marcas', campo: 'marca', campoId: 'id_marca', select: productoMarca, recargarTabla: () => cargarMarcas() },
+};
+let catalogoProductoActual = null;
+
+document.querySelectorAll('.btn-agregar-catalogo-producto').forEach((boton) => {
+  boton.addEventListener('click', () => {
+    catalogoProductoActual = boton.dataset.catalogo;
+    modalRapidoCatalogoProductoTitulo.textContent = CATALOGOS_PRODUCTO[catalogoProductoActual].titulo;
+    formRapidoCatalogoProducto.reset();
+    modalRapidoCatalogoProductoOverlay.hidden = false;
+    modalRapidoCatalogoProductoNombre.focus();
+  });
+});
+
+function cerrarModalRapidoCatalogoProducto() {
+  modalRapidoCatalogoProductoOverlay.hidden = true;
+}
+modalRapidoCatalogoProductoCerrar.addEventListener('click', cerrarModalRapidoCatalogoProducto);
+modalRapidoCatalogoProductoOverlay.addEventListener('click', (e) => {
+  if (e.target === modalRapidoCatalogoProductoOverlay) cerrarModalRapidoCatalogoProducto();
+});
+
+formRapidoCatalogoProducto.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = modalRapidoCatalogoProductoNombre.value.trim();
+  if (!nombre || !catalogoProductoActual) return;
+  const config = CATALOGOS_PRODUCTO[catalogoProductoActual];
+
+  const res = await fetch(config.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [config.campo]: nombre }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  const creado = await res.json();
+  await poblarSelectsProducto();
+  config.select.value = creado[config.campoId];
+  config.recargarTabla();
+  cerrarModalRapidoCatalogoProducto();
+});
+
 function renderizarProductos(productos) {
   tablaProductos.innerHTML = productos.map((p) => `
     <tr>

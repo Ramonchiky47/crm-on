@@ -367,15 +367,24 @@
           <div class="fila">
             <label>
               Categoría
-              <select id="producto-categoria"><option value="">-- Selecciona --</option></select>
+              <span class="campo-con-boton">
+                <select id="producto-categoria"><option value="">-- Selecciona --</option></select>
+                <button type="button" class="btn-mini btn-agregar-catalogo-producto" data-catalogo="categoria" title="Agregar categoría nueva">+</button>
+              </span>
             </label>
             <label>
               Línea
-              <select id="producto-linea"><option value="">-- Selecciona --</option></select>
+              <span class="campo-con-boton">
+                <select id="producto-linea"><option value="">-- Selecciona --</option></select>
+                <button type="button" class="btn-mini btn-agregar-catalogo-producto" data-catalogo="linea" title="Agregar línea nueva">+</button>
+              </span>
             </label>
             <label>
               Marca
-              <select id="producto-marca"><option value="">-- Selecciona --</option></select>
+              <span class="campo-con-boton">
+                <select id="producto-marca"><option value="">-- Selecciona --</option></select>
+                <button type="button" class="btn-mini btn-agregar-catalogo-producto" data-catalogo="marca" title="Agregar marca nueva">+</button>
+              </span>
             </label>
           </div>
           <div class="fila">
@@ -522,6 +531,19 @@
         <h3 id="modal-rapido-catalogo-destino-titulo">Agregar</h3>
         <form id="form-rapido-catalogo-destino">
           <input type="text" id="modal-rapido-catalogo-destino-nombre" required autofocus />
+          <div class="acciones-form">
+            <button type="submit">Agregar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="modal-rapido-catalogo-producto-overlay" class="modal-overlay" hidden>
+      <div class="modal-caja modal-caja-chica" role="dialog" aria-modal="true">
+        <button type="button" id="modal-rapido-catalogo-producto-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
+        <h3 id="modal-rapido-catalogo-producto-titulo">Agregar</h3>
+        <form id="form-rapido-catalogo-producto">
+          <input type="text" id="modal-rapido-catalogo-producto-nombre" required autofocus />
           <div class="acciones-form">
             <button type="submit">Agregar</button>
           </div>

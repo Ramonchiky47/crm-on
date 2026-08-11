@@ -265,9 +265,10 @@ formRapidoCatalogoDestino.addEventListener('submit', async (e) => {
   cerrarModalRapidoCatalogoDestino();
 });
 
-async function cargarDestinos() {
-  const res = await fetch('/api/destinos');
-  const destinos = await res.json();
+let destinosCache = [];
+const destinosBuscador = document.getElementById('destinos-buscador');
+
+function renderizarDestinos(destinos) {
   tablaDestinos.innerHTML = '';
   for (const d of destinos) {
     const tr = document.createElement('tr');
@@ -287,6 +288,22 @@ async function cargarDestinos() {
     `;
     tablaDestinos.appendChild(tr);
   }
+}
+
+function aplicarFiltroDestinos() {
+  const filtro = destinosBuscador.value.trim();
+  const filtrados = destinosCache.filter((d) =>
+    coincideTexto(d.destino, filtro) || (d.empresas || []).some((e) => coincideTexto(e, filtro))
+  );
+  renderizarDestinos(filtrados);
+}
+
+destinosBuscador.addEventListener('input', aplicarFiltroDestinos);
+
+async function cargarDestinos() {
+  const res = await fetch('/api/destinos');
+  destinosCache = await res.json();
+  aplicarFiltroDestinos();
 }
 
 function limpiarFormDestino() {

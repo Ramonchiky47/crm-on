@@ -2775,7 +2775,9 @@ app.post('/api/pendientes/sincronizar-google', requirePermiso('catalogos', 'edit
   }
 
   // Pull: pendientes ya enlazados cuya tarea en Google ya se completo o se borro, se dan por
-  // resueltos y se borran del CRM.
+  // resueltos y se borran del CRM. IMPORTANTE: si la consulta a Google falla por cualquier otro
+  // motivo (red, rate limit, token, etc.) NO se borra nada; "no se pudo verificar" nunca debe
+  // tratarse como "ya se resolvio" (un bug anterior aqui borro tareas reales por esta confusion).
   const pendientesConGoogle = await db.prepare(
     'SELECT id_pendiente, nombre, google_task_id FROM pendientes WHERE google_task_id IS NOT NULL'
   ).all();
@@ -2783,7 +2785,8 @@ app.post('/api/pendientes/sincronizar-google', requirePermiso('catalogos', 'edit
   const eliminados = [];
   for (const p of pendientesConGoogle) {
     const tarea = await googleTasksApi('GET', `/lists/${conexion.tasklist_id}/tasks/${p.google_task_id}`);
-    const resuelta = !tarea || tarea.noEncontrada || tarea.status === 'completed';
+    if (!tarea) continue; // no se pudo verificar el estado: se deja intacta, no se asume nada.
+    const resuelta = tarea.noEncontrada || tarea.status === 'completed';
     if (resuelta) {
       await db.prepare('DELETE FROM pendientes WHERE id_pendiente = ?').run(p.id_pendiente);
       eliminados.push({ id_pendiente: p.id_pendiente, nombre: p.nombre });

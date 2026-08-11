@@ -1502,19 +1502,42 @@ app.put('/api/productos/:item', requirePermiso('catalogos', 'editar'), ar(async 
     return res.status(400).json({ errores: ['precio_usd es requerido'] });
   }
 
-  await db.prepare(`
-    UPDATE productos SET descripcion = ?, categoria_id = ?, linea_id = ?, marca_id = ?, precio_usd = ?, precio_mxn = ?
-    WHERE item = ?
-  `).run(
-    (req.body.descripcion || '').trim() || null,
-    req.body.categoria_id || null,
-    req.body.linea_id || null,
-    req.body.marca_id || null,
-    Number(precioUsd),
-    req.body.precio_mxn !== undefined && req.body.precio_mxn !== '' ? Number(req.body.precio_mxn) : null,
-    req.params.item
-  );
-  res.json(await db.prepare(`${SELECT_PRODUCTOS} WHERE p.item = ?`).get(req.params.item));
+  const nuevoItem = (req.body.item || '').trim();
+  const cambiaItem = nuevoItem && nuevoItem !== req.params.item;
+  if (cambiaItem && !req.session.esAdmin) {
+    return res.status(403).json({ errores: ['Solo un administrador puede modificar el codigo del producto'] });
+  }
+  if (cambiaItem) {
+    const yaExiste = await db.prepare('SELECT item FROM productos WHERE item = ?').get(nuevoItem);
+    if (yaExiste) return res.status(400).json({ errores: ['Ya existe un producto con ese Item'] });
+  }
+
+  const descripcion = (req.body.descripcion || '').trim() || null;
+  const categoriaId = req.body.categoria_id || null;
+  const lineaId = req.body.linea_id || null;
+  const marcaId = req.body.marca_id || null;
+  const precioMxn = req.body.precio_mxn !== undefined && req.body.precio_mxn !== '' ? Number(req.body.precio_mxn) : null;
+  const itemFinal = cambiaItem ? nuevoItem : req.params.item;
+
+  if (cambiaItem) {
+    // productos.item es PK referenciada por cotizacion_items.producto_item (FK sin ON UPDATE CASCADE),
+    // por lo que se inserta el nuevo item, se reasignan los items de cotizacion y hasta entonces se borra el anterior.
+    await transaction(async (db) => {
+      await db.prepare(`
+        INSERT INTO productos (item, descripcion, categoria_id, linea_id, marca_id, precio_usd, precio_mxn)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(nuevoItem, descripcion, categoriaId, lineaId, marcaId, Number(precioUsd), precioMxn);
+      await db.prepare('UPDATE cotizacion_items SET producto_item = ? WHERE producto_item = ?').run(nuevoItem, req.params.item);
+      await db.prepare('DELETE FROM productos WHERE item = ?').run(req.params.item);
+    });
+  } else {
+    await db.prepare(`
+      UPDATE productos SET descripcion = ?, categoria_id = ?, linea_id = ?, marca_id = ?, precio_usd = ?, precio_mxn = ?
+      WHERE item = ?
+    `).run(descripcion, categoriaId, lineaId, marcaId, Number(precioUsd), precioMxn, req.params.item);
+  }
+
+  res.json(await db.prepare(`${SELECT_PRODUCTOS} WHERE p.item = ?`).get(itemFinal));
 }));
 
 app.delete('/api/productos/:item', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {

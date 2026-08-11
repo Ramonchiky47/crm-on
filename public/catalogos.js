@@ -110,6 +110,7 @@ const btnCancelarDestino = document.getElementById('btn-cancelar-destino');
 const tablaDestinos = document.getElementById('tabla-destinos');
 
 let permisosCatalogos = { ver: true, editar: true, borrar: true };
+let esAdminActual = false;
 
 async function cargarDestinos() {
   const res = await fetch('/api/destinos');
@@ -1397,7 +1398,7 @@ tablaProductos.addEventListener('click', async (e) => {
 
     productoItemOriginal.value = p.item;
     productoItem.value = p.item;
-    productoItem.readOnly = true;
+    productoItem.readOnly = !esAdminActual;
     productoDescripcion.value = p.descripcion || '';
     productoCategoria.value = p.categoria_id || '';
     productoLinea.value = p.linea_id || '';
@@ -1646,6 +1647,7 @@ btnActualizarAlmacenamiento.addEventListener('click', cargarAlmacenamiento);
 promesaAuth.then((sesion) => {
   if (!sesion) return;
   permisosCatalogos = sesion.permisos.catalogos;
+  esAdminActual = sesion.esAdmin;
 
   formDestino.hidden = !permisosCatalogos.editar;
   formContacto.hidden = !permisosCatalogos.editar;

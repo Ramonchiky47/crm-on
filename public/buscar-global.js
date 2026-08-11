@@ -94,7 +94,7 @@ function tablaNegocios(negocios) {
 function renderContacto(c) {
   return `
     <div class="tarjeta-resultado-buscador">
-      <h3>Contacto: ${escaparHtml(c.nombre_completo)}</h3>
+      <h3>Contacto: <a href="contacto-detalle.html?id=${c.id_contacto}">${escaparHtml(c.nombre_completo)}</a></h3>
       <p class="pista">
         ${c.correo_electronico ? escaparHtml(c.correo_electronico) : 'Sin correo'}
         ${c.telefono_local ? ' · Tel. local: ' + escaparHtml(c.telefono_local) : ''}
@@ -115,7 +115,7 @@ function renderDestino(d) {
   const contactosTexto = (d.contactos || []).map((c) => c.nombre_completo).join(', ') || 'Ninguno';
   return `
     <div class="tarjeta-resultado-buscador">
-      <h3>Hotel / Local: ${escaparHtml(d.destino)}</h3>
+      <h3>Hotel / Local: <a href="destino-detalle.html?id=${d.id_destino}">${escaparHtml(d.destino)}</a></h3>
       <p class="pista">Contactos asociados: ${escaparHtml(contactosTexto)}</p>
       <h4>Órdenes</h4>
       ${tablaOrdenes(d.ordenes)}

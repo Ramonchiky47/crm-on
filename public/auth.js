@@ -3,6 +3,13 @@
 // usuario no puede ver. Expone `promesaAuth`, una promesa que resuelve con
 // los datos de la sesion (o null si redirigio a login).
 
+// Doble confirmacion para acciones destructivas o irreversibles (Borrar, Listo, etc.):
+// primero la pregunta especifica de la accion, luego una confirmacion generica.
+function confirmarDoble(mensaje) {
+  if (!confirm(mensaje)) return false;
+  return confirm('Esta acción no se puede deshacer. ¿Confirmas que deseas continuar?');
+}
+
 function insertarBarraUsuario(datos) {
   const barra = document.createElement('div');
   barra.className = 'barra-usuario';

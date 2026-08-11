@@ -297,11 +297,12 @@ tablaPendientes.addEventListener('click', async (e) => {
 
   if (id) {
     if (e.target.classList.contains('btn-listo')) {
+      if (!confirmarDoble('¿Marcar este pendiente como listo?')) return;
       await eliminarYRecargar(`/api/pendientes/${id}`, cargarPendientes);
     }
 
     if (e.target.classList.contains('btn-borrar')) {
-      if (!confirm('¿Borrar este pendiente?')) return;
+      if (!confirmarDoble('¿Borrar este pendiente?')) return;
       await eliminarYRecargar(`/api/pendientes/${id}`, cargarPendientes);
     }
 

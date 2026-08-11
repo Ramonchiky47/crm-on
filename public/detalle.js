@@ -159,7 +159,7 @@ tabla.addEventListener('click', async (e) => {
   if (!idDetalle) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Seguro que quieres borrar este artículo?')) return;
+    if (!confirmarDoble('¿Seguro que quieres borrar este artículo?')) return;
     await fetch(`/api/detalle-compra/${idDetalle}`, { method: 'DELETE' });
     cargarDetalle();
   }

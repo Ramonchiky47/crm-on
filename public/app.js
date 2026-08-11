@@ -428,7 +428,7 @@ tabla.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Seguro que quieres borrar esta orden?')) return;
+    if (!confirmarDoble('¿Seguro que quieres borrar esta orden?')) return;
     await fetch(`/api/ordenes/${encodeURIComponent(id)}`, { method: 'DELETE' });
     cargarOrdenes();
   }

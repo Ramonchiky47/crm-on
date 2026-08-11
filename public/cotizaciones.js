@@ -952,7 +952,7 @@ tablaCotizaciones.addEventListener('click', async (e) => {
   }
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Borrar esta cotización?')) return;
+    if (!confirmarDoble('¿Borrar esta cotización?')) return;
     const res = await fetch(`/api/cotizaciones/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));

@@ -193,7 +193,7 @@ tablaDestinos.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Borrar este hotel/local?')) return;
+    if (!confirmarDoble('¿Borrar este hotel/local?')) return;
     await eliminarYRecargar(`/api/destinos/${id}`, cargarDestinos);
     refrescarDependientesDeDestinos();
   }
@@ -497,7 +497,7 @@ tablaContactos.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Borrar este contacto?')) return;
+    if (!confirmarDoble('¿Borrar este contacto?')) return;
     await eliminarYRecargar(`/api/contactos/${id}`, cargarContactos);
   }
 
@@ -735,7 +735,7 @@ tablaEstatus.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Borrar este estatus?')) return;
+    if (!confirmarDoble('¿Borrar este estatus?')) return;
     await eliminarYRecargar(`/api/estatus/${id}`, cargarEstatusCatalogo);
   }
 
@@ -800,7 +800,7 @@ tablaEstadoEntrega.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Borrar este estado de entrega?')) return;
+    if (!confirmarDoble('¿Borrar este estado de entrega?')) return;
     await eliminarYRecargar(`/api/estados-entrega/${id}`, cargarEstadosEntrega);
   }
 
@@ -953,7 +953,7 @@ tablaUsuarios.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Seguro que quieres borrar este usuario?')) return;
+    if (!confirmarDoble('¿Seguro que quieres borrar este usuario?')) return;
     const res = await fetch(`/api/usuarios/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
@@ -1047,7 +1047,7 @@ tablaRepresentantes.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Borrar este representante?')) return;
+    if (!confirmarDoble('¿Borrar este representante?')) return;
     await eliminarYRecargar(`/api/representantes/${id}`, cargarRepresentantes);
   }
 
@@ -1131,7 +1131,7 @@ tablaCategorias.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Borrar esta categoría?')) return;
+    if (!confirmarDoble('¿Borrar esta categoría?')) return;
     await eliminarYRecargar(`/api/categorias/${id}`, () => cargarCategorias().then(refrescarDependientesDeProductoCatalogo));
   }
 
@@ -1198,7 +1198,7 @@ tablaLineas.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Borrar esta línea?')) return;
+    if (!confirmarDoble('¿Borrar esta línea?')) return;
     await eliminarYRecargar(`/api/lineas/${id}`, () => cargarLineas().then(refrescarDependientesDeProductoCatalogo));
   }
 
@@ -1265,7 +1265,7 @@ tablaMarcas.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Borrar esta marca?')) return;
+    if (!confirmarDoble('¿Borrar esta marca?')) return;
     await eliminarYRecargar(`/api/marcas/${id}`, () => cargarMarcas().then(refrescarDependientesDeProductoCatalogo));
   }
 
@@ -1386,7 +1386,7 @@ tablaProductos.addEventListener('click', async (e) => {
   if (!item) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm(`¿Borrar el producto "${item}"?`)) return;
+    if (!confirmarDoble(`¿Borrar el producto "${item}"?`)) return;
     await eliminarYRecargar(`/api/productos/${encodeURIComponent(item)}`, () => cargarProductos(productosBuscador.value.trim()));
   }
 
@@ -1533,7 +1533,7 @@ tablaEtapaNegocio.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Borrar esta etapa?')) return;
+    if (!confirmarDoble('¿Borrar esta etapa?')) return;
     await eliminarYRecargar(`/api/etapas-negocio/${id}`, cargarEtapasNegocio);
   }
 
@@ -1598,7 +1598,7 @@ tablaActividades.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirm('¿Borrar esta actividad?')) return;
+    if (!confirmarDoble('¿Borrar esta actividad?')) return;
     await eliminarYRecargar(`/api/actividades/${id}`, cargarActividades);
   }
 

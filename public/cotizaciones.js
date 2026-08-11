@@ -1596,7 +1596,7 @@ function descargarPDFCotizacion(id) {
   window.location.href = `/api/cotizaciones/${encodeURIComponent(id)}/pdf?descargar=1`;
 }
 
-promesaAuth.then((sesion) => {
+promesaAuth.then(async (sesion) => {
   if (!sesion) return;
   permisosCatalogos = sesion.permisos.catalogos;
   formNegocio.hidden = !permisosCatalogos.editar;
@@ -1621,5 +1621,24 @@ promesaAuth.then((sesion) => {
   if (cotizacionId) {
     activarSubtab('visualizacion');
     abrirDetalleCotizacion(cotizacionId);
+  }
+
+  // Se llego desde el detalle de un Contacto o Hotel/Local ("+ Agregar cotizacion"): abre la
+  // Captura con negocio/contacto/destino pre-llenados cuando se conocen.
+  if (parametros.get('tab') === 'captura') {
+    const negocioIdUrl = parametros.get('negocio_id');
+    const contactoIdUrl = parametros.get('contacto_id');
+    const destinoIdUrl = parametros.get('destino_id');
+    await Promise.all([poblarSelectsNegocio(), poblarSelectsCotizacion()]);
+    activarSubtab('captura');
+    limpiarFormCotizacion();
+    abrirFormCotizacion();
+    if (negocioIdUrl) {
+      cotizacionNegocio.value = negocioIdUrl;
+      replicarContactoYDestinoDeNegocio(negocioIdUrl);
+    } else if (contactoIdUrl) {
+      cotizacionContacto.value = contactoIdUrl;
+    }
+    if (destinoIdUrl) cotizacionDestino.value = destinoIdUrl;
   }
 });

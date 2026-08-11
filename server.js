@@ -611,13 +611,27 @@ app.get('/api/destinos', requirePermiso('catalogos', 'ver'), ar(async (req, res)
   })));
 }));
 
-// Cotizaciones, ordenes y tareas asociadas a un destino (hotel/local), para el detalle desde
-// el catalogo de Hoteles/Locales. Igual que en Contactos, las tareas se derivan via la orden.
+// Un solo destino con sus conteos de asociados, para la pantalla de detalle (destino-detalle.html).
+app.get('/api/destinos/:id', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const destino = await destinoConEmpresas(req.params.id);
+  if (!destino || !esDueno(destino, req)) return res.status(404).json({ error: 'Hotel/local no encontrado' });
+  const conteos = await conteosAsociadosDestinosBatch([destino.id_destino]);
+  res.json({
+    ...destino,
+    cotizaciones_count: conteos.cotizaciones.get(destino.id_destino) || 0,
+    ordenes_count: conteos.ordenes.get(destino.id_destino) || 0,
+    tareas_count: conteos.tareas.get(destino.id_destino) || 0,
+  });
+}));
+
+// Cotizaciones, ordenes, tareas y contactos asociados a un destino (hotel/local), para el
+// detalle desde el catalogo de Hoteles/Locales. Igual que en Contactos, las tareas se derivan
+// via la orden (los negocios no referencian destino_id).
 app.get('/api/destinos/:id/asociados', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const destino = await db.prepare('SELECT * FROM destinos WHERE id_destino = ?').get(req.params.id);
   if (!destino || !esDueno(destino, req)) return res.status(404).json({ error: 'Hotel/local no encontrado' });
 
-  const [cotizaciones, ordenes, tareas] = await Promise.all([
+  const [cotizaciones, ordenes, tareas, contactos] = await Promise.all([
     db.prepare(`${SELECT_COTIZACIONES} WHERE q.destino_id = ? ORDER BY q.creado_en DESC`).all(req.params.id),
     db.prepare(`${SELECT_ORDENES} WHERE o.destino_id = ? ORDER BY o.creado_en DESC`).all(req.params.id),
     db.prepare(`
@@ -626,9 +640,35 @@ app.get('/api/destinos/:id/asociados', requirePermiso('catalogos', 'ver'), ar(as
       WHERE o.destino_id = ?
       ORDER BY p.creado_en DESC
     `).all(req.params.id),
+    db.prepare(`
+      SELECT c.id_contacto, c.nombre, c.apellido, c.correo_electronico FROM contacto_destinos cd
+      JOIN contactos c ON c.id_contacto = cd.contacto_id
+      WHERE cd.destino_id = ?
+      ORDER BY c.nombre, c.apellido
+    `).all(req.params.id),
   ]);
 
-  res.json({ cotizaciones: cotizaciones.map(conEstatus), ordenes, tareas });
+  res.json({ cotizaciones: cotizaciones.map(conEstatus), ordenes, tareas, contactos });
+}));
+
+// Asocia/desasocia un contacto existente a este destino, desde la pantalla de detalle del
+// Hotel/Local (el mismo par contacto_destinos que se administra desde el lado de Contactos).
+app.post('/api/destinos/:id/contactos', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const destino = await db.prepare('SELECT * FROM destinos WHERE id_destino = ?').get(req.params.id);
+  if (!destino || !esDueno(destino, req)) return res.status(404).json({ error: 'Hotel/local no encontrado' });
+  if (!(await referenciaPropia('contactos', 'id_contacto', req.body.contacto_id, req)) || !req.body.contacto_id) {
+    return res.status(400).json({ errores: ['El contacto seleccionado no existe'] });
+  }
+  await db.prepare('INSERT INTO contacto_destinos (contacto_id, destino_id) VALUES (?, ?) ON CONFLICT (contacto_id, destino_id) DO NOTHING')
+    .run(req.body.contacto_id, req.params.id);
+  res.status(201).json({ ok: true });
+}));
+
+app.delete('/api/destinos/:id/contactos/:contactoId', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const destino = await db.prepare('SELECT * FROM destinos WHERE id_destino = ?').get(req.params.id);
+  if (!destino || !esDueno(destino, req)) return res.status(404).json({ error: 'Hotel/local no encontrado' });
+  await db.prepare('DELETE FROM contacto_destinos WHERE destino_id = ? AND contacto_id = ?').run(req.params.id, req.params.contactoId);
+  res.status(204).end();
 }));
 
 // Catalogo independiente de empresas (tabla propia); se administra escribiendo
@@ -861,6 +901,19 @@ app.get('/api/contactos', requirePermiso('catalogos', 'ver'), ar(async (req, res
       tareas_count: conteos.tareas.get(c.id_contacto) || 0,
     };
   }));
+}));
+
+// Un solo contacto con sus conteos de asociados, para la pantalla de detalle (contacto-detalle.html).
+app.get('/api/contactos/:id', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const contacto = await contactoConDestinos(req.params.id);
+  if (!contacto || !esDueno(contacto, req)) return res.status(404).json({ error: 'Contacto no encontrado' });
+  const conteos = await conteosAsociadosContactosBatch([contacto.id_contacto]);
+  res.json({
+    ...contacto,
+    cotizaciones_count: conteos.cotizaciones.get(contacto.id_contacto) || 0,
+    ordenes_count: conteos.ordenes.get(contacto.id_contacto) || 0,
+    tareas_count: conteos.tareas.get(contacto.id_contacto) || 0,
+  });
 }));
 
 // El correo (si se captura) es la llave del contacto DENTRO de cada usuario: no puede

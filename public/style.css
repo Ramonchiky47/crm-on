@@ -492,6 +492,130 @@ button:hover {
   gap: 1rem;
 }
 
+/* Pantallas de detalle (Contacto y Hotel/Local): panel de datos a la izquierda, tarjetas de
+   asociaciones (Hoteles/Locales, Negocios, Cotizaciones, Ordenes, Tareas) a la derecha. */
+.detalle-layout {
+  display: flex;
+  gap: 1.2rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.detalle-panel-info {
+  flex: 0 0 280px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.detalle-panel-asociaciones {
+  flex: 1 1 420px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.tarjeta-asociacion {
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+}
+
+.tarjeta-asociacion h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tarjeta-asociacion h3 span {
+  color: #757575;
+  font-weight: normal;
+  font-size: 0.85rem;
+}
+
+.tarjeta-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--borde);
+  font-size: 0.85rem;
+}
+
+.tarjeta-item:last-of-type {
+  border-bottom: none;
+}
+
+.tarjeta-item a,
+.tarjeta-item .tarjeta-item-nombre {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.tarjeta-item a:hover,
+.tarjeta-item .tarjeta-item-nombre:hover {
+  text-decoration: underline;
+}
+
+.tarjeta-vacio {
+  color: #757575;
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
+}
+
+.tarjeta-buscador-wrap {
+  position: relative;
+  margin-top: 0.6rem;
+}
+
+.tarjeta-buscador-wrap input[type="search"] {
+  width: 100%;
+}
+
+.tarjeta-buscador-opciones {
+  position: absolute;
+  top: calc(100% + 0.2rem);
+  left: 0;
+  right: 0;
+  background: var(--fondo-modal);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 20;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.tarjeta-buscador-opciones button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  color: inherit;
+  border: none;
+  border-bottom: 1px solid var(--borde);
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.tarjeta-buscador-opciones button:last-child {
+  border-bottom: none;
+}
+
+.tarjeta-buscador-opciones button:hover {
+  background: var(--fondo-suave);
+}
+
+.tarjeta-asociacion form.form-catalogo {
+  margin-top: 0.6rem;
+}
+
 .tarjeta-producto {
   border: 1px solid var(--borde);
   border-radius: 8px;

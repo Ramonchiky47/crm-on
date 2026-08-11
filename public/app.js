@@ -546,6 +546,10 @@ promesaAuth.then((sesion) => {
   permisosOrdenes = sesion.permisos.ordenes;
   if (!permisosOrdenes.editar) btnMostrarForm.hidden = true;
 
-  cargarCatalogos().then(cargarOrdenes);
+  cargarCatalogos().then(cargarOrdenes).then(() => {
+    // Se llego desde el detalle de un Contacto/Hotel-Local: abre directo esa orden.
+    const ordenId = new URLSearchParams(window.location.search).get('orden');
+    if (ordenId) abrirDetalle(ordenId);
+  });
   cargarFiltroEstatus();
 });

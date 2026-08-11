@@ -186,10 +186,7 @@ async function editarDestino(id) {
 }
 
 tablaDestinos.addEventListener('click', async (e) => {
-  if (e.target.classList.contains('btn-ver-asociados')) {
-    abrirAsociados(e.target.dataset.entidad, e.target.dataset.id, e.target.dataset.tipo);
-    return;
-  }
+  if (e.target.classList.contains('btn-ver-asociados')) return;
 
   const id = e.target.dataset.id;
   if (!id) return;
@@ -508,191 +505,22 @@ tablaContactos.addEventListener('click', async (e) => {
   }
 });
 
-// ---------- Detalle de asociados (Cotizaciones / Ordenes / Tareas) de un Contacto ----------
-
-const modalOverlay = document.getElementById('modal-overlay');
-const modalContenido = document.getElementById('modal-contenido');
-const modalCerrar = document.getElementById('modal-cerrar');
-
-function cerrarModal() {
-  modalOverlay.hidden = true;
-  modalContenido.innerHTML = '';
-}
-
-modalCerrar.addEventListener('click', cerrarModal);
-modalOverlay.addEventListener('click', (e) => {
-  if (e.target === modalOverlay) cerrarModal();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !modalOverlay.hidden) cerrarModal();
-});
-
-function celdaEstatusAsociado(estatus) {
-  const clase = estatus === 'Vencido' ? 'estatus-vencido' : 'estatus-vigente';
-  return `<span class="${clase}">${escaparHtml(estatus)}</span>`;
-}
-
-// entidad es 'contactos' o 'destinos' (ambos exponen GET /api/<entidad>/:id/asociados con la
-// misma forma: { cotizaciones, ordenes, tareas }), asi que esta vista de detalle es compartida.
-async function abrirAsociados(entidad, id, tipo) {
-  const res = await fetch(`/api/${entidad}/${encodeURIComponent(id)}/asociados`);
-  if (!res.ok) return;
-  const datos = await res.json();
-  const lista = datos[tipo] || [];
-
-  const titulos = { cotizaciones: 'Cotizaciones', ordenes: 'Órdenes', tareas: 'Tareas' };
-  let encabezados;
-  let filas;
-
-  if (tipo === 'cotizaciones') {
-    encabezados = '<th>ID</th><th>Nombre</th><th>Fecha</th><th>Total</th><th>Estatus</th>';
-    filas = lista.map((c) => `
-      <tr>
-        <td>${escaparHtml(c.id_cotizacion)}</td>
-        <td>${escaparHtml(c.nombre)}</td>
-        <td>${escaparHtml(c.fecha_creacion || '')}</td>
-        <td>${escaparHtml(c.moneda)} ${formatoImporte(c.gran_total)}</td>
-        <td>${celdaEstatusAsociado(c.estatus)}</td>
-      </tr>
-    `).join('');
-  } else if (tipo === 'ordenes') {
-    encabezados = '<th>ID</th><th>Nombre</th><th>Fecha</th><th>Importe</th><th>Estatus</th>';
-    filas = lista.map((o) => `
-      <tr>
-        <td>${escaparHtml(o.id)}</td>
-        <td>${escaparHtml(o.nombre || '')}</td>
-        <td>${escaparHtml(o.fecha || '')}</td>
-        <td>${formatoImporte(o.importe)}</td>
-        <td>${escaparHtml(o.estatus_nombre || '')}</td>
-      </tr>
-    `).join('');
-  } else {
-    encabezados = '<th>Nombre</th><th>Fecha de compromiso</th><th>Creada</th>';
-    filas = lista.map((p) => `
-      <tr>
-        <td>${escaparHtml(p.nombre)}</td>
-        <td>${escaparHtml(p.fecha_compromiso || 'Sin fecha')}</td>
-        <td>${escaparHtml(fechaDe(p.creado_en))}</td>
-      </tr>
-    `).join('');
-  }
-
-  const etiquetaVolver = entidad === 'contactos' ? 'al contacto' : 'al hotel/local';
-  modalContenido.innerHTML = `
-    <h2>${titulos[tipo]}</h2>
-    <p><a href="#" class="btn-volver-asociado" data-entidad="${entidad}" data-id="${escaparHtml(id)}">← Volver ${etiquetaVolver}</a></p>
-    <div class="tabla-scroll">
-      <table>
-        <thead><tr>${encabezados}</tr></thead>
-        <tbody>${filas || '<tr><td colspan="5">Sin registros.</td></tr>'}</tbody>
-      </table>
-    </div>
-  `;
-  modalOverlay.hidden = false;
-}
-
-function campoFicha(etiqueta, valor) {
-  return `<div><span>${escaparHtml(etiqueta)}</span><p>${valor !== null && valor !== undefined && valor !== '' ? escaparHtml(String(valor)) : '-'}</p></div>`;
-}
-
-// Ficha completa de un contacto: se abre al hacer clic en su fila de la tabla.
-async function abrirDetalleContacto(id) {
-  const res = await fetch('/api/contactos');
-  if (!res.ok) return;
-  const contactos = await res.json();
-  const c = contactos.find((x) => String(x.id_contacto) === String(id));
-  if (!c) return;
-
-  const destinosTexto = (c.destinos || []).map((d) => d.destino).join(', ') || 'Sin hoteles/locales asociados';
-
-  modalContenido.innerHTML = `
-    <h2>${escaparHtml(c.nombre_completo)}</h2>
-    <div class="acciones-form">
-      ${permisosCatalogos.editar ? `<button type="button" class="btn-editar-contacto-modal" data-id="${c.id_contacto}">Editar</button>` : ''}
-    </div>
-    <div class="ficha-detalle">
-      ${campoFicha('ID', c.id_publico)}
-      ${campoFicha('Correo electrónico', c.correo_electronico)}
-      ${campoFicha('Teléfono local', c.telefono_local)}
-      ${campoFicha('Teléfono celular', c.telefono_celular)}
-      ${campoFicha('Hoteles/Locales', destinosTexto)}
-      ${campoFicha('Fecha de creación', fechaDe(c.creado_en))}
-      ${campoFicha('Última actividad', fechaDe(c.fecha_ultima_actividad) || 'Sin actividad')}
-    </div>
-    <div class="acciones-form">
-      <button type="button" class="btn-mini btn-ver-asociados" data-entidad="contactos" data-id="${c.id_contacto}" data-tipo="cotizaciones">Cotizaciones (${c.cotizaciones_count || 0})</button>
-      <button type="button" class="btn-mini btn-ver-asociados" data-entidad="contactos" data-id="${c.id_contacto}" data-tipo="ordenes">Órdenes (${c.ordenes_count || 0})</button>
-      <button type="button" class="btn-mini btn-ver-asociados" data-entidad="contactos" data-id="${c.id_contacto}" data-tipo="tareas">Tareas (${c.tareas_count || 0})</button>
-    </div>
-  `;
-  modalOverlay.hidden = false;
-}
-
-// Ficha completa de un hotel/local: se abre al hacer clic en su fila de la tabla.
-async function abrirDetalleDestino(id) {
-  const res = await fetch('/api/destinos');
-  if (!res.ok) return;
-  const destinos = await res.json();
-  const d = destinos.find((x) => String(x.id_destino) === String(id));
-  if (!d) return;
-
-  const empresasTexto = (d.empresas || []).join(', ') || 'Sin empresas asociadas';
-
-  modalContenido.innerHTML = `
-    <h2>${escaparHtml(d.destino)}</h2>
-    <div class="acciones-form">
-      ${permisosCatalogos.editar ? `<button type="button" class="btn-editar-destino-modal" data-id="${d.id_destino}">Editar</button>` : ''}
-    </div>
-    <div class="ficha-detalle">
-      ${campoFicha('Empresas', empresasTexto)}
-    </div>
-    <div class="acciones-form">
-      <button type="button" class="btn-mini btn-ver-asociados" data-entidad="destinos" data-id="${d.id_destino}" data-tipo="cotizaciones">Cotizaciones (${d.cotizaciones_count || 0})</button>
-      <button type="button" class="btn-mini btn-ver-asociados" data-entidad="destinos" data-id="${d.id_destino}" data-tipo="ordenes">Órdenes (${d.ordenes_count || 0})</button>
-      <button type="button" class="btn-mini btn-ver-asociados" data-entidad="destinos" data-id="${d.id_destino}" data-tipo="tareas">Tareas (${d.tareas_count || 0})</button>
-    </div>
-  `;
-  modalOverlay.hidden = false;
-}
-
-function abrirDetalleAsociado(entidad, id) {
-  if (entidad === 'destinos') abrirDetalleDestino(id);
-  else abrirDetalleContacto(id);
-}
-
-modalContenido.addEventListener('click', (e) => {
-  if (e.target.classList.contains('btn-ver-asociados')) {
-    abrirAsociados(e.target.dataset.entidad, e.target.dataset.id, e.target.dataset.tipo);
-    return;
-  }
-  if (e.target.classList.contains('btn-volver-asociado')) {
-    e.preventDefault();
-    abrirDetalleAsociado(e.target.dataset.entidad, e.target.dataset.id);
-    return;
-  }
-  if (e.target.classList.contains('btn-editar-contacto-modal')) {
-    cerrarModal();
-    editarContacto(e.target.dataset.id);
-    return;
-  }
-  if (e.target.classList.contains('btn-editar-destino-modal')) {
-    cerrarModal();
-    editarDestino(e.target.dataset.id);
-  }
-});
+// ---------- Detalle de Contacto / Hotel-Local: pantalla completa propia ----------
+// (contacto-detalle.html / destino-detalle.html), no un modal: ahi se ven y administran
+// Hoteles/Locales, Negocios, Cotizaciones, Ordenes y Tareas asociadas.
 
 tablaContactos.addEventListener('click', (e) => {
-  if (e.target.closest('button')) return;
+  if (e.target.closest('button') && !e.target.classList.contains('btn-ver-asociados')) return;
   const fila = e.target.closest('tr');
   if (!fila || !fila.dataset.id) return;
-  abrirDetalleContacto(fila.dataset.id);
+  window.location.href = `contacto-detalle.html?id=${encodeURIComponent(fila.dataset.id)}`;
 });
 
 tablaDestinos.addEventListener('click', (e) => {
-  if (e.target.closest('button')) return;
+  if (e.target.closest('button') && !e.target.classList.contains('btn-ver-asociados')) return;
   const fila = e.target.closest('tr');
   if (!fila || !fila.dataset.id) return;
-  abrirDetalleDestino(fila.dataset.id);
+  window.location.href = `destino-detalle.html?id=${encodeURIComponent(fila.dataset.id)}`;
 });
 
 const btnUnificarContactos = document.getElementById('btn-unificar-contactos');

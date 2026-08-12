@@ -334,7 +334,7 @@ button:hover {
   flex-wrap: wrap;
 }
 
-.fila-filtros input[type="search"] {
+.fila-filtros input[type="text"] {
   flex: 1 1 180px;
   width: auto;
   min-width: 0;
@@ -573,7 +573,7 @@ button:hover {
   margin-top: 0.6rem;
 }
 
-.tarjeta-buscador-wrap input[type="search"] {
+.tarjeta-buscador-wrap input[type="text"] {
   width: 100%;
 }
 

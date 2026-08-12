@@ -436,7 +436,7 @@ async function cargarPlazas() {
     <tr>
       <td>${escaparHtml(p.id_empresa)}</td>
       <td>${escaparHtml(p.empresa)}</td>
-      <td>${p.destinos_asociados}</td>
+      <td><button type="button" class="btn-mini btn-asociar-destinos" data-catalogo="plaza" data-id="${p.id_empresa}" data-nombre="${escaparHtml(p.empresa)}">${p.destinos_asociados}</button></td>
       <td class="acciones">
         ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${p.id_empresa}" data-nombre="${escaparHtml(p.empresa)}">Editar</button>` : ''}
         ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${p.id_empresa}">Borrar</button>` : ''}
@@ -506,7 +506,7 @@ async function cargarGrupos() {
     <tr>
       <td>${escaparHtml(g.id_grupo)}</td>
       <td>${escaparHtml(g.grupo)}</td>
-      <td>${g.destinos_asociados}</td>
+      <td><button type="button" class="btn-mini btn-asociar-destinos" data-catalogo="grupo" data-id="${g.id_grupo}" data-nombre="${escaparHtml(g.grupo)}">${g.destinos_asociados}</button></td>
       <td class="acciones">
         ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${g.id_grupo}" data-nombre="${escaparHtml(g.grupo)}">Editar</button>` : ''}
         ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${g.id_grupo}">Borrar</button>` : ''}
@@ -576,7 +576,7 @@ async function cargarCadenas() {
     <tr>
       <td>${escaparHtml(c.id_cadena)}</td>
       <td>${escaparHtml(c.cadena)}</td>
-      <td>${c.destinos_asociados}</td>
+      <td><button type="button" class="btn-mini btn-asociar-destinos" data-catalogo="cadena" data-id="${c.id_cadena}" data-nombre="${escaparHtml(c.cadena)}">${c.destinos_asociados}</button></td>
       <td class="acciones">
         ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${c.id_cadena}" data-nombre="${escaparHtml(c.cadena)}">Editar</button>` : ''}
         ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${c.id_cadena}">Borrar</button>` : ''}
@@ -628,6 +628,122 @@ tablaCadenas.addEventListener('click', async (e) => {
     cadenaNombre.value = e.target.dataset.nombre;
     btnCancelarCadena.hidden = false;
     cadenaNombre.focus();
+  }
+});
+
+// ---- Asociar hoteles/locales desde Plaza/Grupo/Cadena (boton con el conteo en su tabla) ----
+// Permite agregar/quitar hoteles/locales sin tener que ir uno por uno al formulario de Destino.
+
+const CATALOGOS_ASOCIAR_DESTINOS = {
+  plaza: { url: (id) => `/api/empresas/${id}/destinos`, recargarTabla: () => cargarPlazas() },
+  grupo: { url: (id) => `/api/grupos/${id}/destinos`, recargarTabla: () => cargarGrupos() },
+  cadena: { url: (id) => `/api/cadenas/${id}/destinos`, recargarTabla: () => cargarCadenas() },
+};
+
+const modalAsociarDestinosOverlay = document.getElementById('modal-asociar-destinos-overlay');
+const modalAsociarDestinosCerrar = document.getElementById('modal-asociar-destinos-cerrar');
+const modalAsociarDestinosTitulo = document.getElementById('modal-asociar-destinos-titulo');
+const modalAsociarDestinosLista = document.getElementById('modal-asociar-destinos-lista');
+const modalAsociarDestinosBuscar = document.getElementById('modal-asociar-destinos-buscar');
+const modalAsociarDestinosOpciones = document.getElementById('modal-asociar-destinos-opciones');
+
+let asociarDestinosActual = { tipo: null, id: null, destinos: [] };
+
+function renderizarListaAsociarDestinos() {
+  const destinos = asociarDestinosActual.destinos;
+  modalAsociarDestinosLista.innerHTML = destinos.length
+    ? destinos.map((d) => `
+        <div class="tarjeta-item">
+          <a href="destino-detalle.html?id=${d.id_destino}">${escaparHtml(d.destino)}</a>
+          ${permisosCatalogos.editar ? `<button type="button" class="btn-mini btn-quitar-destino-asociado" data-id="${d.id_destino}">Quitar</button>` : ''}
+        </div>
+      `).join('')
+    : '<p class="tarjeta-vacio">Sin hoteles/locales asociados.</p>';
+}
+
+async function cargarListaAsociarDestinos() {
+  const { tipo, id } = asociarDestinosActual;
+  const res = await fetch(CATALOGOS_ASOCIAR_DESTINOS[tipo].url(id));
+  asociarDestinosActual.destinos = await res.json();
+  renderizarListaAsociarDestinos();
+}
+
+async function abrirModalAsociarDestinos(tipo, id, nombre) {
+  asociarDestinosActual = { tipo, id, destinos: [] };
+  modalAsociarDestinosTitulo.textContent = `Hoteles/Locales de "${nombre}"`;
+  modalAsociarDestinosBuscar.value = '';
+  modalAsociarDestinosOpciones.hidden = true;
+  modalAsociarDestinosBuscar.hidden = !permisosCatalogos.editar;
+  await cargarListaAsociarDestinos();
+  modalAsociarDestinosOverlay.hidden = false;
+}
+
+function cerrarModalAsociarDestinos() {
+  modalAsociarDestinosOverlay.hidden = true;
+}
+modalAsociarDestinosCerrar.addEventListener('click', cerrarModalAsociarDestinos);
+modalAsociarDestinosOverlay.addEventListener('click', (e) => {
+  if (e.target === modalAsociarDestinosOverlay) cerrarModalAsociarDestinos();
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.classList.contains('btn-asociar-destinos')) return;
+  abrirModalAsociarDestinos(e.target.dataset.catalogo, e.target.dataset.id, e.target.dataset.nombre);
+});
+
+modalAsociarDestinosBuscar.addEventListener('input', () => {
+  const filtro = modalAsociarDestinosBuscar.value.trim().toLowerCase();
+  if (!filtro) {
+    modalAsociarDestinosOpciones.hidden = true;
+    modalAsociarDestinosOpciones.innerHTML = '';
+    return;
+  }
+  const yaAsociados = new Set(asociarDestinosActual.destinos.map((d) => d.id_destino));
+  const coincidencias = destinosCache
+    .filter((d) => !yaAsociados.has(d.id_destino) && d.destino.toLowerCase().includes(filtro))
+    .slice(0, 20);
+  modalAsociarDestinosOpciones.innerHTML = coincidencias.length
+    ? coincidencias.map((d) => `<button type="button" data-id="${d.id_destino}">${escaparHtml(d.destino)}</button>`).join('')
+    : '<button type="button" disabled>Sin resultados</button>';
+  modalAsociarDestinosOpciones.hidden = false;
+});
+
+modalAsociarDestinosOpciones.addEventListener('click', async (e) => {
+  const id = e.target.dataset.id;
+  if (!id) return;
+  const { tipo, id: catalogoId } = asociarDestinosActual;
+  const res = await fetch(CATALOGOS_ASOCIAR_DESTINOS[tipo].url(catalogoId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ destino_id: Number(id) }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  modalAsociarDestinosBuscar.value = '';
+  modalAsociarDestinosOpciones.hidden = true;
+  await cargarListaAsociarDestinos();
+  CATALOGOS_ASOCIAR_DESTINOS[tipo].recargarTabla();
+  cargarDestinos();
+  refrescarMultiSelectsDestino();
+});
+
+modalAsociarDestinosLista.addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('btn-quitar-destino-asociado')) return;
+  const destinoId = e.target.dataset.id;
+  const { tipo, id } = asociarDestinosActual;
+  await fetch(`${CATALOGOS_ASOCIAR_DESTINOS[tipo].url(id)}/${destinoId}`, { method: 'DELETE' });
+  await cargarListaAsociarDestinos();
+  CATALOGOS_ASOCIAR_DESTINOS[tipo].recargarTabla();
+  cargarDestinos();
+  refrescarMultiSelectsDestino();
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.tarjeta-buscador-wrap')) {
+    modalAsociarDestinosOpciones.hidden = true;
   }
 });
 

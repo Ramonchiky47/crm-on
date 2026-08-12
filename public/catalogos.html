@@ -552,6 +552,18 @@
         </form>
       </div>
     </div>
+
+    <div id="modal-asociar-destinos-overlay" class="modal-overlay" hidden>
+      <div class="modal-caja" role="dialog" aria-modal="true">
+        <button type="button" id="modal-asociar-destinos-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
+        <h3 id="modal-asociar-destinos-titulo">Hoteles/Locales asociados</h3>
+        <div id="modal-asociar-destinos-lista"></div>
+        <div class="tarjeta-buscador-wrap">
+          <input type="text" autocomplete="off" id="modal-asociar-destinos-buscar" placeholder="+ Agregar hotel/local..." />
+          <div id="modal-asociar-destinos-opciones" class="tarjeta-buscador-opciones" hidden></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="auth.js"></script>

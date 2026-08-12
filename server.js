@@ -817,6 +817,30 @@ app.delete('/api/empresas/:id', requirePermiso('catalogos', 'borrar'), ar(async 
   res.status(204).end();
 }));
 
+// Asociar/desasociar hoteles/locales desde el lado de la Plaza (para completar la asociacion
+// sin tener que ir uno por uno al formulario de cada Destino).
+app.get('/api/empresas/:id/destinos', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const destinos = await db.prepare(`
+    SELECT d.id_destino, d.destino FROM destino_empresas de
+    JOIN destinos d ON d.id_destino = de.destino_id
+    WHERE de.empresa_id = ?
+    ORDER BY d.destino
+  `).all(req.params.id);
+  res.json(destinos);
+}));
+
+app.post('/api/empresas/:id/destinos', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  if (!req.body.destino_id) return res.status(400).json({ errores: ['destino_id es requerido'] });
+  await db.prepare('INSERT INTO destino_empresas (destino_id, empresa_id) VALUES (?, ?) ON CONFLICT (destino_id, empresa_id) DO NOTHING')
+    .run(req.body.destino_id, req.params.id);
+  res.status(201).json({ ok: true });
+}));
+
+app.delete('/api/empresas/:id/destinos/:destinoId', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  await db.prepare('DELETE FROM destino_empresas WHERE empresa_id = ? AND destino_id = ?').run(req.params.id, req.params.destinoId);
+  res.status(204).end();
+}));
+
 app.get('/api/grupos', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const grupos = await db.prepare(`
     SELECT g.id_grupo, g.grupo, COUNT(dg.id) AS destinos_asociados
@@ -861,6 +885,29 @@ app.delete('/api/grupos/:id', requirePermiso('catalogos', 'borrar'), ar(async (r
   res.status(204).end();
 }));
 
+// Asociar/desasociar hoteles/locales desde el lado del Grupo.
+app.get('/api/grupos/:id/destinos', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const destinos = await db.prepare(`
+    SELECT d.id_destino, d.destino FROM destino_grupos dg
+    JOIN destinos d ON d.id_destino = dg.destino_id
+    WHERE dg.grupo_id = ?
+    ORDER BY d.destino
+  `).all(req.params.id);
+  res.json(destinos);
+}));
+
+app.post('/api/grupos/:id/destinos', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  if (!req.body.destino_id) return res.status(400).json({ errores: ['destino_id es requerido'] });
+  await db.prepare('INSERT INTO destino_grupos (destino_id, grupo_id) VALUES (?, ?) ON CONFLICT (destino_id, grupo_id) DO NOTHING')
+    .run(req.body.destino_id, req.params.id);
+  res.status(201).json({ ok: true });
+}));
+
+app.delete('/api/grupos/:id/destinos/:destinoId', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  await db.prepare('DELETE FROM destino_grupos WHERE grupo_id = ? AND destino_id = ?').run(req.params.id, req.params.destinoId);
+  res.status(204).end();
+}));
+
 app.get('/api/cadenas', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const cadenas = await db.prepare(`
     SELECT c.id_cadena, c.cadena, COUNT(dc.id) AS destinos_asociados
@@ -902,6 +949,29 @@ app.delete('/api/cadenas/:id', requirePermiso('catalogos', 'borrar'), ar(async (
   }
   const info = await db.prepare('DELETE FROM cadenas WHERE id_cadena = ?').run(req.params.id);
   if (info.changes === 0) return res.status(404).json({ error: 'Cadena no encontrada' });
+  res.status(204).end();
+}));
+
+// Asociar/desasociar hoteles/locales desde el lado de la Cadena.
+app.get('/api/cadenas/:id/destinos', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const destinos = await db.prepare(`
+    SELECT d.id_destino, d.destino FROM destino_cadenas dc
+    JOIN destinos d ON d.id_destino = dc.destino_id
+    WHERE dc.cadena_id = ?
+    ORDER BY d.destino
+  `).all(req.params.id);
+  res.json(destinos);
+}));
+
+app.post('/api/cadenas/:id/destinos', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  if (!req.body.destino_id) return res.status(400).json({ errores: ['destino_id es requerido'] });
+  await db.prepare('INSERT INTO destino_cadenas (destino_id, cadena_id) VALUES (?, ?) ON CONFLICT (destino_id, cadena_id) DO NOTHING')
+    .run(req.body.destino_id, req.params.id);
+  res.status(201).json({ ok: true });
+}));
+
+app.delete('/api/cadenas/:id/destinos/:destinoId', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  await db.prepare('DELETE FROM destino_cadenas WHERE cadena_id = ? AND destino_id = ?').run(req.params.id, req.params.destinoId);
   res.status(204).end();
 }));
 

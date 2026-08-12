@@ -180,6 +180,51 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.tarjeta-buscador-wrap')) opcionesDestinoAgregar.hidden = true;
 });
 
+// Agregar de un solo paso todos los hoteles/locales de un Grupo (accion rapida: solo agrega los
+// hoteles que ya tiene ese grupo en este momento, no queda ningun vinculo permanente al grupo).
+const agregarGrupoSelect = document.getElementById('agregar-grupo-select');
+const btnAgregarGrupo = document.getElementById('btn-agregar-grupo');
+
+async function cargarGruposDisponibles() {
+  const res = await fetch('/api/grupos');
+  const grupos = await res.json();
+  agregarGrupoSelect.innerHTML = '<option value="">Agregar todos los hoteles de un grupo...</option>'
+    + grupos.map((g) => `<option value="${g.id_grupo}">${escaparHtml(g.grupo)}</option>`).join('');
+}
+
+btnAgregarGrupo.addEventListener('click', async () => {
+  const grupoId = agregarGrupoSelect.value;
+  if (!grupoId) return;
+
+  const resGrupo = await fetch(`/api/grupos/${encodeURIComponent(grupoId)}/destinos`);
+  const destinosDelGrupo = await resGrupo.json();
+  const yaAsociados = new Set((contactoActual.destinos || []).map((d) => d.id_destino));
+  const nuevosDestinos = [
+    ...(contactoActual.destinos || []).map((d) => d.id_destino),
+    ...destinosDelGrupo.map((d) => d.id_destino).filter((id) => !yaAsociados.has(id)),
+  ];
+
+  const res = await fetch(`/api/contactos/${encodeURIComponent(idContacto)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      nombre: contactoActual.nombre,
+      apellido: contactoActual.apellido,
+      correo_electronico: contactoActual.correo_electronico,
+      telefono_local: contactoActual.telefono_local,
+      telefono_celular: contactoActual.telefono_celular,
+      destinos: nuevosDestinos,
+    }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  agregarGrupoSelect.value = '';
+  await cargarContacto();
+});
+
 // ---------- Negocios ----------
 
 const listaNegocios = document.getElementById('lista-negocios');
@@ -376,8 +421,9 @@ promesaAuth.then(async (sesion) => {
   btnEditarContacto.hidden = !permisosCatalogos.editar;
   document.getElementById('btn-mostrar-form-negocio').hidden = !permisosCatalogos.editar;
   document.querySelector('.tarjeta-buscador-wrap').hidden = !permisosCatalogos.editar;
+  document.getElementById('agregar-grupo-wrap').hidden = !permisosCatalogos.editar;
 
-  await Promise.all([cargarDestinosDisponibles(), cargarEtapasNegocioSelect(), cargarActividadesCache()]);
+  await Promise.all([cargarDestinosDisponibles(), cargarGruposDisponibles(), cargarEtapasNegocioSelect(), cargarActividadesCache()]);
   await cargarContacto();
   await Promise.all([cargarNegociosDeContacto(), cargarAsociados()]);
 });

@@ -773,6 +773,24 @@ app.delete('/api/destinos/:id/contactos/:contactoId', requirePermiso('catalogos'
 // Catalogos independientes de Plaza (tabla empresas), Grupo y Cadena: se administran tanto desde
 // su propia pantalla de catalogo (alta/edicion/borrado) como escribiendo nombres nuevos en el
 // formulario de Destino (o con el "+" de alta rapida), que los crea/enlaza automaticamente.
+// Cada uno tiene ademas su propia pantalla de detalle (plaza/grupo/cadena-detalle.html) con los
+// hoteles/locales asociados y el acumulado de Cotizaciones/Ordenes/Tareas de todos ellos.
+async function asociadosDeGrupoCatalogo(tablaJoin, columnaId, id) {
+  const enGrupo = `SELECT destino_id FROM ${tablaJoin} WHERE ${columnaId} = ?`;
+  const [destinos, cotizaciones, ordenes, tareas] = await Promise.all([
+    db.prepare(`SELECT id_destino, destino FROM destinos WHERE id_destino IN (${enGrupo}) ORDER BY destino`).all(id),
+    db.prepare(`${SELECT_COTIZACIONES} WHERE q.destino_id IN (${enGrupo}) ORDER BY q.creado_en DESC`).all(id),
+    db.prepare(`${SELECT_ORDENES} WHERE o.destino_id IN (${enGrupo}) ORDER BY o.creado_en DESC`).all(id),
+    db.prepare(`
+      SELECT DISTINCT p.* FROM pendientes p
+      JOIN ordenes o ON o.id = p.orden_id
+      WHERE o.destino_id IN (${enGrupo})
+      ORDER BY p.creado_en DESC
+    `).all(id),
+  ]);
+  return { destinos, cotizaciones: cotizaciones.map(conEstatus), ordenes, tareas };
+}
+
 app.get('/api/empresas', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const empresas = await db.prepare(`
     SELECT e.id_empresa, e.empresa, COUNT(de.id) AS destinos_asociados
@@ -815,6 +833,18 @@ app.delete('/api/empresas/:id', requirePermiso('catalogos', 'borrar'), ar(async 
   const info = await db.prepare('DELETE FROM empresas WHERE id_empresa = ?').run(req.params.id);
   if (info.changes === 0) return res.status(404).json({ error: 'Plaza no encontrada' });
   res.status(204).end();
+}));
+
+app.get('/api/empresas/:id', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const plaza = await db.prepare('SELECT * FROM empresas WHERE id_empresa = ?').get(req.params.id);
+  if (!plaza) return res.status(404).json({ error: 'Plaza no encontrada' });
+  res.json(plaza);
+}));
+
+// Hoteles/locales asociados a esta plaza, y el acumulado de Cotizaciones/Ordenes/Tareas de todos
+// ellos, para la pantalla de detalle (plaza-detalle.html).
+app.get('/api/empresas/:id/asociados', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  res.json(await asociadosDeGrupoCatalogo('destino_empresas', 'empresa_id', req.params.id));
 }));
 
 // Asociar/desasociar hoteles/locales desde el lado de la Plaza (para completar la asociacion
@@ -885,6 +915,16 @@ app.delete('/api/grupos/:id', requirePermiso('catalogos', 'borrar'), ar(async (r
   res.status(204).end();
 }));
 
+app.get('/api/grupos/:id', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const grupo = await db.prepare('SELECT * FROM grupos WHERE id_grupo = ?').get(req.params.id);
+  if (!grupo) return res.status(404).json({ error: 'Grupo no encontrado' });
+  res.json(grupo);
+}));
+
+app.get('/api/grupos/:id/asociados', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  res.json(await asociadosDeGrupoCatalogo('destino_grupos', 'grupo_id', req.params.id));
+}));
+
 // Asociar/desasociar hoteles/locales desde el lado del Grupo.
 app.get('/api/grupos/:id/destinos', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const destinos = await db.prepare(`
@@ -950,6 +990,16 @@ app.delete('/api/cadenas/:id', requirePermiso('catalogos', 'borrar'), ar(async (
   const info = await db.prepare('DELETE FROM cadenas WHERE id_cadena = ?').run(req.params.id);
   if (info.changes === 0) return res.status(404).json({ error: 'Cadena no encontrada' });
   res.status(204).end();
+}));
+
+app.get('/api/cadenas/:id', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const cadena = await db.prepare('SELECT * FROM cadenas WHERE id_cadena = ?').get(req.params.id);
+  if (!cadena) return res.status(404).json({ error: 'Cadena no encontrada' });
+  res.json(cadena);
+}));
+
+app.get('/api/cadenas/:id/asociados', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  res.json(await asociadosDeGrupoCatalogo('destino_cadenas', 'cadena_id', req.params.id));
 }));
 
 // Asociar/desasociar hoteles/locales desde el lado de la Cadena.
@@ -3547,7 +3597,7 @@ app.get('/api/buscar-global', ar(async (req, res) => {
   }
 
   const q = (req.query.q || '').trim();
-  if (q.length < 2) return res.json({ contactos: [], destinos: [], ordenes: [], productos: [] });
+  if (q.length < 2) return res.json({ contactos: [], destinos: [], ordenes: [], productos: [], plazas: [], grupos: [], cadenas: [] });
   const like = `%${q}%`;
   const soloPropios = !req.session.esAdmin;
 
@@ -3566,6 +3616,30 @@ app.get('/api/buscar-global', ar(async (req, res) => {
   const destinos = soloPropios
     ? await db.prepare('SELECT * FROM destinos WHERE usuario_id = ? AND destino ILIKE ? ORDER BY destino').all(req.session.usuarioId, like)
     : await db.prepare('SELECT * FROM destinos WHERE destino ILIKE ? ORDER BY destino').all(like);
+
+  // Plaza/Grupo/Cadena son catalogos compartidos (sin usuario_id), igual que Productos: no se
+  // filtran por dueno.
+  const plazas = await db.prepare(`
+    SELECT e.id_empresa, e.empresa, COUNT(de.id) AS destinos_asociados
+    FROM empresas e LEFT JOIN destino_empresas de ON de.empresa_id = e.id_empresa
+    WHERE e.empresa ILIKE ?
+    GROUP BY e.id_empresa
+    ORDER BY e.empresa
+  `).all(like);
+  const grupos = await db.prepare(`
+    SELECT g.id_grupo, g.grupo, COUNT(dg.id) AS destinos_asociados
+    FROM grupos g LEFT JOIN destino_grupos dg ON dg.grupo_id = g.id_grupo
+    WHERE g.grupo ILIKE ?
+    GROUP BY g.id_grupo
+    ORDER BY g.grupo
+  `).all(like);
+  const cadenas = await db.prepare(`
+    SELECT c.id_cadena, c.cadena, COUNT(dc.id) AS destinos_asociados
+    FROM cadenas c LEFT JOIN destino_cadenas dc ON dc.cadena_id = c.id_cadena
+    WHERE c.cadena ILIKE ?
+    GROUP BY c.id_cadena
+    ORDER BY c.cadena
+  `).all(like);
 
   const ordenes = await db.prepare(`${SELECT_ORDENES} WHERE o.id ILIKE ? OR o.nombre ILIKE ? ORDER BY o.creado_en DESC`).all(like, like);
 
@@ -3624,7 +3698,7 @@ app.get('/api/buscar-global', ar(async (req, res) => {
     `).all(`%${p.item}%`),
   })));
 
-  res.json({ contactos: contactosConRegistros, destinos: destinosConRegistros, ordenes, productos: productosConHistorial });
+  res.json({ contactos: contactosConRegistros, destinos: destinosConRegistros, ordenes, productos: productosConHistorial, plazas, grupos, cadenas });
 }));
 
 // Middleware final de manejo de errores (rutas envueltas con ar()).

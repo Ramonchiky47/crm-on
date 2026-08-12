@@ -125,6 +125,33 @@ function renderDestino(d) {
   `;
 }
 
+function renderPlaza(p) {
+  return `
+    <div class="tarjeta-resultado-buscador">
+      <h3>Plaza: <a href="plaza-detalle.html?id=${p.id_empresa}">${escaparHtml(p.empresa)}</a></h3>
+      <p class="pista">${p.destinos_asociados} hotel(es)/local(es) asociado(s)</p>
+    </div>
+  `;
+}
+
+function renderGrupo(g) {
+  return `
+    <div class="tarjeta-resultado-buscador">
+      <h3>Grupo: <a href="grupo-detalle.html?id=${g.id_grupo}">${escaparHtml(g.grupo)}</a></h3>
+      <p class="pista">${g.destinos_asociados} hotel(es)/local(es) asociado(s)</p>
+    </div>
+  `;
+}
+
+function renderCadena(c) {
+  return `
+    <div class="tarjeta-resultado-buscador">
+      <h3>Cadena: <a href="cadena-detalle.html?id=${c.id_cadena}">${escaparHtml(c.cadena)}</a></h3>
+      <p class="pista">${c.destinos_asociados} hotel(es)/local(es) asociado(s)</p>
+    </div>
+  `;
+}
+
 function tablaHistorialCotizaciones(items) {
   if (!items.length) return '<p class="pista">Sin cotizaciones que incluyan este producto.</p>';
   return `
@@ -203,7 +230,8 @@ async function buscar(q) {
   }
   const data = await res.json();
 
-  const sinResultados = !data.contactos.length && !data.destinos.length && !data.ordenes.length && !data.productos.length;
+  const sinResultados = !data.contactos.length && !data.destinos.length && !data.ordenes.length && !data.productos.length
+    && !data.plazas.length && !data.grupos.length && !data.cadenas.length;
   if (sinResultados) {
     contenedor.innerHTML = `<p class="pista">Sin resultados para "${escaparHtml(q)}".</p>`;
     return;
@@ -212,6 +240,9 @@ async function buscar(q) {
   contenedor.innerHTML = `
     ${data.contactos.map(renderContacto).join('')}
     ${data.destinos.map(renderDestino).join('')}
+    ${data.plazas.map(renderPlaza).join('')}
+    ${data.grupos.map(renderGrupo).join('')}
+    ${data.cadenas.map(renderCadena).join('')}
     ${data.productos.map(renderProducto).join('')}
     ${data.ordenes.length ? `
       <div class="tarjeta-resultado-buscador">

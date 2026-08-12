@@ -105,6 +105,7 @@ if (tabDesdeUrl) activarTabCatalogo(tabDesdeUrl);
 const formDestino = document.getElementById('form-destino');
 const destinoId = document.getElementById('destino-id');
 const destinoNombre = document.getElementById('destino-nombre');
+const destinoUbicacion = document.getElementById('destino-ubicacion');
 const btnCancelarDestino = document.getElementById('btn-cancelar-destino');
 const tablaDestinos = document.getElementById('tabla-destinos');
 
@@ -332,6 +333,7 @@ formDestino.addEventListener('submit', async (e) => {
   e.preventDefault();
   const payload = {
     destino: destinoNombre.value.trim(),
+    ubicacion: destinoUbicacion.value.trim(),
     empresas: multiSelectPlaza.obtenerSeleccionados(),
     grupos: multiSelectGrupo.obtenerSeleccionados(),
     cadenas: multiSelectCadena.obtenerSeleccionados(),
@@ -362,6 +364,7 @@ async function editarDestino(id) {
 
   destinoId.value = d.id_destino;
   destinoNombre.value = d.destino;
+  destinoUbicacion.value = d.ubicacion || '';
   multiSelectPlaza.marcar(d.empresas);
   multiSelectGrupo.marcar(d.grupos);
   multiSelectCadena.marcar(d.cadenas);

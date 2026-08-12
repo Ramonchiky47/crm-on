@@ -29,6 +29,7 @@ const btnEditarDestino = document.getElementById('btn-editar-destino');
 const formEditarDestino = document.getElementById('form-editar-destino');
 const btnCancelarEditarDestino = document.getElementById('btn-cancelar-editar-destino');
 const editarDestinoNombre = document.getElementById('editar-destino-nombre');
+const editarDestinoUbicacion = document.getElementById('editar-destino-ubicacion');
 
 // Mismo widget reutilizable de catalogos.js: boton + panel de checkboxes buscable para elegir
 // uno o mas valores de un catalogo (Plaza/Grupo/Cadena), con seleccion rastreada por nombre.
@@ -195,11 +196,13 @@ async function cargarDestino() {
     ${campoFicha('Plaza', (destinoActual.empresas || []).join(', '))}
     ${campoFicha('Grupo', (destinoActual.grupos || []).join(', '))}
     ${campoFicha('Cadena', (destinoActual.cadenas || []).join(', '))}
+    ${campoFicha('Ubicación', destinoActual.ubicacion)}
   `;
 }
 
 btnEditarDestino.addEventListener('click', () => {
   editarDestinoNombre.value = destinoActual.destino || '';
+  editarDestinoUbicacion.value = destinoActual.ubicacion || '';
   multiSelectPlaza.marcar(destinoActual.empresas);
   multiSelectGrupo.marcar(destinoActual.grupos);
   multiSelectCadena.marcar(destinoActual.cadenas);
@@ -216,6 +219,7 @@ formEditarDestino.addEventListener('submit', async (e) => {
   e.preventDefault();
   const payload = {
     destino: editarDestinoNombre.value.trim(),
+    ubicacion: editarDestinoUbicacion.value.trim(),
     empresas: multiSelectPlaza.obtenerSeleccionados(),
     grupos: multiSelectGrupo.obtenerSeleccionados(),
     cadenas: multiSelectCadena.obtenerSeleccionados(),

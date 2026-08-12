@@ -1030,7 +1030,8 @@ app.post('/api/destinos', requirePermiso('catalogos', 'editar'), ar(async (req, 
   if (!destino) return res.status(400).json({ errores: ['destino es requerido'] });
 
   try {
-    const info = await db.prepare('INSERT INTO destinos (destino, usuario_id) VALUES (?, ?)').run(destino, req.session.usuarioId);
+    const info = await db.prepare('INSERT INTO destinos (destino, usuario_id, ubicacion) VALUES (?, ?, ?)')
+      .run(destino, req.session.usuarioId, quitarAcentos((req.body.ubicacion || '').trim()) || null);
     await reemplazarEmpresasDestino(info.lastInsertRowid, req.body.empresas);
     await reemplazarGruposDestino(info.lastInsertRowid, req.body.grupos);
     await reemplazarCadenasDestino(info.lastInsertRowid, req.body.cadenas);
@@ -1048,7 +1049,8 @@ app.put('/api/destinos/:id', requirePermiso('catalogos', 'editar'), ar(async (re
   if (!existente || !esDueno(existente, req)) return res.status(404).json({ error: 'Hotel/local no encontrado' });
 
   try {
-    await db.prepare('UPDATE destinos SET destino = ? WHERE id_destino = ?').run(destino, req.params.id);
+    await db.prepare('UPDATE destinos SET destino = ?, ubicacion = ? WHERE id_destino = ?')
+      .run(destino, quitarAcentos((req.body.ubicacion || '').trim()) || null, req.params.id);
     if (req.body.empresas !== undefined) await reemplazarEmpresasDestino(req.params.id, req.body.empresas);
     if (req.body.grupos !== undefined) await reemplazarGruposDestino(req.params.id, req.body.grupos);
     if (req.body.cadenas !== undefined) await reemplazarCadenasDestino(req.params.id, req.body.cadenas);

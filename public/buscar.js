@@ -201,4 +201,7 @@ promesaAuth.then((sesion) => {
   if (!sesion) return;
   if (!sesion.permisos.ordenes.ver) window.location.href = 'index.html';
   cargarFiltroEstatus();
+
+  suscribirTiempoReal(['ordenes'], buscarOrdenes);
+  suscribirTiempoReal(['estatus_catalogo'], () => { cargarFiltroEstatus(); buscarOrdenes(); });
 });

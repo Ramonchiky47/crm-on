@@ -1642,4 +1642,9 @@ promesaAuth.then(async (sesion) => {
     }
     if (destinoIdUrl) cotizacionDestino.value = destinoIdUrl;
   }
+
+  suscribirTiempoReal(['negocios'], () => { poblarSelectsNegocio(); cargarNegocios(); });
+  suscribirTiempoReal(['cotizaciones', 'cotizacion_items'], cargarCotizaciones);
+  suscribirTiempoReal(['contactos', 'destinos', 'productos', 'representantes'], poblarSelectsCotizacion);
+  suscribirTiempoReal(['etapas_negocio'], poblarSelectsNegocio);
 });

@@ -442,4 +442,9 @@ promesaAuth.then(async (sesion) => {
   refrescarMultiSelectsDestino();
   await cargarDestino();
   await cargarAsociados();
+
+  suscribirTiempoReal(['destinos', 'destino_empresas', 'destino_grupos', 'destino_cadenas'], () => { cargarDestino(); refrescarMultiSelectsDestino(); });
+  suscribirTiempoReal(['empresas', 'grupos', 'cadenas'], refrescarMultiSelectsDestino);
+  suscribirTiempoReal(['contacto_destinos', 'cotizaciones', 'ordenes', 'pendientes'], cargarAsociados);
+  suscribirTiempoReal(['contactos'], () => { cargarContactosDisponibles(); cargarAsociados(); });
 });

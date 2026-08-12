@@ -187,4 +187,16 @@ promesaAuth.then((sesion) => {
     document.getElementById('tabla-estatus').closest('section').hidden = true;
     document.getElementById('tabla-estado-entrega').closest('section').hidden = true;
   }
+
+  if (permisos.ordenes.ver) suscribirTiempoReal(['ordenes'], cargarOrdenes);
+  if (permisos.detalle_compra.ver) suscribirTiempoReal(['detalle_de_compra'], cargarDetalle);
+  if (permisos.catalogos.ver) {
+    suscribirTiempoReal(['destinos', 'destino_empresas', 'destino_grupos', 'destino_cadenas'], cargarDestinos);
+    suscribirTiempoReal(['contactos'], cargarContactos);
+    suscribirTiempoReal(['empresas'], cargarEmpresas);
+    suscribirTiempoReal(['grupos'], cargarGrupos);
+    suscribirTiempoReal(['cadenas'], cargarCadenas);
+    suscribirTiempoReal(['estatus_catalogo'], cargarEstatusCatalogo);
+    suscribirTiempoReal(['estados_entrega'], cargarEstadosEntrega);
+  }
 });

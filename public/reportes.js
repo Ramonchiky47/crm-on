@@ -326,4 +326,7 @@ promesaAuth.then((sesion) => {
     return;
   }
   cargarFiltroEstatus().then(cargarReporte);
+
+  suscribirTiempoReal(['ordenes'], cargarReporte);
+  suscribirTiempoReal(['estatus_catalogo'], () => cargarFiltroEstatus().then(cargarReporte));
 });

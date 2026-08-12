@@ -552,4 +552,8 @@ promesaAuth.then((sesion) => {
     if (ordenId) abrirDetalle(ordenId);
   });
   cargarFiltroEstatus();
+
+  suscribirTiempoReal(['ordenes'], cargarOrdenes);
+  suscribirTiempoReal(['destinos', 'contactos', 'estados_entrega'], cargarCatalogos);
+  suscribirTiempoReal(['estatus_catalogo'], () => { cargarCatalogos(); cargarFiltroEstatus(); });
 });

@@ -685,6 +685,9 @@ promesaAuth.then(async (sesion) => {
   await cargarPanelActividades();
   await cargarPendientes();
   if (permisosCatalogos.editar) sincronizarConGoogleTasks();
+
+  suscribirTiempoReal(['pendientes', 'pendiente_actividades', 'pendiente_notas'], cargarPendientes);
+  suscribirTiempoReal(['actividades'], cargarPanelActividades);
 });
 
 btnSincronizarGoogleTasks.addEventListener('click', sincronizarConGoogleTasks);

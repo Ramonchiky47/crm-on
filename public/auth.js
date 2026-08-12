@@ -82,3 +82,38 @@ async function iniciarAuth() {
 }
 
 const promesaAuth = iniciarAuth();
+
+// ---------- Actualizaciones en tiempo real (Supabase Realtime) ----------
+// La llave publica solo tiene permiso de LECTURA (ver migracion "habilitar_rls_solo_lectura_anon"):
+// cualquier escritura sigue pasando por la API de Express, que valida sesion y permisos. Esto
+// solo se usa para enterarse de que "algo cambio" y disparar un recargar() ya existente de la
+// pantalla (que si pasa por la API autenticada), no para leer/mostrar los datos del propio evento.
+const SUPABASE_URL = 'https://lcroyltwviddtdxqwzox.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_-Yxe-JuqvWFRmS0eGnB6Tg_P6pcM5ZV';
+
+const promesaSupabaseRealtime = new Promise((resolve) => {
+  const script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
+  script.onload = () => resolve(window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY));
+  script.onerror = () => resolve(null);
+  document.head.appendChild(script);
+});
+
+// Suscribe `recargar` a cualquier INSERT/UPDATE/DELETE en una o mas tablas de Postgres, con un
+// pequeno debounce para no disparar varias veces seguidas si llegan varios cambios juntos (ej.
+// una carga masiva). Uso: suscribirTiempoReal(['destinos', 'destino_empresas'], cargarDestinos).
+function suscribirTiempoReal(tablas, recargar) {
+  promesaSupabaseRealtime.then((cliente) => {
+    if (!cliente) return;
+    let temporizador = null;
+    const recargarConDebounce = () => {
+      clearTimeout(temporizador);
+      temporizador = setTimeout(recargar, 400);
+    };
+    const canal = cliente.channel(`rt-${tablas.join('-')}-${Math.random().toString(36).slice(2)}`);
+    for (const tabla of tablas) {
+      canal.on('postgres_changes', { event: '*', schema: 'public', table: tabla }, recargarConDebounce);
+    }
+    canal.subscribe();
+  });
+}

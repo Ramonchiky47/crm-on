@@ -353,4 +353,9 @@ promesaAuth.then((sesion) => {
       }
     }, 250);
   });
+
+  suscribirTiempoReal(
+    ['contactos', 'destinos', 'productos', 'ordenes', 'empresas', 'grupos', 'cadenas'],
+    () => buscar(inputBuscador.value.trim())
+  );
 });

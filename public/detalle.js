@@ -194,4 +194,6 @@ promesaAuth.then((sesion) => {
   permisosDetalle = sesion.permisos.detalle_compra;
   if (!permisosDetalle.editar) btnMostrarForm.hidden = true;
   cargarDetalle();
+
+  suscribirTiempoReal(['detalle_de_compra'], cargarDetalle);
 });

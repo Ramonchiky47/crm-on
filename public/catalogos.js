@@ -2167,4 +2167,24 @@ promesaAuth.then((sesion) => {
     tabUsuarios.hidden = true;
     tabAlmacenamiento.hidden = true;
   }
+
+  // Actualizaciones en tiempo real: si otro usuario (u otra pestana) cambia estos datos, esta
+  // pantalla se refresca sola. Usuarios/Permisos quedan fuera porque esas tablas no tienen
+  // lectura publica (ver migracion de RLS), asi que nunca llegaria un evento para ellas.
+  suscribirTiempoReal(['destinos', 'destino_empresas', 'destino_grupos', 'destino_cadenas'], () => { cargarDestinos(); refrescarMultiSelectsDestino(); });
+  suscribirTiempoReal(['empresas'], () => { cargarPlazas(); cargarDestinos(); refrescarMultiSelectsDestino(); });
+  suscribirTiempoReal(['grupos'], () => { cargarGrupos(); cargarDestinos(); refrescarMultiSelectsDestino(); });
+  suscribirTiempoReal(['cadenas'], () => { cargarCadenas(); cargarDestinos(); refrescarMultiSelectsDestino(); });
+  suscribirTiempoReal(['contactos', 'contacto_destinos'], () => { cargarContactos(); cargarPanelDestinosContacto(); });
+  suscribirTiempoReal(['estatus_catalogo'], cargarEstatusCatalogo);
+  suscribirTiempoReal(['estados_entrega'], cargarEstadosEntrega);
+  suscribirTiempoReal(['categorias'], () => { cargarCategorias(); poblarSelectsProducto(); });
+  suscribirTiempoReal(['lineas'], () => { cargarLineas(); poblarSelectsProducto(); });
+  suscribirTiempoReal(['marcas'], () => { cargarMarcas(); poblarSelectsProducto(); });
+  suscribirTiempoReal(['productos'], () => cargarProductos(productosBuscador.value.trim()));
+  suscribirTiempoReal(['etapas_negocio'], cargarEtapasNegocio);
+  suscribirTiempoReal(['actividades'], cargarActividades);
+  if (sesion.esAdmin) {
+    suscribirTiempoReal(['representantes'], cargarRepresentantes);
+  }
 });

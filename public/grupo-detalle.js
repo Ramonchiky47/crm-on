@@ -202,4 +202,8 @@ promesaAuth.then(async (sesion) => {
   await cargarDestinosDisponibles();
   await cargarGrupo();
   await cargarAsociados();
+
+  suscribirTiempoReal(['grupos'], cargarGrupo);
+  suscribirTiempoReal(['destinos', 'destino_grupos'], () => { cargarDestinosDisponibles(); cargarAsociados(); });
+  suscribirTiempoReal(['cotizaciones', 'ordenes', 'pendientes'], cargarAsociados);
 });

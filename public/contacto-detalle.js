@@ -426,4 +426,11 @@ promesaAuth.then(async (sesion) => {
   await Promise.all([cargarDestinosDisponibles(), cargarGruposDisponibles(), cargarEtapasNegocioSelect(), cargarActividadesCache()]);
   await cargarContacto();
   await Promise.all([cargarNegociosDeContacto(), cargarAsociados()]);
+
+  suscribirTiempoReal(['contactos', 'contacto_destinos'], () => { cargarContacto(); cargarDestinosDisponibles(); });
+  suscribirTiempoReal(['destinos', 'grupos', 'destino_grupos'], () => { cargarDestinosDisponibles(); cargarGruposDisponibles(); });
+  suscribirTiempoReal(['negocios'], cargarNegociosDeContacto);
+  suscribirTiempoReal(['cotizaciones', 'ordenes', 'pendientes'], cargarAsociados);
+  suscribirTiempoReal(['etapas_negocio'], cargarEtapasNegocioSelect);
+  suscribirTiempoReal(['actividades'], cargarActividadesCache);
 });

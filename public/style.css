@@ -15,6 +15,16 @@
   display: none !important;
 }
 
+/* Unificar duplicados (Contactos/Destinos): checkbox del registro que se queda (sobreviviente)
+   vs. los que se combinan en el (duplicados). */
+.check-unificar.check-sobreviviente {
+  accent-color: #000000;
+}
+
+.check-unificar.check-duplicado {
+  accent-color: #1565c0;
+}
+
 body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 14px;
@@ -207,13 +217,6 @@ code {
   gap: 0.3rem;
 }
 
-.grupo-unificar-contacto {
-  border: 1px solid var(--borde);
-  border-radius: 6px;
-  padding: 0.6rem 0.8rem;
-  margin: 0.6rem 0;
-}
-
 .tarjeta-resultado-buscador {
   border: 1px solid var(--borde);
   border-radius: 8px;
@@ -230,23 +233,6 @@ code {
   font-size: 0.85rem;
   color: #757575;
   text-transform: uppercase;
-}
-
-.grupo-unificar-contacto h4 {
-  margin: 0 0 0.4rem;
-}
-
-.opcion-unificar-contacto {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  padding: 0.25rem 0;
-  font-size: 0.85rem;
-}
-
-.opcion-unificar-contacto input {
-  flex: none;
-  margin-top: 0.2rem;
 }
 
 input:disabled,

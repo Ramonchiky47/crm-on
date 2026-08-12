@@ -19,6 +19,107 @@ async function eliminarYRecargar(url, recargar) {
   recargar();
 }
 
+// ---------- Unificar duplicados (seleccion manual: Destinos y Contactos) ----------
+// El usuario marca la casilla del registro que se queda (sobreviviente, en negro) y luego las
+// de los que se combinan en el (duplicados, en azul). Reutilizable porque la mecanica de
+// seleccion es identica en ambos catalogos; solo cambian la tabla, los botones y el endpoint.
+function crearSelectorUnificar({ tabla, thCheck, btnUnificar, btnConfirmar, btnCancelar, pista, reporte, url, campoNombreDetalle, entidadTexto, recargar, alExito }) {
+  let activo = false;
+  let sobreviviente = null;
+  const duplicados = new Set();
+
+  function casilla(id) {
+    if (!activo) return '';
+    const esSobreviviente = id === sobreviviente;
+    const esDuplicado = duplicados.has(id);
+    const clase = esSobreviviente ? 'check-sobreviviente' : (esDuplicado ? 'check-duplicado' : '');
+    return `<td><input type="checkbox" class="check-unificar ${clase}" data-id="${id}" ${esSobreviviente || esDuplicado ? 'checked' : ''} /></td>`;
+  }
+
+  function actualizarBotonConfirmar() {
+    btnConfirmar.disabled = !(sobreviviente !== null && duplicados.size > 0);
+  }
+
+  tabla.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('check-unificar')) return;
+    const id = Number(e.target.dataset.id);
+    if (e.target.checked) {
+      if (sobreviviente === null) sobreviviente = id;
+      else duplicados.add(id);
+    } else if (id === sobreviviente) {
+      sobreviviente = null;
+      duplicados.clear();
+    } else {
+      duplicados.delete(id);
+    }
+    recargar();
+    actualizarBotonConfirmar();
+  });
+
+  function activar() {
+    activo = true;
+    sobreviviente = null;
+    duplicados.clear();
+    thCheck.hidden = false;
+    btnUnificar.hidden = true;
+    btnConfirmar.hidden = false;
+    btnCancelar.hidden = false;
+    pista.hidden = false;
+    reporte.hidden = true;
+    actualizarBotonConfirmar();
+    recargar();
+  }
+
+  function desactivar() {
+    activo = false;
+    sobreviviente = null;
+    duplicados.clear();
+    thCheck.hidden = true;
+    btnUnificar.hidden = false;
+    btnConfirmar.hidden = true;
+    btnCancelar.hidden = true;
+    pista.hidden = true;
+    recargar();
+  }
+
+  btnUnificar.addEventListener('click', activar);
+  btnCancelar.addEventListener('click', desactivar);
+
+  btnConfirmar.addEventListener('click', async () => {
+    if (sobreviviente === null || duplicados.size === 0) return;
+    if (!confirmarDoble(`¿Unificar estos ${entidadTexto}? Esta acción no se puede deshacer.`)) return;
+
+    btnConfirmar.disabled = true;
+    btnConfirmar.textContent = 'Unificando...';
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decisiones: [{ sobreviviente_id: sobreviviente, duplicado_ids: [...duplicados] }] }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert('Error: ' + (data.errores ? data.errores.join(', ') : res.statusText));
+        return;
+      }
+      reporte.hidden = false;
+      const nombreSobreviviente = data.detalle[0] ? data.detalle[0][campoNombreDetalle] : '';
+      reporte.innerHTML = `
+        Se unificaron <strong>${data.duplicadosEliminados}</strong> ${entidadTexto} duplicado(s)
+        en <strong>${escaparHtml(nombreSobreviviente)}</strong>
+        (<strong>${data.ordenesReasignadas}</strong> órdenes reasignadas).
+      `;
+      desactivar();
+      if (alExito) alExito();
+    } finally {
+      btnConfirmar.disabled = false;
+      btnConfirmar.textContent = 'Confirmar unificación';
+    }
+  });
+
+  return { casilla };
+}
+
 // ---------- Cargas masivas por CSV (productos, contactos) ----------
 
 // Intenta UTF-8 estricto; si el archivo no es UTF-8 valido (comun en CSV exportados
@@ -275,6 +376,7 @@ function renderizarDestinos(destinos) {
     const tr = document.createElement('tr');
     tr.dataset.id = d.id_destino;
     tr.innerHTML = `
+      ${selectorDestinos.casilla(d.id_destino)}
       <td>${escaparHtml(d.destino)}</td>
       <td>${escaparHtml((d.empresas || []).join(', '))}</td>
       <td>${escaparHtml((d.grupos || []).join(', '))}</td>
@@ -390,36 +492,20 @@ tablaDestinos.addEventListener('click', async (e) => {
 });
 
 const btnUnificarDestinos = document.getElementById('btn-unificar-destinos');
-const reporteUnificarDestinos = document.getElementById('reporte-unificar-destinos');
 
-btnUnificarDestinos.addEventListener('click', async () => {
-  if (!confirm('¿Unificar hoteles/locales duplicados (mismo nombre y mismas plazas/grupos/cadenas)? Esta acción no se puede deshacer.')) return;
-
-  btnUnificarDestinos.disabled = true;
-  btnUnificarDestinos.textContent = 'Unificando...';
-
-  try {
-    const res = await fetch('/api/destinos/unificar', { method: 'POST' });
-    const data = await res.json();
-
-    reporteUnificarDestinos.hidden = false;
-    if (data.gruposUnificados === 0) {
-      reporteUnificarDestinos.textContent = 'No se encontraron hoteles/locales duplicados.';
-    } else {
-      reporteUnificarDestinos.innerHTML = `
-        Se unificaron <strong>${data.gruposUnificados}</strong> hotel(es)/local(es) duplicado(s)
-        (<strong>${data.duplicadosEliminados}</strong> registros eliminados,
-        <strong>${data.ordenesReasignadas}</strong> órdenes reasignadas):
-        <ul>${data.detalle.map((d) => `<li>${escaparHtml(d.destino)} (${d.duplicadosEliminados} duplicado(s))</li>`).join('')}</ul>
-      `;
-    }
-
-    cargarDestinos();
-    refrescarDependientesDeDestinos();
-  } finally {
-    btnUnificarDestinos.disabled = false;
-    btnUnificarDestinos.textContent = 'Unificar hoteles/locales duplicados';
-  }
+const selectorDestinos = crearSelectorUnificar({
+  tabla: tablaDestinos,
+  thCheck: document.getElementById('th-check-destinos'),
+  btnUnificar: btnUnificarDestinos,
+  btnConfirmar: document.getElementById('btn-confirmar-unificar-destinos'),
+  btnCancelar: document.getElementById('btn-cancelar-unificar-destinos'),
+  pista: document.getElementById('pista-unificar-destinos'),
+  reporte: document.getElementById('reporte-unificar-destinos'),
+  url: '/api/destinos/unificar',
+  campoNombreDetalle: 'destino',
+  entidadTexto: 'hoteles/locales',
+  recargar: aplicarFiltroDestinos,
+  alExito: () => { cargarDestinos(); refrescarDependientesDeDestinos(); },
 });
 
 // ---- Plaza ----
@@ -769,6 +855,7 @@ function renderizarContactos(contactos) {
     tr.dataset.id = c.id_contacto;
     const destinosTexto = (c.destinos || []).map((d) => d.destino).join(', ');
     tr.innerHTML = `
+      ${selectorContactos.casilla(c.id_contacto)}
       <td>${escaparHtml(c.id_publico || '')}</td>
       <td>${escaparHtml(c.nombre)}</td>
       <td>${escaparHtml(c.apellido || '')}</td>
@@ -933,6 +1020,7 @@ tablaContactos.addEventListener('click', async (e) => {
 // Hoteles/Locales, Negocios, Cotizaciones, Ordenes y Tareas asociadas.
 
 tablaContactos.addEventListener('click', (e) => {
+  if (e.target.closest('input')) return;
   if (e.target.closest('button') && !e.target.classList.contains('btn-ver-asociados')) return;
   const fila = e.target.closest('tr');
   if (!fila || !fila.dataset.id) return;
@@ -940,6 +1028,7 @@ tablaContactos.addEventListener('click', (e) => {
 });
 
 tablaDestinos.addEventListener('click', (e) => {
+  if (e.target.closest('input')) return;
   if (e.target.closest('button') && !e.target.classList.contains('btn-ver-asociados')) return;
   const fila = e.target.closest('tr');
   if (!fila || !fila.dataset.id) return;
@@ -947,113 +1036,20 @@ tablaDestinos.addEventListener('click', (e) => {
 });
 
 const btnUnificarContactos = document.getElementById('btn-unificar-contactos');
-const reporteUnificarContactos = document.getElementById('reporte-unificar-contactos');
 
-function fichaContactoUnificar(c) {
-  const destinosTexto = (c.destinos || []).map((d) => d.destino).join(', ') || 'Sin hoteles/locales';
-  const ordenesTexto = `${c.ordenes_count || 0} orden(es)`;
-  const cotizacionesTexto = `${c.cotizaciones_count || 0} cotización(es)`;
-  const tieneRegistros = (c.ordenes_count || 0) > 0 || (c.cotizaciones_count || 0) > 0;
-  return `
-    <label class="opcion-unificar-contacto">
-      <input type="radio" name="sobreviviente-${c._grupoIndice}" value="${c.id_contacto}" ${c._esPrimero ? 'checked' : ''} />
-      <span>
-        <strong>ID ${escaparHtml(c.id_publico || c.id_contacto)}</strong> ·
-        ${escaparHtml(c.correo_electronico || 'sin correo')} ·
-        ${escaparHtml(c.telefono_local || c.telefono_celular || 'sin teléfono')} ·
-        ${escaparHtml(destinosTexto)} ·
-        <strong${tieneRegistros ? ' class="estatus-vencido"' : ''}>${ordenesTexto} · ${cotizacionesTexto}</strong> ·
-        creado ${escaparHtml(fechaDe(c.creado_en))}
-        ${c.fecha_ultima_actividad ? ` · última actividad ${escaparHtml(fechaDe(c.fecha_ultima_actividad))}` : ''}
-      </span>
-    </label>
-  `;
-}
-
-let gruposDuplicadosContactos = [];
-
-async function mostrarGruposDuplicadosContactos() {
-  const res = await fetch('/api/contactos/duplicados');
-  gruposDuplicadosContactos = await res.json();
-
-  reporteUnificarContactos.hidden = false;
-
-  if (!gruposDuplicadosContactos.length) {
-    reporteUnificarContactos.innerHTML = '<p class="pista">No se encontraron contactos duplicados.</p>';
-    return;
-  }
-
-  reporteUnificarContactos.innerHTML = `
-    <p class="pista">Se encontraron ${gruposDuplicadosContactos.length} grupo(s) de contactos duplicados. Elige cuál contacto se conserva en cada grupo (los demás se eliminan y sus órdenes/destinos se reasignan al que elijas), o marca "No unificar" para dejar ese grupo tal cual.</p>
-    ${gruposDuplicadosContactos.map((grupo, indice) => `
-      <div class="grupo-unificar-contacto">
-        <h4>${escaparHtml([grupo[0].nombre, grupo[0].apellido].filter(Boolean).join(' '))}</h4>
-        ${grupo.map((c, i) => fichaContactoUnificar({ ...c, _grupoIndice: indice, _esPrimero: i === 0 })).join('')}
-        <label class="opcion-unificar-contacto">
-          <input type="radio" name="sobreviviente-${indice}" value="ninguno" />
-          <span>No unificar este grupo</span>
-        </label>
-      </div>
-    `).join('')}
-    <div class="acciones-form">
-      <button type="button" id="btn-confirmar-unificar-contactos">Confirmar unificación</button>
-      <button type="button" id="btn-cancelar-unificar-contactos">Cancelar</button>
-    </div>
-  `;
-
-  document.getElementById('btn-cancelar-unificar-contactos').addEventListener('click', () => {
-    reporteUnificarContactos.hidden = true;
-    reporteUnificarContactos.innerHTML = '';
-  });
-
-  document.getElementById('btn-confirmar-unificar-contactos').addEventListener('click', async () => {
-    const decisiones = gruposDuplicadosContactos
-      .map((grupo, indice) => {
-        const seleccionado = reporteUnificarContactos.querySelector(`input[name="sobreviviente-${indice}"]:checked`);
-        if (!seleccionado || seleccionado.value === 'ninguno') return null;
-        const sobrevivienteId = Number(seleccionado.value);
-        return {
-          sobreviviente_id: sobrevivienteId,
-          duplicado_ids: grupo.map((c) => c.id_contacto).filter((id) => id !== sobrevivienteId),
-        };
-      })
-      .filter(Boolean);
-
-    if (!decisiones.length) {
-      alert('No seleccionaste ningún grupo para unificar.');
-      return;
-    }
-
-    if (!confirm('¿Unificar los contactos seleccionados? Esta acción no se puede deshacer.')) return;
-
-    const res = await fetch('/api/contactos/unificar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ decisiones }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      alert('Error: ' + (data.errores ? data.errores.join(', ') : res.statusText));
-      return;
-    }
-
-    reporteUnificarContactos.innerHTML = `
-      Se unificaron <strong>${data.gruposUnificados}</strong> grupo(s) de duplicados
-      (<strong>${data.duplicadosEliminados}</strong> registros eliminados,
-      <strong>${data.ordenesReasignadas}</strong> órdenes reasignadas):
-      <ul>${data.detalle.map((d) => `<li>${escaparHtml(d.contacto)} (${d.duplicadosEliminados} duplicado(s))</li>`).join('')}</ul>
-    `;
-    cargarContactos();
-  });
-}
-
-btnUnificarContactos.addEventListener('click', async () => {
-  btnUnificarContactos.disabled = true;
-  try {
-    await mostrarGruposDuplicadosContactos();
-  } finally {
-    btnUnificarContactos.disabled = false;
-  }
+const selectorContactos = crearSelectorUnificar({
+  tabla: tablaContactos,
+  thCheck: document.getElementById('th-check-contactos'),
+  btnUnificar: btnUnificarContactos,
+  btnConfirmar: document.getElementById('btn-confirmar-unificar-contactos'),
+  btnCancelar: document.getElementById('btn-cancelar-unificar-contactos'),
+  pista: document.getElementById('pista-unificar-contactos'),
+  reporte: document.getElementById('reporte-unificar-contactos'),
+  url: '/api/contactos/unificar',
+  campoNombreDetalle: 'contacto',
+  entidadTexto: 'contactos',
+  recargar: aplicarFiltrosContactos,
+  alExito: () => cargarContactos(),
 });
 
 // ---------- Carga masiva de contactos (CSV) ----------

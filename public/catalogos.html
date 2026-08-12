@@ -92,16 +92,18 @@
         </form>
 
         <div class="acciones-form">
-          <button type="button" id="btn-unificar-destinos">Unificar hoteles/locales duplicados</button>
+          <button type="button" id="btn-unificar-destinos">Unificar duplicados</button>
+          <button type="button" id="btn-confirmar-unificar-destinos" hidden disabled>Confirmar unificación</button>
+          <button type="button" id="btn-cancelar-unificar-destinos" hidden>Cancelar</button>
         </div>
-        <p class="pista">Combina hoteles/locales con el mismo nombre y las mismas plazas/grupos/cadenas asociadas (sin importar mayúsculas, acentos o espacios de más), reasignando sus órdenes.</p>
+        <p class="pista" id="pista-unificar-destinos" hidden>Marca la casilla del hotel/local que se queda (se pondrá en negro) y luego las de los que se combinan en él (se pondrán en azul).</p>
         <div id="reporte-unificar-destinos" hidden></div>
 
         <input type="text" autocomplete="off" id="destinos-buscador" class="busqueda" placeholder="Buscar por hotel/local o plaza..." />
 
         <div class="tabla-scroll">
           <table>
-            <thead><tr><th>Hotel / Local</th><th>Plaza</th><th>Grupo</th><th>Cadena</th><th>Cotizaciones</th><th>Órdenes</th><th>Tareas</th><th>Acciones</th></tr></thead>
+            <thead><tr><th id="th-check-destinos" hidden></th><th>Hotel / Local</th><th>Plaza</th><th>Grupo</th><th>Cadena</th><th>Cotizaciones</th><th>Órdenes</th><th>Tareas</th><th>Acciones</th></tr></thead>
             <tbody id="tabla-destinos"></tbody>
           </table>
         </div>
@@ -167,9 +169,11 @@
       </form>
 
       <div class="acciones-form">
-        <button type="button" id="btn-unificar-contactos">Unificar contactos duplicados</button>
+        <button type="button" id="btn-unificar-contactos">Unificar duplicados</button>
+        <button type="button" id="btn-confirmar-unificar-contactos" hidden disabled>Confirmar unificación</button>
+        <button type="button" id="btn-cancelar-unificar-contactos" hidden>Cancelar</button>
       </div>
-      <p class="pista">Combina contactos que tengan exactamente el mismo nombre y apellido, reasignando sus órdenes (y sus hoteles/locales asociados).</p>
+      <p class="pista" id="pista-unificar-contactos" hidden>Marca la casilla del contacto que se queda (se pondrá en negro) y luego las de los que se combinan en él (se pondrán en azul).</p>
       <div id="reporte-unificar-contactos" hidden></div>
 
       <div class="fila-filtros">
@@ -182,6 +186,7 @@
         <table class="tabla-contactos-fija">
           <thead>
             <tr>
+              <th id="th-check-contactos" hidden></th>
               <th data-campo="id_publico">ID</th><th data-campo="nombre">Nombre</th><th data-campo="apellido">Apellido</th><th data-campo="correo_electronico">Correo</th><th data-campo="telefono_local">Tel. local</th><th data-campo="telefono_celular">Tel. celular</th><th data-campo="destinos_texto">Hoteles/Locales</th>
               <th data-campo="creado_en">Fecha de creación</th><th data-campo="fecha_ultima_actividad">Última actividad</th><th data-campo="cotizaciones_count">Cotizaciones</th><th data-campo="ordenes_count">Órdenes</th><th data-campo="tareas_count">Tareas</th><th>Acciones</th>
             </tr>

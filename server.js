@@ -1073,25 +1073,13 @@ app.delete('/api/destinos/:id', requirePermiso('catalogos', 'borrar'), ar(async 
   res.status(204).end();
 }));
 
-// Unifica destinos "casi iguales": mismo nombre y mismas plazas/grupos/cadenas ignorando
-// mayusculas/minusculas, acentos y espacios repetidos (ej. "Alof Guadalajara" y
-// "ALOF  Guadalajara " se consideran el mismo destino).
-// Conserva el de menor id, reasigna las ordenes que apuntaban al duplicado y borra el duplicado.
+// Unifica los grupos de duplicados que el usuario selecciono manualmente en la app: para cada
+// grupo se indica que hotel/local sobrevive (sobreviviente_id) y cuales se eliminan
+// (duplicado_ids). Reasigna ordenes y cotizaciones, fusiona (sin perder datos) las plazas/
+// grupos/cadenas y los contactos asociados de cada duplicado hacia el sobreviviente.
 app.post('/api/destinos/unificar', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {
-  const destinos = req.session.esAdmin
-    ? await db.prepare('SELECT * FROM destinos').all()
-    : await db.prepare('SELECT * FROM destinos WHERE usuario_id = ?').all(req.session.usuarioId);
-  const clavesAgrupadas = new Map();
-
-  for (const d of destinos) {
-    const empresas = (await empresasDeDestino(d.id_destino)).map(normalizarParaComparar).sort();
-    const grupos = (await gruposDeDestino(d.id_destino)).map(normalizarParaComparar).sort();
-    const cadenas = (await cadenasDeDestino(d.id_destino)).map(normalizarParaComparar).sort();
-    // La clave incluye usuario_id para nunca unificar destinos de distintos duenos entre si.
-    const clave = `${d.usuario_id}|${normalizarParaComparar(d.destino)} ${empresas.join(' ')}|${grupos.join(' ')}|${cadenas.join(' ')}`;
-    if (!clavesAgrupadas.has(clave)) clavesAgrupadas.set(clave, []);
-    clavesAgrupadas.get(clave).push(d);
-  }
+  const decisiones = Array.isArray(req.body.decisiones) ? req.body.decisiones : [];
+  if (!decisiones.length) return res.status(400).json({ errores: ['No hay decisiones de unificacion que aplicar'] });
 
   const resultado = await transaction(async (db) => {
     let gruposUnificados = 0;
@@ -1099,24 +1087,46 @@ app.post('/api/destinos/unificar', requirePermiso('catalogos', 'borrar'), ar(asy
     let ordenesReasignadas = 0;
     const detalle = [];
 
-    for (const grupo of clavesAgrupadas.values()) {
-      if (grupo.length < 2) continue;
+    for (const decision of decisiones) {
+      const sobreviviente = await db.prepare('SELECT * FROM destinos WHERE id_destino = ?').get(decision.sobreviviente_id);
+      const duplicadoIds = Array.isArray(decision.duplicado_ids) ? decision.duplicado_ids : [];
+      if (!sobreviviente || !esDueno(sobreviviente, req) || !duplicadoIds.length) continue;
 
-      grupo.sort((a, b) => a.id_destino - b.id_destino);
-      const [sobreviviente, ...duplicados] = grupo;
+      for (const dupId of duplicadoIds) {
+        if (Number(dupId) === Number(decision.sobreviviente_id)) continue;
+        const dup = await db.prepare('SELECT * FROM destinos WHERE id_destino = ?').get(dupId);
+        // Nunca unificar destinos de otro dueno, aunque el sobreviviente si sea propio.
+        if (!dup || dup.usuario_id !== sobreviviente.usuario_id) continue;
 
-      for (const dup of duplicados) {
         const info = await db.prepare('UPDATE ordenes SET destino_id = ? WHERE destino_id = ?').run(sobreviviente.id_destino, dup.id_destino);
         ordenesReasignadas += info.changes;
-        await db.prepare('DELETE FROM destino_empresas WHERE destino_id = ?').run(dup.id_destino);
-        await db.prepare('DELETE FROM destino_grupos WHERE destino_id = ?').run(dup.id_destino);
-        await db.prepare('DELETE FROM destino_cadenas WHERE destino_id = ?').run(dup.id_destino);
+        await db.prepare('UPDATE cotizaciones SET destino_id = ? WHERE destino_id = ?').run(sobreviviente.id_destino, dup.id_destino);
+        await db.prepare(`
+          INSERT INTO contacto_destinos (contacto_id, destino_id)
+          SELECT contacto_id, ? FROM contacto_destinos WHERE destino_id = ?
+          ON CONFLICT (contacto_id, destino_id) DO NOTHING
+        `).run(sobreviviente.id_destino, dup.id_destino);
+        await db.prepare(`
+          INSERT INTO destino_empresas (destino_id, empresa_id)
+          SELECT ?, empresa_id FROM destino_empresas WHERE destino_id = ?
+          ON CONFLICT (destino_id, empresa_id) DO NOTHING
+        `).run(sobreviviente.id_destino, dup.id_destino);
+        await db.prepare(`
+          INSERT INTO destino_grupos (destino_id, grupo_id)
+          SELECT ?, grupo_id FROM destino_grupos WHERE destino_id = ?
+          ON CONFLICT (destino_id, grupo_id) DO NOTHING
+        `).run(sobreviviente.id_destino, dup.id_destino);
+        await db.prepare(`
+          INSERT INTO destino_cadenas (destino_id, cadena_id)
+          SELECT ?, cadena_id FROM destino_cadenas WHERE destino_id = ?
+          ON CONFLICT (destino_id, cadena_id) DO NOTHING
+        `).run(sobreviviente.id_destino, dup.id_destino);
         await db.prepare('DELETE FROM destinos WHERE id_destino = ?').run(dup.id_destino);
         duplicadosEliminados++;
       }
 
       gruposUnificados++;
-      detalle.push({ destino: sobreviviente.destino, duplicadosEliminados: duplicados.length });
+      detalle.push({ destino: sobreviviente.destino, duplicadosEliminados: duplicadoIds.length });
     }
 
     return { gruposUnificados, duplicadosEliminados, ordenesReasignadas, detalle };
@@ -1469,74 +1479,8 @@ app.post('/api/contactos/importar-csv', requirePermiso('catalogos', 'editar'), a
   res.json({ total: registros.length, ...resultado });
 }));
 
-// Unifica contactos duplicados: mismo Nombre + Apellido exactos.
-// Solo detecta y devuelve los grupos de contactos duplicados (mismo nombre+apellido), sin
-// modificar nada: el usuario elige en la app cual contacto de cada grupo se conserva.
-// Dos contactos con el mismo correo (o donde a alguno le falta el correo) se consideran
-// compatibles para unificar; si ambos tienen correo y son distintos, NO son el mismo contacto
-// aunque compartan nombre y apellido.
-function correosCompatibles(a, b) {
-  if (!a.correo_electronico || !b.correo_electronico) return true;
-  return a.correo_electronico.toLowerCase() === b.correo_electronico.toLowerCase();
-}
-
-app.get('/api/contactos/duplicados', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {
-  const contactos = req.session.esAdmin
-    ? await db.prepare('SELECT * FROM contactos').all()
-    : await db.prepare('SELECT * FROM contactos WHERE usuario_id = ?').all(req.session.usuarioId);
-  const gruposPorNombre = new Map();
-
-  for (const c of contactos) {
-    // La llave incluye usuario_id para nunca sugerir unificar contactos de distintos duenos.
-    const llave = `${c.usuario_id}|${c.nombre}|${c.apellido || ''}`;
-    if (!gruposPorNombre.has(llave)) gruposPorNombre.set(llave, []);
-    gruposPorNombre.get(llave).push(c);
-  }
-
-  const subgrupos = [];
-  for (const grupo of gruposPorNombre.values()) {
-    const padre = grupo.map((_, i) => i);
-    function raiz(i) { return padre[i] === i ? i : (padre[i] = raiz(padre[i])); }
-    function unir(i, j) { padre[raiz(i)] = raiz(j); }
-
-    for (let i = 0; i < grupo.length; i++) {
-      for (let j = i + 1; j < grupo.length; j++) {
-        if (correosCompatibles(grupo[i], grupo[j])) unir(i, j);
-      }
-    }
-
-    const porRaiz = new Map();
-    grupo.forEach((c, i) => {
-      const r = raiz(i);
-      if (!porRaiz.has(r)) porRaiz.set(r, []);
-      porRaiz.get(r).push(c);
-    });
-    subgrupos.push(...porRaiz.values());
-  }
-
-  const gruposConDuplicados = subgrupos.filter((grupo) => grupo.length > 1);
-  const idsEnDuplicados = gruposConDuplicados.flat().map((c) => c.id_contacto);
-  const [destinosPorContacto, fechasPorContacto, conteos] = await Promise.all([
-    destinosDeContactosBatch(idsEnDuplicados),
-    fechasUltimaActividadContactosBatch(idsEnDuplicados),
-    conteosAsociadosContactosBatch(idsEnDuplicados),
-  ]);
-
-  const resultado = gruposConDuplicados.map((grupo) => grupo
-    .map((c) => ({
-      ...c,
-      destinos: destinosPorContacto.get(c.id_contacto) || [],
-      fecha_ultima_actividad: fechasPorContacto.get(c.id_contacto) || null,
-      cotizaciones_count: conteos.cotizaciones.get(c.id_contacto) || 0,
-      ordenes_count: conteos.ordenes.get(c.id_contacto) || 0,
-    }))
-    .sort((a, b) => a.id_contacto - b.id_contacto));
-
-  res.json(resultado);
-}));
-
-// Unifica los grupos de duplicados que el usuario ya decidio en la app: para cada grupo se
-// indica que contacto sobrevive (sobreviviente_id) y cuales se eliminan (duplicado_ids).
+// Unifica los grupos de duplicados que el usuario selecciono manualmente en la app: para cada
+// grupo se indica que contacto sobrevive (sobreviviente_id) y cuales se eliminan (duplicado_ids).
 app.post('/api/contactos/unificar', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {
   const decisiones = Array.isArray(req.body.decisiones) ? req.body.decisiones : [];
   if (!decisiones.length) return res.status(400).json({ errores: ['No hay decisiones de unificacion que aplicar'] });
@@ -1560,6 +1504,8 @@ app.post('/api/contactos/unificar', requirePermiso('catalogos', 'borrar'), ar(as
 
         const info = await db.prepare('UPDATE ordenes SET contacto_id = ? WHERE contacto_id = ?').run(sobreviviente.id_contacto, dup.id_contacto);
         ordenesReasignadas += info.changes;
+        await db.prepare('UPDATE cotizaciones SET contacto_id = ? WHERE contacto_id = ?').run(sobreviviente.id_contacto, dup.id_contacto);
+        await db.prepare('UPDATE negocios SET contacto_id = ? WHERE contacto_id = ?').run(sobreviviente.id_contacto, dup.id_contacto);
         await db.prepare(`
           INSERT INTO contacto_destinos (contacto_id, destino_id)
           SELECT ?, destino_id FROM contacto_destinos WHERE contacto_id = ?

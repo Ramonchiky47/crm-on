@@ -208,7 +208,23 @@ const destinoId = document.getElementById('destino-id');
 const destinoNombre = document.getElementById('destino-nombre');
 const destinoUbicacion = document.getElementById('destino-ubicacion');
 const btnCancelarDestino = document.getElementById('btn-cancelar-destino');
+const btnMostrarFormDestino = document.getElementById('btn-mostrar-form-destino');
 const tablaDestinos = document.getElementById('tabla-destinos');
+
+function abrirFormDestino() {
+  formDestino.hidden = false;
+  btnMostrarFormDestino.hidden = true;
+}
+
+function cerrarFormDestino() {
+  formDestino.hidden = true;
+  btnMostrarFormDestino.hidden = false;
+}
+
+btnMostrarFormDestino.addEventListener('click', () => {
+  abrirFormDestino();
+  destinoNombre.focus();
+});
 
 let permisosCatalogos = { ver: true, editar: true, borrar: true };
 let esAdminActual = false;
@@ -416,6 +432,7 @@ function limpiarFormDestino() {
   multiSelectGrupo.marcar([]);
   multiSelectCadena.marcar([]);
   btnCancelarDestino.hidden = true;
+  cerrarFormDestino();
 }
 
 // El catalogo de Contactos depende de Destinos (select de Hoteles/Locales del formulario,
@@ -471,6 +488,7 @@ async function editarDestino(id) {
   multiSelectGrupo.marcar(d.grupos);
   multiSelectCadena.marcar(d.cadenas);
   btnCancelarDestino.hidden = false;
+  abrirFormDestino();
   destinoNombre.focus();
 }
 
@@ -758,7 +776,23 @@ const contactoCorreo = document.getElementById('contacto-correo');
 const contactoTelefonoLocal = document.getElementById('contacto-telefono-local');
 const contactoTelefonoCelular = document.getElementById('contacto-telefono-celular');
 const btnCancelarContacto = document.getElementById('btn-cancelar-contacto');
+const btnMostrarFormContacto = document.getElementById('btn-mostrar-form-contacto');
 const tablaContactos = document.getElementById('tabla-contactos');
+
+function abrirFormContacto() {
+  formContacto.hidden = false;
+  btnMostrarFormContacto.hidden = true;
+}
+
+function cerrarFormContacto() {
+  formContacto.hidden = true;
+  btnMostrarFormContacto.hidden = false;
+}
+
+btnMostrarFormContacto.addEventListener('click', () => {
+  abrirFormContacto();
+  contactoNombre.focus();
+});
 
 const contactoDestinosBtn = document.getElementById('contacto-destinos-btn');
 const contactoDestinosPanel = document.getElementById('contacto-destinos-panel');
@@ -951,6 +985,7 @@ function limpiarFormContacto() {
   formContacto.reset();
   marcarDestinosContacto([]);
   btnCancelarContacto.hidden = true;
+  cerrarFormContacto();
 }
 
 formContacto.addEventListener('submit', async (e) => {
@@ -990,6 +1025,7 @@ function cargarContactoEnFormulario(c) {
   marcarDestinosContacto(c.destinos);
 
   btnCancelarContacto.hidden = false;
+  abrirFormContacto();
   contactoNombre.focus();
 }
 
@@ -2123,11 +2159,13 @@ promesaAuth.then((sesion) => {
   permisosCatalogos = sesion.permisos.catalogos;
   esAdminActual = sesion.esAdmin;
 
-  formDestino.hidden = !permisosCatalogos.editar;
+  formDestino.hidden = true;
+  btnMostrarFormDestino.hidden = !permisosCatalogos.editar;
   formPlaza.hidden = !permisosCatalogos.editar;
   formGrupo.hidden = !permisosCatalogos.editar;
   formCadena.hidden = !permisosCatalogos.editar;
-  formContacto.hidden = !permisosCatalogos.editar;
+  formContacto.hidden = true;
+  btnMostrarFormContacto.hidden = !permisosCatalogos.editar;
   formEstatus.hidden = !permisosCatalogos.editar;
   formEstadoEntrega.hidden = !permisosCatalogos.editar;
   formCategoria.hidden = !permisosCatalogos.editar;

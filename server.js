@@ -46,13 +46,16 @@ const app = express();
 app.set('trust proxy', 1);
 
 const PgSession = pgSessionFabrica(session);
+// rolling: true recorre el vencimiento de la sesion en cada request, para que el limite sea
+// por inactividad (75 min sin ninguna peticion al servidor) y no un tope fijo desde el login.
 app.use(session({
   store: new PgSession({ pool, tableName: 'session' }),
   secret: process.env.SESSION_SECRET || 'crm-on-secreto-de-desarrollo-cambia-esto',
   resave: false,
   saveUninitialized: false,
+  rolling: true,
   cookie: {
-    maxAge: 1000 * 60 * 60 * 8,
+    maxAge: 1000 * 60 * 75,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
   },

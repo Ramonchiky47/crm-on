@@ -83,6 +83,33 @@ async function iniciarAuth() {
 
 const promesaAuth = iniciarAuth();
 
+// ---------- Cierre de sesion por inactividad ----------
+// Si no hay ningun movimiento del usuario (mouse, teclado, touch, scroll) durante este tiempo,
+// se cierra la sesion y se manda a login. El numero debe coincidir con el maxAge de la cookie
+// de sesion en el servidor (server.js), que ademas es la garantia real del lado del servidor
+// por si el usuario cierra la pestana o deshabilita JavaScript.
+const MINUTOS_INACTIVIDAD = 75;
+let temporizadorInactividad = null;
+
+async function cerrarSesionPorInactividad() {
+  try {
+    await fetch('/api/logout', { method: 'POST' });
+  } catch (e) {
+    // Sin red o sesion ya vencida: igual mandamos a login.
+  }
+  window.location.href = 'login.html?motivo=inactividad';
+}
+
+function reiniciarTemporizadorInactividad() {
+  clearTimeout(temporizadorInactividad);
+  temporizadorInactividad = setTimeout(cerrarSesionPorInactividad, MINUTOS_INACTIVIDAD * 60 * 1000);
+}
+
+['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach((evento) => {
+  document.addEventListener(evento, reiniciarTemporizadorInactividad, { passive: true });
+});
+reiniciarTemporizadorInactividad();
+
 // ---------- Actualizaciones en tiempo real (Supabase Realtime) ----------
 // La llave publica solo tiene permiso de LECTURA (ver migracion "habilitar_rls_solo_lectura_anon"):
 // cualquier escritura sigue pasando por la API de Express, que valida sesion y permisos. Esto

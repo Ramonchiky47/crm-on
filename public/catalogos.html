@@ -49,7 +49,9 @@
       </div>
 
       <div data-subpanel="lista">
-        <form id="form-destino" class="form-catalogo form-catalogo-vertical">
+        <button type="button" id="btn-mostrar-form-destino" class="btn-agregar">+ Agregar Hotel/Local</button>
+
+        <form id="form-destino" class="form-catalogo form-catalogo-vertical" hidden>
           <input type="hidden" id="destino-id" />
           <input type="text" id="destino-nombre" placeholder="Nombre del hotel/local" required />
           <div class="fila">
@@ -151,7 +153,9 @@
 
     <section data-panel="contactos" hidden>
       <h2>Contactos</h2>
-      <form id="form-contacto" class="form-catalogo form-catalogo-vertical">
+      <button type="button" id="btn-mostrar-form-contacto" class="btn-agregar">+ Agregar Contacto</button>
+
+      <form id="form-contacto" class="form-catalogo form-catalogo-vertical" hidden>
         <input type="hidden" id="contacto-id" />
         <input type="text" id="contacto-nombre" placeholder="Nombre" required />
         <input type="text" id="contacto-apellido" placeholder="Apellido" />

@@ -8,6 +8,11 @@ fetch('/api/me').then((r) => {
   if (r.ok) window.location.href = 'index.html';
 });
 
+if (new URLSearchParams(window.location.search).get('motivo') === 'inactividad') {
+  errorLogin.textContent = 'Tu sesión se cerró por inactividad. Vuelve a iniciar sesión.';
+  errorLogin.hidden = false;
+}
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   errorLogin.hidden = true;

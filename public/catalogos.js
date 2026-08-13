@@ -1848,6 +1848,7 @@ function renderizarProductos(productos) {
       <td>${p.precio_mxn !== null ? formatoImporte(p.precio_mxn) : ''}</td>
       <td class="acciones">
         ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${escaparHtml(p.item)}">Editar</button>` : ''}
+        ${permisosCatalogos.editar ? `<button class="btn-clonar" data-id="${escaparHtml(p.item)}" title="Crear un producto nuevo con estos mismos datos">Clonar</button>` : ''}
         ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${escaparHtml(p.item)}">Borrar</button>` : ''}
       </td>
     </tr>
@@ -1925,6 +1926,26 @@ tablaProductos.addEventListener('click', async (e) => {
     btnGuardarProducto.textContent = 'Guardar cambios';
     btnCancelarProducto.hidden = false;
     productoDescripcion.focus();
+  }
+
+  if (e.target.classList.contains('btn-clonar')) {
+    const res = await fetch(`/api/productos?q=${encodeURIComponent(item)}`);
+    const productos = await res.json();
+    const p = productos.find((x) => x.item === item);
+    if (!p) return;
+
+    limpiarFormProducto();
+    // El Item se deja en blanco (a diferencia de Editar): es la llave primaria, asi que el
+    // usuario debe escribir un codigo nuevo antes de guardar.
+    productoDescripcion.value = p.descripcion || '';
+    productoCategoria.value = p.categoria_id || '';
+    productoLinea.value = p.linea_id || '';
+    productoMarca.value = p.marca_id || '';
+    productoPrecioUsd.value = p.precio_usd;
+    productoPrecioMxn.value = p.precio_mxn !== null ? p.precio_mxn : '';
+
+    btnCancelarProducto.hidden = false;
+    productoItem.focus();
   }
 });
 

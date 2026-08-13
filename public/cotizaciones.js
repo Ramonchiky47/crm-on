@@ -1624,9 +1624,15 @@ promesaAuth.then(async (sesion) => {
   poblarSelectsNegocio().then(cargarNegocios);
   poblarSelectsCotizacion().then(cargarCotizaciones);
 
+  const parametros = new URLSearchParams(window.location.search);
+
+  // Enlaces directos a una pestana (ej. desde la barra lateral): ?tab=negocios o
+  // ?tab=visualizacion. "captura" tiene su propio manejo mas abajo porque ademas precarga datos.
+  const tabDirecto = parametros.get('tab');
+  if (tabDirecto === 'negocios' || tabDirecto === 'visualizacion') activarSubtab(tabDirecto);
+
   // Se llego desde una Tarea con actividad "Cotizacion": abre directo la captura de una
   // cotizacion nueva y recuerda la tarea para borrarla cuando se guarde.
-  const parametros = new URLSearchParams(window.location.search);
   const pendienteId = parametros.get('pendiente');
   if (pendienteId) {
     pendienteOrigenId = pendienteId;

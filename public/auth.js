@@ -68,6 +68,76 @@ function ajustarNavegacion(datos) {
   });
 }
 
+// ---------- Barra lateral (navegacion global) ----------
+// Se agrega como hermano de .contenedor (no lo reemplaza ni lo reordena) y solo empuja el
+// contenido con un margin-left via la clase "con-barra-lateral" en <body>, para no arriesgar
+// el layout propio de cada pantalla.
+const NAV_LATERAL = [
+  { grupo: null, texto: 'Inicio', href: 'panel.html', permiso: () => true },
+  { grupo: null, texto: 'Órdenes', href: 'ordenes.html', permiso: (p) => p.ordenes.ver },
+  { grupo: null, texto: 'Cotizaciones', href: 'cotizaciones.html?tab=visualizacion', permiso: (p) => p.catalogos.ver },
+  { grupo: null, texto: 'Negocios', href: 'cotizaciones.html?tab=negocios', permiso: (p) => p.catalogos.ver },
+  { grupo: null, texto: 'Detalle de compra', href: 'detalle.html', permiso: (p) => p.detalle_compra.ver },
+  { grupo: null, texto: 'Reportes', href: 'reportes.html', permiso: (p) => p.ordenes.ver },
+  { grupo: null, texto: 'Tareas', href: 'index.html', permiso: (p) => p.catalogos.ver },
+  { grupo: null, texto: 'Datos', href: 'datos.html', permiso: (p) => p.ordenes.ver || p.detalle_compra.ver || p.catalogos.ver },
+
+  { grupo: 'Catálogos', texto: 'Hoteles / Locales', href: 'catalogos.html?tab=destinos', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Plaza', href: 'catalogos.html?tab=destinos', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Grupo', href: 'catalogos.html?tab=destinos', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Cadena', href: 'catalogos.html?tab=destinos', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Contactos', href: 'catalogos.html?tab=contactos', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Productos', href: 'catalogos.html?tab=productos', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Estatus', href: 'catalogos.html?tab=estatus', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Estado de entrega', href: 'catalogos.html?tab=estado-entrega', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Etapa del Negocio', href: 'catalogos.html?tab=etapa-negocio', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Actividades', href: 'catalogos.html?tab=actividades', permiso: (p) => p.catalogos.ver },
+
+  { grupo: 'Administración', texto: 'Usuarios', href: 'catalogos.html?tab=usuarios', soloAdmin: true },
+  { grupo: 'Administración', texto: 'Representantes', href: 'catalogos.html?tab=usuarios', soloAdmin: true },
+  { grupo: 'Administración', texto: 'Almacenamiento', href: 'catalogos.html?tab=almacenamiento', soloAdmin: true },
+];
+
+function insertarBarraLateral(datos) {
+  const archivoActual = window.location.pathname.split('/').pop() || 'index.html';
+
+  const visibles = NAV_LATERAL.filter((item) => (item.soloAdmin ? datos.esAdmin : item.permiso(datos.permisos)));
+  const grupos = [{ nombre: null, items: visibles.filter((i) => !i.grupo) }];
+  for (const nombreGrupo of ['Catálogos', 'Administración']) {
+    const items = visibles.filter((i) => i.grupo === nombreGrupo);
+    if (items.length) grupos.push({ nombre: nombreGrupo, items });
+  }
+
+  const html = grupos.map((g) => `
+    <div class="nav-grupo">
+      ${g.nombre ? `<div class="nav-grupo__titulo">${escaparHtmlLateral(g.nombre)}</div>` : ''}
+      ${g.items.map((item) => {
+        const archivoItem = item.href.split('?')[0];
+        const activo = archivoItem === archivoActual;
+        return `<a class="nav-item${item.grupo ? ' nav-item--sub' : ''}${activo ? ' activo' : ''}" href="${item.href}"${activo ? ' aria-current="page"' : ''}>${escaparHtmlLateral(item.texto)}</a>`;
+      }).join('')}
+    </div>
+  `).join('');
+
+  const barra = document.createElement('aside');
+  barra.className = 'barra-lateral';
+  barra.innerHTML = `
+    <div class="lateral-marca">
+      <span class="lateral-marca__nombre">GONPAL</span>
+      <span class="lateral-marca__sufijo">CRM</span>
+    </div>
+    <nav class="nav-lateral" aria-label="Navegación principal">${html}</nav>
+  `;
+  document.body.insertBefore(barra, document.body.firstChild);
+  document.body.classList.add('con-barra-lateral');
+}
+
+function escaparHtmlLateral(texto) {
+  const div = document.createElement('div');
+  div.textContent = texto;
+  return div.innerHTML;
+}
+
 async function iniciarAuth() {
   const res = await fetch('/api/me');
   if (!res.ok) {
@@ -76,6 +146,7 @@ async function iniciarAuth() {
   }
 
   const datos = await res.json();
+  insertarBarraLateral(datos);
   insertarBarraUsuario(datos);
   ajustarNavegacion(datos);
   return datos;

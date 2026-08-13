@@ -3658,6 +3658,80 @@ app.get('/api/buscar-global', ar(async (req, res) => {
   res.json({ contactos: contactosConRegistros, destinos: destinosConRegistros, ordenes, productos: productosConHistorial, plazas, grupos, cadenas });
 }));
 
+// ---------- Panel General (pantalla de inicio) ----------
+// Cada bloque solo se calcula/incluye si el usuario tiene permiso de ver el modulo del que
+// viene (catalogos para Negocios/Cotizaciones, ordenes para Ordenes/Ventas, detalle_compra para
+// Top articulos), igual que el resto de la app oculta secciones sin permiso en vez de fallar.
+app.get('/api/panel/resumen', ar(async (req, res) => {
+  if (!req.session.usuarioId) return res.status(401).json({ error: 'No autenticado' });
+  const permisos = await permisosDe(req.session.usuarioId, req.session.esAdmin);
+  const soloPropios = !req.session.esAdmin;
+  const usuarioId = req.session.usuarioId;
+  const hoy = new Date().toISOString().slice(0, 10);
+  const inicioMes = `${hoy.slice(0, 7)}-01`;
+  const resultado = {};
+
+  if (permisos.catalogos.ver) {
+    const negocios = soloPropios
+      ? await db.prepare(`${SELECT_NEGOCIOS} WHERE n.usuario_id = ?`).all(usuarioId)
+      : await db.prepare(SELECT_NEGOCIOS).all();
+    const etapasCatalogo = await db.prepare('SELECT id_etapa, etapa FROM etapas_negocio ORDER BY id_etapa').all();
+    const conteoPorEtapa = new Map();
+    for (const n of negocios) {
+      const nombre = n.etapa_nombre || 'Sin etapa';
+      conteoPorEtapa.set(nombre, (conteoPorEtapa.get(nombre) || 0) + 1);
+    }
+    const etapasCierre = ['Cierre Ganado', 'Cierre Perdido'];
+    resultado.negociosActivos = negocios.filter((n) => !etapasCierre.includes(n.etapa_nombre)).length;
+    resultado.negociosCerradosMes = negocios.filter((n) => etapasCierre.includes(n.etapa_nombre) && (n.creado_en || '') >= inicioMes).length;
+    resultado.pipeline = etapasCatalogo.map((e) => ({ etapa: e.etapa, cantidad: conteoPorEtapa.get(e.etapa) || 0 }));
+
+    const cotizaciones = (soloPropios
+      ? await db.prepare(`${SELECT_COTIZACIONES} WHERE q.usuario_id = ?`).all(usuarioId)
+      : await db.prepare(SELECT_COTIZACIONES).all()
+    ).map(conEstatus);
+    resultado.cotizacionesVigentes = cotizaciones.filter((c) => c.estatus === 'Vigente').length;
+    resultado.cotizacionesPorVencer = cotizaciones
+      .filter((c) => c.estatus === 'Vigente' && c.fecha_vencimiento)
+      .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento))
+      .slice(0, 6)
+      .map((c) => ({
+        id_cotizacion: c.id_cotizacion, nombre: c.nombre, destino_nombre: c.destino_nombre,
+        contacto_nombre: c.contacto_nombre, gran_total: c.gran_total, moneda: c.moneda,
+        fecha_vencimiento: c.fecha_vencimiento,
+      }));
+
+    resultado.tareasHoy = await db.prepare(`
+      SELECT id_pendiente, nombre, fecha_compromiso FROM pendientes
+      WHERE fecha_compromiso = ? ORDER BY nombre
+    `).all(hoy);
+  }
+
+  if (permisos.ordenes.ver) {
+    const enUso = await db.prepare(`
+      SELECT COUNT(*) c, COALESCE(SUM(o.importe), 0) ventas
+      FROM ordenes o JOIN estatus_catalogo e ON e.id_estatus = o.estatus_id
+      WHERE e.estatus = 'Pendiente'
+    `).get();
+    resultado.ordenesPendientes = Number(enUso.c);
+    const ventasMes = await db.prepare('SELECT COALESCE(SUM(importe), 0) ventas FROM ordenes WHERE fecha >= ?').get(inicioMes);
+    resultado.ventasMes = Number(ventasMes.ventas);
+  }
+
+  if (permisos.detalle_compra.ver) {
+    resultado.topArticulos = await db.prepare(`
+      SELECT articulo, SUM(cantidad_vendida) AS total
+      FROM detalle_de_compra
+      WHERE articulo IS NOT NULL AND fecha >= ?
+      GROUP BY articulo
+      ORDER BY total DESC
+      LIMIT 6
+    `).all(inicioMes);
+  }
+
+  res.json(resultado);
+}));
+
 // Middleware final de manejo de errores (rutas envueltas con ar()).
 app.use((err, req, res, next) => {
   console.error(err);

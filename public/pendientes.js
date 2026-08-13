@@ -104,6 +104,7 @@ const pendienteNombre = document.getElementById('pendiente-nombre');
 const pendienteFechaCompromiso = document.getElementById('pendiente-fecha-compromiso');
 const btnGuardarPendiente = document.getElementById('btn-guardar-pendiente');
 const btnCancelarPendiente = document.getElementById('btn-cancelar-pendiente');
+const btnMostrarFormPendiente = document.getElementById('btn-mostrar-form-pendiente');
 const tablaPendientes = document.getElementById('tabla-pendientes');
 const btnSincronizarGoogleTasks = document.getElementById('btn-sincronizar-google-tasks');
 
@@ -264,6 +265,17 @@ function limpiarFormPendiente() {
   btnCancelarPendiente.hidden = true;
 }
 
+function abrirFormPendiente() {
+  formPendiente.hidden = false;
+  btnMostrarFormPendiente.hidden = true;
+}
+
+function cerrarFormPendiente() {
+  limpiarFormPendiente();
+  formPendiente.hidden = true;
+  btnMostrarFormPendiente.hidden = false;
+}
+
 formPendiente.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (actividadesSeleccionadas.size === 0) {
@@ -286,11 +298,12 @@ formPendiente.addEventListener('submit', async (e) => {
     alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
     return;
   }
-  limpiarFormPendiente();
+  cerrarFormPendiente();
   cargarPendientes();
 });
 
-btnCancelarPendiente.addEventListener('click', limpiarFormPendiente);
+btnCancelarPendiente.addEventListener('click', cerrarFormPendiente);
+btnMostrarFormPendiente.addEventListener('click', abrirFormPendiente);
 
 tablaPendientes.addEventListener('click', async (e) => {
   const id = e.target.dataset.id;
@@ -322,6 +335,7 @@ tablaPendientes.addEventListener('click', async (e) => {
 
       btnGuardarPendiente.textContent = 'Guardar cambios';
       btnCancelarPendiente.hidden = false;
+      abrirFormPendiente();
       pendienteNombre.focus();
     }
     return;
@@ -679,7 +693,7 @@ promesaAuth.then(async (sesion) => {
     return;
   }
 
-  formPendiente.hidden = !permisosCatalogos.editar;
+  btnMostrarFormPendiente.hidden = !permisosCatalogos.editar;
   btnSincronizarGoogleTasks.hidden = !permisosCatalogos.editar;
 
   await cargarPanelActividades();

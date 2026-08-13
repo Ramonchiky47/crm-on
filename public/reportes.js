@@ -322,7 +322,7 @@ document.addEventListener('keydown', (e) => {
 promesaAuth.then((sesion) => {
   if (!sesion) return;
   if (!sesion.permisos.ordenes.ver) {
-    window.location.href = 'index.html';
+    window.location.href = 'panel.html';
     return;
   }
   cargarFiltroEstatus().then(cargarReporte);

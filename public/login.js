@@ -5,7 +5,7 @@ const errorLogin = document.getElementById('error-login');
 
 // Si ya hay sesion activa, saltar directo a la app.
 fetch('/api/me').then((r) => {
-  if (r.ok) window.location.href = 'index.html';
+  if (r.ok) window.location.href = 'panel.html';
 });
 
 if (new URLSearchParams(window.location.search).get('motivo') === 'inactividad') {
@@ -30,5 +30,5 @@ form.addEventListener('submit', async (e) => {
     return;
   }
 
-  window.location.href = 'index.html';
+  window.location.href = 'panel.html';
 });

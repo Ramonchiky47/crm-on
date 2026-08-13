@@ -199,7 +199,7 @@ input.addEventListener('input', () => {
 
 promesaAuth.then((sesion) => {
   if (!sesion) return;
-  if (!sesion.permisos.ordenes.ver) window.location.href = 'index.html';
+  if (!sesion.permisos.ordenes.ver) window.location.href = 'panel.html';
   cargarFiltroEstatus();
 
   suscribirTiempoReal(['ordenes'], buscarOrdenes);

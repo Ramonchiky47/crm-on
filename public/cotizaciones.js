@@ -1501,16 +1501,14 @@ function generarHtmlCotizacionPDF(c) {
         <div>Referencia: ${escaparHtml(referenciaCotizacion(c))}</div>
         <div>Creación del presupuesto: ${fechaLarga(c.fecha_creacion)}</div>
         <div>Caducidad del presupuesto: ${fechaLarga(c.fecha_vencimiento)}</div>
-        <div>Presupuesto creado por: ${escaparHtml(EMISOR_COTIZACION.nombre)}</div>
-        <div>${escaparHtml(EMISOR_COTIZACION.puesto)}</div>
-        <div>${escaparHtml(EMISOR_COTIZACION.correo)}</div>
-        <div>${escaparHtml(EMISOR_COTIZACION.telefono)}</div>
+        <div>Presupuesto creado por: ${escaparHtml(c.representante_nombre || EMISOR_COTIZACION.nombre)}</div>
+        <div>${escaparHtml(c.representante_correo || EMISOR_COTIZACION.correo)}</div>
       </div>
     </div>
   </div>
 
   <div class="caja">
-    <p><strong>Comentarios de ${escaparHtml(EMISOR_COTIZACION.nombre)}</strong></p>
+    <p><strong>Comentarios de ${escaparHtml(c.representante_nombre || EMISOR_COTIZACION.nombre)}</strong></p>
     <p><strong>Cotización Basada en:</strong> ${escaparHtml(c.moneda)}</p>
     ${c.metodo_pago ? `<p><strong>Condiciones de Pago:</strong> ${escaparHtml(c.metodo_pago)}</p>` : ''}
     ${c.lugar_entrega ? `<p><strong>Lugar de envío:</strong> ${escaparHtml(c.lugar_entrega)}</p>` : ''}
@@ -1564,18 +1562,21 @@ function generarHtmlCotizacionPDF(c) {
   <div class="footer">
     <p>¿Tienes alguna pregunta? Ponte en contacto conmigo</p>
     <p>
-      <strong>${escaparHtml(EMISOR_COTIZACION.nombre)}</strong><br />
-      ${escaparHtml(EMISOR_COTIZACION.puesto)}<br />
-      ${escaparHtml(EMISOR_COTIZACION.correo)}<br />
-      ${escaparHtml(EMISOR_COTIZACION.telefono)}
-    </p>
-    <p>
-      ${escaparHtml(EMISOR_COTIZACION.empresa)}<br />
-      ${EMISOR_COTIZACION.direccion.map(escaparHtml).join('<br />')}
+      ${lineasFirma(c).map(escaparHtml).join('<br />')}
     </p>
   </div>
 </body>
 </html>`;
+}
+
+// La firma del representante seleccionado (texto libre, capturada en su catalogo) reemplaza el
+// bloque fijo de Ramon Villanueva/Gonpal cuando esta capturada; si no, se usa ese bloque como
+// respaldo para no dejar el pie de la cotizacion en blanco.
+function lineasFirma(c) {
+  if ((c.representante_firma || '').trim()) {
+    return c.representante_firma.split('\n').map((l) => l.trim()).filter(Boolean);
+  }
+  return [EMISOR_COTIZACION.nombre, EMISOR_COTIZACION.puesto, EMISOR_COTIZACION.correo, EMISOR_COTIZACION.telefono, EMISOR_COTIZACION.empresa, ...EMISOR_COTIZACION.direccion];
 }
 
 async function generarPDFCotizacion(id) {

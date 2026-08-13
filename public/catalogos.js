@@ -1446,20 +1446,22 @@ const representanteId = document.getElementById('representante-id');
 const representanteNombre = document.getElementById('representante-nombre');
 const representanteCorreo = document.getElementById('representante-correo');
 const representanteCelular = document.getElementById('representante-celular');
+const representanteFirma = document.getElementById('representante-firma');
 const btnCancelarRepresentante = document.getElementById('btn-cancelar-representante');
 const tablaRepresentantes = document.getElementById('tabla-representantes');
+let representantesCache = [];
 
 async function cargarRepresentantes() {
   const res = await fetch('/api/representantes');
   if (!res.ok) return;
-  const representantes = await res.json();
-  tablaRepresentantes.innerHTML = representantes.map((r) => `
+  representantesCache = await res.json();
+  tablaRepresentantes.innerHTML = representantesCache.map((r) => `
     <tr>
       <td>${escaparHtml(r.representante)}</td>
       <td>${escaparHtml(r.correo_electronico || '')}</td>
       <td>${escaparHtml(r.celular || '')}</td>
       <td class="acciones">
-        <button class="btn-editar" data-id="${r.id_representante}" data-nombre="${escaparHtml(r.representante)}" data-correo="${escaparHtml(r.correo_electronico || '')}" data-celular="${escaparHtml(r.celular || '')}">Editar</button>
+        <button class="btn-editar" data-id="${r.id_representante}">Editar</button>
         <button class="btn-borrar" data-id="${r.id_representante}">Borrar</button>
       </td>
     </tr>
@@ -1478,6 +1480,7 @@ formRepresentante.addEventListener('submit', async (e) => {
     representante: representanteNombre.value.trim(),
     correo_electronico: representanteCorreo.value.trim(),
     celular: representanteCelular.value.trim(),
+    firma: representanteFirma.value.trim(),
   };
   const id = representanteId.value;
   const res = await fetch(id ? `/api/representantes/${id}` : '/api/representantes', {
@@ -1506,10 +1509,13 @@ tablaRepresentantes.addEventListener('click', async (e) => {
   }
 
   if (e.target.classList.contains('btn-editar')) {
-    representanteId.value = id;
-    representanteNombre.value = e.target.dataset.nombre;
-    representanteCorreo.value = e.target.dataset.correo;
-    representanteCelular.value = e.target.dataset.celular;
+    const r = representantesCache.find((x) => String(x.id_representante) === String(id));
+    if (!r) return;
+    representanteId.value = r.id_representante;
+    representanteNombre.value = r.representante;
+    representanteCorreo.value = r.correo_electronico || '';
+    representanteCelular.value = r.celular || '';
+    representanteFirma.value = r.firma || '';
     btnCancelarRepresentante.hidden = false;
     representanteNombre.focus();
   }

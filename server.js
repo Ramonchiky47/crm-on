@@ -285,12 +285,16 @@ app.post('/api/representantes', requireAdmin, ar(async (req, res) => {
   const representante = quitarAcentos((req.body.representante || '').trim());
   if (!representante) return res.status(400).json({ errores: ['representante es requerido'] });
 
+  // La firma es texto libre para el pie de las cotizaciones (nombre, puesto, contacto,
+  // empresa, direccion en las lineas que el representante decida): no se le quitan acentos,
+  // a diferencia del resto de los catalogos, porque va impresa tal cual en un documento oficial.
   const info = await db.prepare(`
-    INSERT INTO representantes (representante, correo_electronico, celular) VALUES (?, ?, ?)
+    INSERT INTO representantes (representante, correo_electronico, celular, firma) VALUES (?, ?, ?, ?)
   `).run(
     representante,
     (req.body.correo_electronico || '').trim() || null,
-    (req.body.celular || '').trim() || null
+    (req.body.celular || '').trim() || null,
+    (req.body.firma || '').trim() || null
   );
   res.status(201).json(await db.prepare('SELECT * FROM representantes WHERE id_representante = ?').get(info.lastInsertRowid));
 }));
@@ -303,11 +307,12 @@ app.put('/api/representantes/:id', requireAdmin, ar(async (req, res) => {
   if (!representante) return res.status(400).json({ errores: ['representante es requerido'] });
 
   await db.prepare(`
-    UPDATE representantes SET representante = ?, correo_electronico = ?, celular = ? WHERE id_representante = ?
+    UPDATE representantes SET representante = ?, correo_electronico = ?, celular = ?, firma = ? WHERE id_representante = ?
   `).run(
     representante,
     (req.body.correo_electronico || '').trim() || null,
     (req.body.celular || '').trim() || null,
+    (req.body.firma || '').trim() || null,
     req.params.id
   );
   res.json(await db.prepare('SELECT * FROM representantes WHERE id_representante = ?').get(req.params.id));
@@ -2160,7 +2165,8 @@ app.post('/api/negocios/:id/notas', requirePermiso('catalogos', 'editar'), ar(as
 const SELECT_COTIZACIONES = `
   SELECT q.*, n.negocio AS negocio_nombre, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre,
     c.correo_electronico AS contacto_correo, d.destino AS destino_nombre,
-    r.representante AS representante_nombre, r.correo_electronico AS representante_correo, r.celular AS representante_celular
+    r.representante AS representante_nombre, r.correo_electronico AS representante_correo, r.celular AS representante_celular,
+    r.firma AS representante_firma
   FROM cotizaciones q
   LEFT JOIN negocios n ON n.id_negocio = q.negocio_id
   LEFT JOIN contactos c ON c.id_contacto = q.contacto_id
@@ -2471,8 +2477,8 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
   doc.text(`Referencia: ${referenciaCotizacionPdf(cotizacion)}`, 340, yInfo, { width: 205, align: 'right' });
   doc.text(`Creación: ${fechaLargaPdf(cotizacion.fecha_creacion)}`, { width: 205, align: 'right' });
   doc.text(`Caducidad: ${fechaLargaPdf(cotizacion.fecha_vencimiento)}`, { width: 205, align: 'right' });
-  doc.text(`Presupuesto por: ${EMISOR_COTIZACION.nombre}`, { width: 205, align: 'right' });
-  doc.text(EMISOR_COTIZACION.correo, { width: 205, align: 'right' });
+  doc.text(`Presupuesto por: ${cotizacion.representante_nombre || EMISOR_COTIZACION.nombre}`, { width: 205, align: 'right' });
+  doc.text(cotizacion.representante_correo || EMISOR_COTIZACION.correo, { width: 205, align: 'right' });
   doc.fillColor('#000');
 
   doc.y = Math.max(doc.y, yInfo + 90);
@@ -2551,13 +2557,13 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
   doc.moveDown(1);
   doc.fontSize(9).font('Helvetica-Bold').text('¿Tienes alguna pregunta? Ponte en contacto conmigo');
   doc.font('Helvetica').fontSize(9);
-  doc.text(EMISOR_COTIZACION.nombre);
-  doc.text(EMISOR_COTIZACION.puesto);
-  doc.text(EMISOR_COTIZACION.correo);
-  doc.text(EMISOR_COTIZACION.telefono);
-  doc.moveDown(0.3);
-  doc.text(EMISOR_COTIZACION.empresa);
-  doc.fontSize(8).fillColor('#555').text(EMISOR_COTIZACION.direccion);
+  // La firma del representante seleccionado (texto libre, tal cual la capturo) reemplaza el
+  // bloque fijo de Ramon Villanueva/Gonpal cuando esta capturada; si no, se usa ese bloque como
+  // respaldo para no dejar el pie de la cotizacion en blanco.
+  const lineasFirma = (cotizacion.representante_firma || '').trim()
+    ? cotizacion.representante_firma.split('\n').map((l) => l.trim()).filter(Boolean)
+    : [EMISOR_COTIZACION.nombre, EMISOR_COTIZACION.puesto, EMISOR_COTIZACION.correo, EMISOR_COTIZACION.telefono, EMISOR_COTIZACION.empresa, EMISOR_COTIZACION.direccion];
+  lineasFirma.forEach((linea) => doc.text(linea));
   doc.fillColor('#000');
 
   doc.end();

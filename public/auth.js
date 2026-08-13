@@ -98,8 +98,22 @@ const NAV_LATERAL = [
   { grupo: 'Administración', texto: 'Almacenamiento', href: 'catalogos.html?tab=almacenamiento', soloAdmin: true },
 ];
 
+// Paginas donde varios items de la barra apuntan al mismo archivo con distinto ?tab=: si la URL
+// actual no trae ?tab=, hay que saber cual pestana se activa por default para marcar el item
+// correcto (si no, ninguno o el equivocado quedaria resaltado).
+const TAB_POR_DEFECTO = { 'cotizaciones.html': 'negocios', 'catalogos.html': 'destinos' };
+
+function esItemActivo(item, archivoActual, tabActual) {
+  const [archivoItem, queryItem] = item.href.split('?');
+  if (archivoItem !== archivoActual) return false;
+  const tabItem = queryItem ? new URLSearchParams(queryItem).get('tab') : null;
+  if (!tabItem) return true;
+  return tabItem === (tabActual || TAB_POR_DEFECTO[archivoActual]);
+}
+
 function insertarBarraLateral(datos) {
   const archivoActual = window.location.pathname.split('/').pop() || 'index.html';
+  const tabActual = new URLSearchParams(window.location.search).get('tab');
 
   const visibles = NAV_LATERAL.filter((item) => (item.soloAdmin ? datos.esAdmin : item.permiso(datos.permisos)));
   const grupos = [{ nombre: null, items: visibles.filter((i) => !i.grupo) }];
@@ -112,8 +126,7 @@ function insertarBarraLateral(datos) {
     <div class="nav-grupo">
       ${g.nombre ? `<div class="nav-grupo__titulo">${escaparHtmlLateral(g.nombre)}</div>` : ''}
       ${g.items.map((item) => {
-        const archivoItem = item.href.split('?')[0];
-        const activo = archivoItem === archivoActual;
+        const activo = esItemActivo(item, archivoActual, tabActual);
         return `<a class="nav-item${item.grupo ? ' nav-item--sub' : ''}${activo ? ' activo' : ''}" href="${item.href}"${activo ? ' aria-current="page"' : ''}>${escaparHtmlLateral(item.texto)}</a>`;
       }).join('')}
     </div>

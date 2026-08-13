@@ -75,8 +75,8 @@ function ajustarNavegacion(datos) {
 const NAV_LATERAL = [
   { grupo: null, texto: 'Inicio', href: 'panel.html', permiso: () => true },
   { grupo: null, texto: 'Órdenes', href: 'ordenes.html', permiso: (p) => p.ordenes.ver },
-  { grupo: null, texto: 'Cotizaciones', href: 'cotizaciones.html?tab=visualizacion', permiso: (p) => p.catalogos.ver },
   { grupo: null, texto: 'Negocios', href: 'cotizaciones.html?tab=negocios', permiso: (p) => p.catalogos.ver },
+  { grupo: null, texto: 'Cotizaciones', href: 'cotizaciones.html?tab=visualizacion', permiso: (p) => p.catalogos.ver },
   { grupo: null, texto: 'Detalle de compra', href: 'detalle.html', permiso: (p) => p.detalle_compra.ver },
   { grupo: null, texto: 'Reportes', href: 'reportes.html', permiso: (p) => p.ordenes.ver },
   { grupo: null, texto: 'Tareas', href: 'index.html', permiso: (p) => p.catalogos.ver },

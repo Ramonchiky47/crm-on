@@ -107,9 +107,15 @@ body.con-barra-lateral {
 
 .lateral-marca {
   display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.3rem 0.6rem 1.1rem;
+}
+
+.lateral-marca__fila {
+  display: flex;
   align-items: baseline;
   gap: 0.4rem;
-  padding: 0.3rem 0.6rem 1.1rem;
 }
 
 .lateral-marca__nombre {
@@ -125,6 +131,11 @@ body.con-barra-lateral {
   letter-spacing: 0.06em;
   color: var(--peligro);
   text-transform: uppercase;
+}
+
+.lateral-marca__autor {
+  font-size: 0.62rem;
+  color: var(--lateral-ink-baja);
 }
 
 .nav-lateral {

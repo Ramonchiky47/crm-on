@@ -139,8 +139,11 @@ function insertarBarraLateral(datos) {
   barra.className = 'barra-lateral';
   barra.innerHTML = `
     <div class="lateral-marca">
-      <span class="lateral-marca__nombre">GONPAL</span>
-      <span class="lateral-marca__sufijo">CRM</span>
+      <div class="lateral-marca__fila">
+        <span class="lateral-marca__nombre">GONPAL</span>
+        <span class="lateral-marca__sufijo">CRM</span>
+      </div>
+      <span class="lateral-marca__autor">By Ing Ramón Villanueva</span>
     </div>
     <nav class="nav-lateral" aria-label="Navegación principal">${html}</nav>
   `;

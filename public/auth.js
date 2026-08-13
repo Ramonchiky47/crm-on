@@ -79,7 +79,6 @@ const NAV_LATERAL = [
   { grupo: null, texto: 'Cotizaciones', href: 'cotizaciones.html?tab=visualizacion', permiso: (p) => p.catalogos.ver },
   { grupo: null, texto: 'Captura de cotizaciones', href: 'cotizaciones.html?tab=captura', permiso: (p) => p.catalogos.editar },
   { grupo: null, texto: 'Detalle de compra', href: 'detalle.html', permiso: (p) => p.detalle_compra.ver },
-  { grupo: null, texto: 'Reportes', href: 'reportes.html', permiso: (p) => p.ordenes.ver },
   { grupo: null, texto: 'Carga inicial', href: 'carga.html', permiso: (p) => p.ordenes.editar || p.detalle_compra.editar },
   { grupo: null, texto: 'Tareas', href: 'index.html', permiso: (p) => p.catalogos.ver },
   { grupo: null, texto: 'Datos', href: 'datos.html', permiso: (p) => p.ordenes.ver || p.detalle_compra.ver || p.catalogos.ver },

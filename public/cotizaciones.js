@@ -134,7 +134,11 @@ function coincideTexto(valor, filtro) {
 
 // Filtro de Etapa (Negocios): checkboxes generados a partir del catalogo de etapas_negocio,
 // que solo se aplican al presionar "Aplicar" (igual que el filtro de Etapa de Cotizaciones).
+// Por defecto se muestran todas las etapas excepto Cierre Ganado y Cierre Perdido; solo se ven
+// si el usuario las selecciona explicitamente en el filtro.
 let etapasNegSeleccionadas = new Set();
+let etapasNegInicializadas = false;
+const ETAPAS_NEG_EXCLUIDAS_POR_DEFECTO = ['Cierre Ganado', 'Cierre Perdido'];
 
 function poblarOpcionesFiltroNegEtapa(etapas) {
   filtroNegEtapaOpciones.innerHTML = etapas.map((e) => `
@@ -187,6 +191,17 @@ async function poblarSelectsNegocio() {
   poblarSelect(negocioContacto, contactos, 'id_contacto', 'nombre_completo_correo');
   poblarSelect(negocioEtapa, etapas, 'id_etapa', 'etapa');
   poblarOpcionesFiltroNegEtapa(etapas);
+
+  if (!etapasNegInicializadas) {
+    etapasNegInicializadas = true;
+    etapasNegSeleccionadas = new Set(
+      etapas.map((e) => e.etapa).filter((nombre) => !ETAPAS_NEG_EXCLUIDAS_POR_DEFECTO.includes(nombre))
+    );
+    actualizarBotonFiltroNegEtapa();
+    sincronizarChecksFiltroNegEtapa();
+    aplicarFiltrosNegocios();
+  }
+
   // Un negocio nuevo nace en la etapa "Negociacion" por default.
   if (!negocioId.value) seleccionarEtapaPorNombre(negocioEtapa, 'negociacion');
 }
@@ -627,7 +642,9 @@ async function cargarCotizaciones() {
 
 // Filtro por Etapa: checkboxes dentro de un panel desplegable que solo se aplican al
 // presionar "Aplicar" (o se descartan con "Cancelar"), no en vivo como los demas filtros.
-let etapasCotSeleccionadas = new Set();
+// Por defecto solo se muestra Negociacion; Ganada y Perdida quedan ocultas hasta que el usuario
+// las seleccione explicitamente.
+let etapasCotSeleccionadas = new Set(['Negociacion']);
 
 function actualizarBotonFiltroCotEtapa() {
   filtroCotEtapaBtn.textContent = etapasCotSeleccionadas.size

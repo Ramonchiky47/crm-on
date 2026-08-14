@@ -2517,7 +2517,20 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
   if (cotizacion.metodo_pago) doc.text(`Condiciones de pago: ${cotizacion.metodo_pago}`);
   if (cotizacion.lugar_entrega) doc.text(`Lugar de envío: ${cotizacion.lugar_entrega}`);
   if (cotizacion.tiempo_entrega) doc.text(`Tiempo de entrega: ${cotizacion.tiempo_entrega}`);
-  if (cotizacion.observaciones) doc.text(cotizacion.observaciones);
+  if (cotizacion.observaciones) {
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#000').text('Observaciones:');
+    // La clausula de "reportar daño en 24 horas" se resalta en rojo/negrita/mas grande que el
+    // resto del texto, sin importar en que parte de Observaciones venga escrita.
+    const CLAUSULA_DANIO_24H = /mercanc[ií]a con da[ñn]o debe reportarse/i;
+    for (const linea of cotizacion.observaciones.split('\n')) {
+      if (CLAUSULA_DANIO_24H.test(linea)) {
+        doc.font('Helvetica-Bold').fontSize(10).fillColor(rojoGonpal).text(linea);
+      } else {
+        doc.font('Helvetica').fontSize(9).fillColor('#000').text(linea);
+      }
+    }
+    doc.fillColor('#000');
+  }
   doc.moveDown(0.8);
 
   const columnas = [

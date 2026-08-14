@@ -1134,6 +1134,17 @@ function campoFicha(etiqueta, valor) {
   return `<div><span>${escaparHtml(etiqueta)}</span><p>${valor !== null && valor !== undefined && valor !== '' ? escaparHtml(String(valor)) : '-'}</p></div>`;
 }
 
+// La clausula de "reportar daño en 24 horas" se resalta en rojo/negrita/mas grande que el
+// resto de Observaciones (mismo criterio que el PDF), sin importar en que renglon venga escrita.
+const CLAUSULA_DANIO_24H = /mercanc[ií]a con da[ñn]o debe reportarse/i;
+
+function observacionesConClausulaResaltada(texto) {
+  return texto
+    .split('\n')
+    .map((linea) => (CLAUSULA_DANIO_24H.test(linea) ? `<span class="clausula-danio">${escaparHtml(linea)}</span>` : escaparHtml(linea)))
+    .join('\n');
+}
+
 // ---- Notas de seguimiento de un Negocio (bitacora, sin limite, con fecha/hora) ----
 
 function fechaHoraNota(creadoEn) {
@@ -1218,7 +1229,7 @@ async function abrirDetalleCotizacion(id) {
       ${campoFicha('Tiempo de entrega', c.tiempo_entrega)}
       ${campoFicha('Fecha de seguimiento', c.fecha_seguimiento)}
     </div>
-    ${c.observaciones ? `<p><strong>Observaciones:</strong> ${escaparHtml(c.observaciones)}</p>` : ''}
+    ${c.observaciones ? `<p><strong>Observaciones:</strong></p><p class="observaciones-cotizacion">${observacionesConClausulaResaltada(c.observaciones)}</p>` : ''}
     <h3>Productos (${c.items.length})</h3>
     <div class="tabla-scroll">
       <table>

@@ -1688,6 +1688,18 @@ td.acciones {
   word-break: break-word;
 }
 
+.observaciones-cotizacion {
+  white-space: pre-line;
+  font-size: 0.85rem;
+  margin: 0 0 1rem;
+}
+
+.observaciones-cotizacion .clausula-danio {
+  color: var(--peligro);
+  font-weight: 700;
+  font-size: 1.05em;
+}
+
 .resumen-cotizacion {
   border-top: 1px solid var(--borde);
   padding-top: 0.6rem;

@@ -337,6 +337,7 @@ body.con-barra-lateral {
   gap: 0.6rem;
   border-radius: 6px;
   padding: 0.15rem 0.3rem;
+  cursor: pointer;
 }
 
 .pipeline__fila:hover, .pipeline__fila:focus-visible { background: var(--fondo-suave); }
@@ -397,6 +398,7 @@ body.con-barra-lateral {
   padding: 0.55rem 0.3rem;
   border-bottom: 1px solid var(--borde);
   border-radius: 6px;
+  cursor: pointer;
 }
 
 .fila-lista:last-child { border-bottom: none; }
@@ -448,6 +450,7 @@ body.con-barra-lateral {
   gap: 0.5rem;
   border-radius: 6px;
   padding: 0.15rem 0.3rem;
+  cursor: pointer;
 }
 
 .articulo__fila:hover, .articulo__fila:focus-visible { background: var(--fondo-suave); }

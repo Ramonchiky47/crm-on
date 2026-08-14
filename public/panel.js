@@ -36,7 +36,7 @@ function renderizarPipeline(pipeline) {
     if (!['Cierre Ganado', 'Cierre Perdido'].includes(p.etapa)) indiceEnCurso++;
     const ancho = Math.max(4, Math.round((p.cantidad / maximo) * 100));
     return `
-      <div class="pipeline__fila" tabindex="0">
+      <div class="pipeline__fila" tabindex="0" data-href="cotizaciones.html?tab=negocios" title="Ver Negocios">
         <span class="pipeline__etapa">${escaparHtml(p.etapa)}</span>
         <span class="pipeline__pista"><span class="pipeline__barra" style="width:${ancho}%; background:${color}"></span></span>
         <span class="pipeline__valor">${p.cantidad}</span>
@@ -63,7 +63,7 @@ function renderizarCotizacionesPorVencer(lista) {
   const contenedor = document.getElementById('lista-vencer');
   contenedor.innerHTML = lista.length
     ? lista.map((c) => `
-        <div class="fila-lista" tabindex="0">
+        <div class="fila-lista" tabindex="0" data-href="cotizaciones.html?cotizacion=${encodeURIComponent(c.id_cotizacion)}" title="Abrir cotización">
           <div class="fila-lista__texto">
             <div class="fila-lista__principal">${escaparHtml(c.id_cotizacion)} &middot; ${escaparHtml(c.destino_nombre || c.nombre)}</div>
             <div class="fila-lista__secundario">${escaparHtml(c.contacto_nombre || '')} &middot; ${escaparHtml(c.moneda)} ${formatoImporte(c.gran_total)}</div>
@@ -79,7 +79,7 @@ function renderizarTopArticulos(lista) {
   const maximo = Math.max(1, ...lista.map((a) => Number(a.total)));
   contenedor.innerHTML = lista.length
     ? lista.map((a) => `
-        <div class="articulo__fila" tabindex="0">
+        <div class="articulo__fila" tabindex="0" data-href="buscar.html?q=${encodeURIComponent(a.articulo)}" title="Buscar órdenes con este artículo">
           <div>
             <div class="articulo__nombre">${escaparHtml(a.articulo)}</div>
             <div class="articulo__pista"><span class="articulo__barra" style="width:${Math.max(4, Math.round((Number(a.total) / maximo) * 100))}%"></span></div>
@@ -95,7 +95,7 @@ function renderizarTareasHoy(lista) {
   const contenedor = document.getElementById('lista-tareas');
   contenedor.innerHTML = lista.length
     ? lista.map((p) => `
-        <div class="fila-lista" tabindex="0">
+        <div class="fila-lista" tabindex="0" data-href="index.html" title="Ir a Tareas">
           <div class="fila-lista__texto">
             <div class="fila-lista__principal">${escaparHtml(p.nombre)}</div>
           </div>
@@ -157,6 +157,25 @@ async function cargarPanel() {
     renderizarTareasHoy(d.tareasHoy);
   }
 }
+
+// Las tarjetas del panel son informativas pero tambien un acceso directo: un clic (o Enter/
+// espacio con teclado) en una fila lleva a la pantalla real donde vive ese dato.
+function activarNavegacionLista(contenedorId) {
+  const contenedor = document.getElementById(contenedorId);
+  contenedor.addEventListener('click', (e) => {
+    const fila = e.target.closest('[data-href]');
+    if (fila) window.location.href = fila.dataset.href;
+  });
+  contenedor.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const fila = e.target.closest('[data-href]');
+    if (!fila) return;
+    e.preventDefault();
+    window.location.href = fila.dataset.href;
+  });
+}
+
+['pipeline-lista', 'lista-vencer', 'lista-articulos', 'lista-tareas'].forEach(activarNavegacionLista);
 
 promesaAuth.then((sesion) => {
   if (!sesion) return;

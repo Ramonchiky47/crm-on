@@ -202,6 +202,13 @@ promesaAuth.then((sesion) => {
   if (!sesion.permisos.ordenes.ver) window.location.href = 'panel.html';
   cargarFiltroEstatus();
 
+  // Enlace directo con termino precargado (ej. desde el Panel General): ?q=articulo
+  const qUrl = new URLSearchParams(window.location.search).get('q');
+  if (qUrl) {
+    input.value = qUrl;
+    buscarOrdenes();
+  }
+
   suscribirTiempoReal(['ordenes'], buscarOrdenes);
   suscribirTiempoReal(['estatus_catalogo'], () => { cargarFiltroEstatus(); buscarOrdenes(); });
 });

@@ -592,6 +592,16 @@ function activarFiltroNegocio(id, nombre) {
     filtroPista.hidden = true;
     cargarCotizaciones();
   });
+
+  // Al venir de "Ver cotizaciones" de un negocio especifico, se limpian los demas filtros
+  // (incluida la etapa, que por default solo muestra "Negociacion") para no ocultar por
+  // accidente las cotizaciones de ese negocio si estan en otra etapa o quedo texto de un
+  // filtro anterior.
+  [filtroCotId, filtroCotNombre, filtroCotNegocio, filtroCotContacto, filtroCotFecha].forEach((input) => { input.value = ''; });
+  etapasCotSeleccionadas = new Set();
+  sincronizarChecksFiltroCotEtapa();
+  actualizarBotonFiltroCotEtapa();
+
   cargarCotizaciones();
 }
 

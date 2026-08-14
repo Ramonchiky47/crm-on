@@ -46,16 +46,15 @@ const app = express();
 app.set('trust proxy', 1);
 
 const PgSession = pgSessionFabrica(session);
-// rolling: true recorre el vencimiento de la sesion en cada request, para que el limite sea
-// por inactividad (75 min sin ninguna peticion al servidor) y no un tope fijo desde el login.
+// Sin maxAge, la cookie es "de sesion": el navegador la borra al cerrarse por completo, asi
+// que volver a abrirlo siempre pide usuario y contrasena. El limite de 75 min de inactividad
+// con el navegador abierto lo sigue manejando el cierre de sesion automatico en el cliente.
 app.use(session({
-  store: new PgSession({ pool, tableName: 'session' }),
+  store: new PgSession({ pool, tableName: 'session', ttl: 60 * 60 * 24 }),
   secret: process.env.SESSION_SECRET || 'crm-on-secreto-de-desarrollo-cambia-esto',
   resave: false,
   saveUninitialized: false,
-  rolling: true,
   cookie: {
-    maxAge: 1000 * 60 * 75,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
   },

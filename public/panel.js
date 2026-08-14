@@ -21,8 +21,8 @@ document.getElementById('panel-fecha').innerHTML = `<strong>${fechaLarga(new Dat
 const etapasPipelineOrdinal = ['Prospeccion', 'Calificacion', 'Contacto', 'Cotizacion', 'Negociacion'];
 
 function colorEtapaPipeline(nombreEtapa, indiceEnCurso) {
-  if (nombreEtapa === 'Cierre Ganado') return 'var(--bueno)';
-  if (nombreEtapa === 'Cierre Perdido') return 'var(--critico)';
+  if (nombreEtapa === 'Cierre Ganado') return 'var(--exito)';
+  if (nombreEtapa === 'Cierre Perdido') return 'var(--peligro)';
   const pasos = ['var(--dato-250)', 'var(--dato-400)', 'var(--dato-450)', 'var(--dato-500)', 'var(--dato-600)'];
   return pasos[indiceEnCurso % pasos.length];
 }
@@ -114,8 +114,30 @@ function tarjetaKpi(etiqueta, valor, delta, clase) {
   `;
 }
 
+// Importe por moneda de un grupo de cotizaciones: si no hubo en una moneda no se muestra esa
+// linea (evita mostrar "USD 0.00 · MXN 0.00" cuando no paso nada ese dia).
+function textoImportePorMoneda(usd, mxn) {
+  const partes = [];
+  if (usd) partes.push(`USD ${formatoImporte(usd)}`);
+  if (mxn) partes.push(`MXN ${formatoImporte(mxn)}`);
+  return partes.join(' · ');
+}
+
+function renderizarCotizacionesDia(d) {
+  document.getElementById('cot-dia-realizadas').textContent = d.cotizacionesRealizadas;
+  document.getElementById('cot-dia-realizadas-importe').textContent =
+    textoImportePorMoneda(d.cotizacionesRealizadasImporteUsd, d.cotizacionesRealizadasImporteMxn);
+  document.getElementById('cot-dia-ganadas').textContent = d.cotizacionesGanadas;
+  document.getElementById('cot-dia-ganadas-importe').textContent =
+    textoImportePorMoneda(d.cotizacionesGanadasImporteUsd, d.cotizacionesGanadasImporteMxn);
+  document.getElementById('cot-dia-perdidas').textContent = d.cotizacionesPerdidas;
+}
+
+const filtroFechaPanel = document.getElementById('panel-filtro-fecha');
+
 async function cargarPanel() {
-  const res = await fetch('/api/panel/resumen');
+  const parametros = filtroFechaPanel.value ? `?fecha=${encodeURIComponent(filtroFechaPanel.value)}` : '';
+  const res = await fetch(`/api/panel/resumen${parametros}`);
   if (!res.ok) return;
   const d = await res.json();
 
@@ -156,7 +178,14 @@ async function cargarPanel() {
     document.getElementById('tarjeta-tareas').hidden = false;
     renderizarTareasHoy(d.tareasHoy);
   }
+  if (d.filtroFecha) {
+    document.getElementById('tarjeta-cotizaciones-dia').hidden = false;
+    if (!filtroFechaPanel.value) filtroFechaPanel.value = d.filtroFecha;
+    renderizarCotizacionesDia(d);
+  }
 }
+
+filtroFechaPanel.addEventListener('change', cargarPanel);
 
 // Las tarjetas del panel son informativas pero tambien un acceso directo: un clic (o Enter/
 // espacio con teclado) en una fila lleva a la pantalla real donde vive ese dato.

@@ -3681,8 +3681,11 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
   const permisos = await permisosDe(req.session.usuarioId, req.session.esAdmin);
   const soloPropios = !req.session.esAdmin;
   const usuarioId = req.session.usuarioId;
-  const hoy = new Date().toISOString().slice(0, 10);
+  // CURRENT_DATE de Postgres (zona horaria America/Mexico_City) en vez de new Date() de Node
+  // (que siempre es UTC): evita que "hoy" se adelante un dia por la tarde/noche en Mexico.
+  const { hoy } = await db.prepare('SELECT (CURRENT_DATE)::text AS hoy').get();
   const inicioMes = `${hoy.slice(0, 7)}-01`;
+  const fechaFiltro = (req.query.fecha || hoy).slice(0, 10);
   const resultado = {};
 
   if (permisos.catalogos.ver) {
@@ -3719,6 +3722,25 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
       SELECT id_pendiente, nombre, fecha_compromiso FROM pendientes
       WHERE fecha_compromiso = ? ORDER BY nombre
     `).all(hoy);
+
+    // Cotizaciones del dia (filtro por Fecha de creacion, default hoy): cuantas se hicieron,
+    // su importe por moneda (USD y MXN se suman aparte, no se mezclan), y de esas cuantas ya
+    // estan en etapa Ganada/Perdida.
+    const sumaPorMoneda = (lista, moneda) => lista
+      .filter((c) => c.moneda === moneda)
+      .reduce((acc, c) => acc + Number(c.gran_total || 0), 0);
+
+    const cotizacionesDelDia = cotizaciones.filter((c) => c.fecha_creacion === fechaFiltro);
+    const cotizacionesGanadasDelDia = cotizacionesDelDia.filter((c) => c.etapa === 'Ganada');
+
+    resultado.filtroFecha = fechaFiltro;
+    resultado.cotizacionesRealizadas = cotizacionesDelDia.length;
+    resultado.cotizacionesRealizadasImporteUsd = sumaPorMoneda(cotizacionesDelDia, 'USD');
+    resultado.cotizacionesRealizadasImporteMxn = sumaPorMoneda(cotizacionesDelDia, 'MXN');
+    resultado.cotizacionesGanadas = cotizacionesGanadasDelDia.length;
+    resultado.cotizacionesGanadasImporteUsd = sumaPorMoneda(cotizacionesGanadasDelDia, 'USD');
+    resultado.cotizacionesGanadasImporteMxn = sumaPorMoneda(cotizacionesGanadasDelDia, 'MXN');
+    resultado.cotizacionesPerdidas = cotizacionesDelDia.filter((c) => c.etapa === 'Perdida').length;
   }
 
   if (permisos.ordenes.ver) {

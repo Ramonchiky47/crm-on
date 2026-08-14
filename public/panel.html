@@ -17,6 +17,29 @@
 
     <div class="cuadricula">
       <div class="columna">
+        <section class="tarjeta" id="tarjeta-cotizaciones-dia" hidden>
+          <div class="tarjeta__cabecera">
+            <h2 class="tarjeta__titulo">Cotizaciones del día</h2>
+            <input type="date" id="panel-filtro-fecha" />
+          </div>
+          <div class="resumen-cot-dia">
+            <div class="resumen-cot-dia__grupo">
+              <span class="resumen-cot-dia__etiqueta">Realizadas</span>
+              <span class="resumen-cot-dia__valor" id="cot-dia-realizadas">0</span>
+              <span class="resumen-cot-dia__importe" id="cot-dia-realizadas-importe"></span>
+            </div>
+            <div class="resumen-cot-dia__grupo es-bueno">
+              <span class="resumen-cot-dia__etiqueta">Ganadas</span>
+              <span class="resumen-cot-dia__valor" id="cot-dia-ganadas">0</span>
+              <span class="resumen-cot-dia__importe" id="cot-dia-ganadas-importe"></span>
+            </div>
+            <div class="resumen-cot-dia__grupo es-critico">
+              <span class="resumen-cot-dia__etiqueta">Perdidas</span>
+              <span class="resumen-cot-dia__valor" id="cot-dia-perdidas">0</span>
+            </div>
+          </div>
+        </section>
+
         <section class="tarjeta" id="tarjeta-pipeline" hidden>
           <div class="tarjeta__cabecera">
             <h2 class="tarjeta__titulo">Negocios por etapa</h2>
@@ -25,8 +48,8 @@
           <div class="pipeline" id="pipeline-lista"></div>
           <div class="pipeline__leyenda">
             <span class="leyenda__punto" style="--marcador:var(--dato-450)">En curso</span>
-            <span class="leyenda__punto" style="--marcador:var(--bueno)">Ganado</span>
-            <span class="leyenda__punto" style="--marcador:var(--critico)">Perdido</span>
+            <span class="leyenda__punto" style="--marcador:var(--exito)">Ganado</span>
+            <span class="leyenda__punto" style="--marcador:var(--peligro)">Perdido</span>
           </div>
         </section>
 

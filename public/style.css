@@ -303,6 +303,62 @@ body.con-barra-lateral {
 .kpi__delta.es-alerta { color: var(--alerta); }
 .kpi__delta.es-neutro { color: #757575; }
 
+#panel-filtro-fecha {
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.78rem;
+  color: inherit;
+  background: #fff;
+}
+
+.resumen-cot-dia {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.9rem;
+}
+
+.resumen-cot-dia__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem;
+  background: var(--fondo-suave);
+}
+
+.resumen-cot-dia__grupo.es-bueno { background: #eaf3ea; }
+.resumen-cot-dia__grupo.es-critico { background: #fbebe8; }
+
+.resumen-cot-dia__etiqueta {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #757575;
+}
+
+.resumen-cot-dia__grupo.es-bueno .resumen-cot-dia__etiqueta { color: var(--exito); }
+.resumen-cot-dia__grupo.es-critico .resumen-cot-dia__etiqueta { color: var(--peligro); }
+
+.resumen-cot-dia__valor {
+  font-size: 1.55rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.resumen-cot-dia__importe {
+  font-size: 0.76rem;
+  color: #757575;
+  font-variant-numeric: tabular-nums;
+  min-height: 1em;
+}
+
+@media (max-width: 640px) {
+  .resumen-cot-dia { grid-template-columns: 1fr; }
+}
+
 .cuadricula {
   display: grid;
   grid-template-columns: 1.7fr 1fr;

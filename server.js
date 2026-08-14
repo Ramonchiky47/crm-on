@@ -2117,8 +2117,11 @@ app.post('/api/negocios', requirePermiso('catalogos', 'editar'), ar(async (req, 
 
   const id = await generarIdNegocio();
   await db.prepare(`
-    INSERT INTO negocios (id_negocio, negocio, contacto_id, etapa_id, motivo_perdida, usuario_id) VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, negocio, req.body.contacto_id || null, req.body.etapa_id || null, (req.body.motivo_perdida || '').trim() || null, req.session.usuarioId);
+    INSERT INTO negocios (id_negocio, negocio, contacto_id, etapa_id, motivo_perdida, usuario_id, fecha_estimada_cierre) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id, negocio, req.body.contacto_id || null, req.body.etapa_id || null, (req.body.motivo_perdida || '').trim() || null,
+    req.session.usuarioId, req.body.fecha_estimada_cierre || null
+  );
 
   res.status(201).json(await negocioConImportes(await db.prepare(`${SELECT_NEGOCIOS} WHERE n.id_negocio = ?`).get(id)));
 }));
@@ -2134,8 +2137,11 @@ app.put('/api/negocios/:id', requirePermiso('catalogos', 'editar'), ar(async (re
   }
 
   await db.prepare(`
-    UPDATE negocios SET negocio = ?, contacto_id = ?, etapa_id = ?, motivo_perdida = ? WHERE id_negocio = ?
-  `).run(negocio, req.body.contacto_id || null, req.body.etapa_id || null, (req.body.motivo_perdida || '').trim() || null, req.params.id);
+    UPDATE negocios SET negocio = ?, contacto_id = ?, etapa_id = ?, motivo_perdida = ?, fecha_estimada_cierre = ? WHERE id_negocio = ?
+  `).run(
+    negocio, req.body.contacto_id || null, req.body.etapa_id || null, (req.body.motivo_perdida || '').trim() || null,
+    req.body.fecha_estimada_cierre || null, req.params.id
+  );
 
   res.json(await negocioConImportes(await db.prepare(`${SELECT_NEGOCIOS} WHERE n.id_negocio = ?`).get(req.params.id)));
 }));

@@ -48,6 +48,10 @@
             Etapa del negocio
             <select id="negocio-etapa"><option value="">-- Selecciona --</option></select>
           </label>
+          <label>
+            Fecha estimada de cierre
+            <input type="date" id="negocio-fecha-estimada-cierre" />
+          </label>
         </div>
         <label id="negocio-motivo-perdida-wrap" hidden>
           Motivo (por qué no compraron la propuesta)
@@ -86,7 +90,7 @@
           <thead>
             <tr>
               <th><input type="checkbox" id="check-todos-negocios" title="Seleccionar todos" /></th>
-              <th data-campo="id_negocio">ID</th><th data-campo="creado_en">Fecha de creación</th><th data-campo="negocio">Negocio</th><th data-campo="contacto_nombre">Contacto</th><th data-campo="etapa_nombre">Etapa</th><th data-campo="estatus">Estatus</th><th data-campo="importe_usd">Importe USD</th><th data-campo="importe_mxn">Importe MXN</th><th>Cotizaciones</th><th>Notas</th><th></th><th>Acciones</th>
+              <th data-campo="id_negocio">ID</th><th data-campo="creado_en">Fecha de creación</th><th data-campo="negocio">Negocio</th><th data-campo="contacto_nombre">Contacto</th><th data-campo="etapa_nombre">Etapa</th><th data-campo="estatus">Estatus</th><th data-campo="fecha_estimada_cierre">Cierre estimado</th><th data-campo="importe_usd">Importe USD</th><th data-campo="importe_mxn">Importe MXN</th><th>Cotizaciones</th><th>Notas</th><th></th><th>Acciones</th>
             </tr>
           </thead>
           <tbody id="tabla-negocios"></tbody>

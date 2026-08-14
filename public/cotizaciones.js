@@ -98,6 +98,7 @@ const negocioId = document.getElementById('negocio-id');
 const negocioNombre = document.getElementById('negocio-nombre');
 const negocioContacto = document.getElementById('negocio-contacto');
 const negocioEtapa = document.getElementById('negocio-etapa');
+const negocioFechaEstimadaCierre = document.getElementById('negocio-fecha-estimada-cierre');
 const negocioMotivoPerdidaWrap = document.getElementById('negocio-motivo-perdida-wrap');
 const negocioMotivoPerdida = document.getElementById('negocio-motivo-perdida');
 const btnGuardarNegocio = document.getElementById('btn-guardar-negocio');
@@ -266,6 +267,7 @@ function renderizarNegocios(negocios) {
       <td>${escaparHtml(n.contacto_nombre || '')}</td>
       <td>${escaparHtml(n.etapa_nombre || '')}</td>
       <td>${celdaEstatus(n.estatus)}</td>
+      <td>${escaparHtml(fechaDe(n.fecha_estimada_cierre))}</td>
       <td>${formatoImporte(n.importe_usd)}</td>
       <td>${formatoImporte(n.importe_mxn)}</td>
       <td><button type="button" class="btn-ver-cotizaciones" data-id="${escaparHtml(n.id_negocio)}" data-nombre="${escaparHtml(n.negocio)}">Ver cotizaciones</button></td>
@@ -403,6 +405,7 @@ formNegocio.addEventListener('submit', async (e) => {
     contacto_id: negocioContacto.value || null,
     etapa_id: negocioEtapa.value || null,
     motivo_perdida: negocioMotivoPerdida.value.trim(),
+    fecha_estimada_cierre: negocioFechaEstimadaCierre.value || null,
   };
   const id = negocioId.value;
   const res = await fetch(id ? `/api/negocios/${id}` : '/api/negocios', {
@@ -466,6 +469,7 @@ tablaNegocios.addEventListener('click', async (e) => {
     negocioNombre.value = n.negocio;
     negocioContacto.value = n.contacto_id || '';
     negocioEtapa.value = n.etapa_id || '';
+    negocioFechaEstimadaCierre.value = n.fecha_estimada_cierre || '';
     negocioMotivoPerdida.value = n.motivo_perdida || '';
     actualizarVisibilidadMotivoPerdida();
 

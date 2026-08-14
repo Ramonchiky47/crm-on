@@ -2100,8 +2100,28 @@ function limpiarFormProducto() {
   cerrarFormProducto();
 }
 
+const modalProductoIncompletoOverlay = document.getElementById('modal-producto-incompleto-overlay');
+
+document.getElementById('btn-producto-incompleto-continuar').addEventListener('click', () => {
+  modalProductoIncompletoOverlay.hidden = true;
+  (
+    !productoCategoria.value ? productoCategoria
+    : !productoLinea.value ? productoLinea
+    : productoMarca
+  ).focus();
+});
+
+document.getElementById('btn-producto-incompleto-cancelar').addEventListener('click', () => {
+  modalProductoIncompletoOverlay.hidden = true;
+  limpiarFormProducto();
+});
+
 formProducto.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!productoCategoria.value || !productoLinea.value || !productoMarca.value) {
+    modalProductoIncompletoOverlay.hidden = false;
+    return;
+  }
   const payload = {
     item: productoItem.value.trim(),
     descripcion: productoDescripcion.value.trim(),

@@ -411,21 +411,21 @@
             <label>
               Categoría
               <span class="campo-con-boton">
-                <select id="producto-categoria" required><option value="">-- Selecciona --</option></select>
+                <select id="producto-categoria"><option value="">-- Selecciona --</option></select>
                 <button type="button" class="btn-mini btn-agregar-catalogo-producto" data-catalogo="categoria" title="Agregar categoría nueva">+</button>
               </span>
             </label>
             <label>
               Línea
               <span class="campo-con-boton">
-                <select id="producto-linea" required><option value="">-- Selecciona --</option></select>
+                <select id="producto-linea"><option value="">-- Selecciona --</option></select>
                 <button type="button" class="btn-mini btn-agregar-catalogo-producto" data-catalogo="linea" title="Agregar línea nueva">+</button>
               </span>
             </label>
             <label>
               Marca
               <span class="campo-con-boton">
-                <select id="producto-marca" required><option value="">-- Selecciona --</option></select>
+                <select id="producto-marca"><option value="">-- Selecciona --</option></select>
                 <button type="button" class="btn-mini btn-agregar-catalogo-producto" data-catalogo="marca" title="Agregar marca nueva">+</button>
               </span>
             </label>
@@ -566,6 +566,17 @@
             <button type="submit">Agregar</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div id="modal-producto-incompleto-overlay" class="modal-overlay" hidden>
+      <div class="modal-caja modal-caja-chica" role="dialog" aria-modal="true">
+        <h3>Falta información</h3>
+        <p class="pista">No se guardará el registro hasta completar Categoría, Línea y Marca.</p>
+        <div class="acciones-form">
+          <button type="button" id="btn-producto-incompleto-continuar">Continuar</button>
+          <button type="button" id="btn-producto-incompleto-cancelar">Cancelar</button>
+        </div>
       </div>
     </div>
 

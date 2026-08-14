@@ -3809,6 +3809,97 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
   res.json(resultado);
 }));
 
+// ---------- Agente de seguimiento proactivo (Vercel Cron, 1x al dia) ----------
+// Revisa negocios activos sin actividad reciente y cotizaciones vigentes por vencer, y crea
+// una Tarea (actividad "Seguimiento") para que el vendedor la trabaje. No hace nada hacia
+// afuera (no llama, no manda correos ni mensajes): las llamadas se siguen haciendo desde el
+// telefono y se transcriben a mano, esto solo evita que un negocio se quede sin ver.
+const DIAS_SIN_ACTIVIDAD_NEGOCIO = 5;
+const DIAS_ANTES_DE_VENCER_COTIZACION = 3;
+
+app.get('/api/cron/seguimiento', ar(async (req, res) => {
+  if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+
+  const seguimiento = await db.prepare(`SELECT id_actividad FROM actividades WHERE actividad = 'Seguimiento'`).get();
+  if (!seguimiento) {
+    return res.json({ creadas: [], aviso: 'No existe la actividad "Seguimiento" en Catálogos → Actividades.' });
+  }
+
+  const { hoy } = await db.prepare('SELECT (CURRENT_DATE)::text AS hoy').get();
+  const fechaDia = (valor) => (valor || '').slice(0, 10);
+  const diasDesde = (fecha) => Math.floor((new Date(hoy) - new Date(fecha)) / 86400000);
+  const ETAPAS_CIERRE = ['Cierre Ganado', 'Cierre Perdido'];
+
+  const [negocios, cotizaciones, pendientesConNegocio] = await Promise.all([
+    db.prepare(SELECT_NEGOCIOS).all(),
+    db.prepare(SELECT_COTIZACIONES).all(),
+    db.prepare('SELECT negocio_id, creado_en FROM pendientes WHERE negocio_id IS NOT NULL').all(),
+  ]);
+
+  const negociosConSeguimientoAbierto = new Set(
+    (await db.prepare(`
+      SELECT DISTINCT p.negocio_id FROM pendientes p
+      JOIN pendiente_actividades pa ON pa.pendiente_id = p.id_pendiente
+      WHERE pa.actividad_id = ? AND p.negocio_id IS NOT NULL
+    `).all(seguimiento.id_actividad)).map((f) => f.negocio_id)
+  );
+
+  const ultimaCotizacionPorNegocio = new Map();
+  for (const c of cotizaciones) {
+    const fecha = fechaDia(c.fecha_creacion || c.creado_en);
+    if (!ultimaCotizacionPorNegocio.has(c.negocio_id) || fecha > ultimaCotizacionPorNegocio.get(c.negocio_id)) {
+      ultimaCotizacionPorNegocio.set(c.negocio_id, fecha);
+    }
+  }
+  const ultimaTareaPorNegocio = new Map();
+  for (const p of pendientesConNegocio) {
+    const fecha = fechaDia(p.creado_en);
+    if (!ultimaTareaPorNegocio.has(p.negocio_id) || fecha > ultimaTareaPorNegocio.get(p.negocio_id)) {
+      ultimaTareaPorNegocio.set(p.negocio_id, fecha);
+    }
+  }
+
+  // Negocios activos (no cerrados) sin ninguna actividad conocida en los ultimos N dias, y que
+  // todavia no tengan una tarea de Seguimiento abierta esperando.
+  const negociosInactivos = negocios.filter((n) => {
+    if (ETAPAS_CIERRE.includes(n.etapa_nombre)) return false;
+    if (negociosConSeguimientoAbierto.has(n.id_negocio)) return false;
+    const fechas = [fechaDia(n.creado_en), ultimaCotizacionPorNegocio.get(n.id_negocio), ultimaTareaPorNegocio.get(n.id_negocio)].filter(Boolean);
+    return diasDesde(fechas.sort().pop()) >= DIAS_SIN_ACTIVIDAD_NEGOCIO;
+  });
+  const idsNegociosInactivos = new Set(negociosInactivos.map((n) => n.id_negocio));
+
+  // Cotizaciones vigentes (etapa Negociacion) que vencen pronto, cuyo negocio no vaya a recibir
+  // ya una tarea por inactividad y que tampoco tenga una de Seguimiento abierta.
+  const cotizacionesPorVencer = cotizaciones.filter((c) => {
+    if (!c.negocio_id || !c.fecha_vencimiento || c.etapa !== 'Negociacion') return false;
+    if (idsNegociosInactivos.has(c.negocio_id) || negociosConSeguimientoAbierto.has(c.negocio_id)) return false;
+    const dias = diasDesde(c.fecha_vencimiento) * -1;
+    return dias >= 0 && dias <= DIAS_ANTES_DE_VENCER_COTIZACION;
+  });
+
+  const creadas = [];
+  async function crearSeguimiento(nombreNegocio, negocioId, contactoId, motivo) {
+    const id = await generarIdPendiente();
+    await db.prepare(`
+      INSERT INTO pendientes (id_pendiente, nombre, fecha_compromiso, negocio_id, contacto_id) VALUES (?, ?, ?, ?, ?)
+    `).run(id, `Seguimiento: ${nombreNegocio}`, hoy, negocioId, contactoId || null);
+    await reemplazarActividadesPendiente(id, [seguimiento.id_actividad]);
+    creadas.push({ id_pendiente: id, negocio: nombreNegocio, motivo });
+  }
+
+  for (const n of negociosInactivos) {
+    await crearSeguimiento(n.negocio, n.id_negocio, n.contacto_id, `sin actividad hace ${DIAS_SIN_ACTIVIDAD_NEGOCIO}+ días`);
+  }
+  for (const c of cotizacionesPorVencer) {
+    await crearSeguimiento(c.negocio_nombre || c.nombre, c.negocio_id, c.contacto_id, 'cotización por vencer');
+  }
+
+  res.json({ creadas, revisados: { negocios: negocios.length, cotizaciones: cotizaciones.length } });
+}));
+
 // Middleware final de manejo de errores (rutas envueltas con ar()).
 app.use((err, req, res, next) => {
   console.error(err);

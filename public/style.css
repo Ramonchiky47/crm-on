@@ -24,6 +24,8 @@
   --lateral-borde: rgba(255, 255, 255, 0.08);
   --lateral-hover: rgba(255, 255, 255, 0.06);
   --lateral-activo: rgba(192, 57, 43, 0.22);
+
+  --altura-barra-superior: 3.2rem;
 }
 
 * {
@@ -62,7 +64,7 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: 3.2rem;
+  height: var(--altura-barra-superior);
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -79,7 +81,17 @@ body.con-barra-lateral .barra-superior {
 }
 
 body.con-barra-superior {
-  padding-top: 3.2rem;
+  padding-top: var(--altura-barra-superior);
+}
+
+/* Encabezados de tabla "pegados" (position: sticky) que se posicionan contra el viewport
+   completo (tablas sin su propio contenedor con overflow-y, ej. Hoteles/Locales) deben
+   quedar debajo de la banda superior fija, o el header queda tapado (mismo z-index bajo la
+   banda) al hacer scroll. Las tablas con su propio scroll acotado (ej. Contactos, con
+   .tabla-alto-fijo) no la necesitan: su "top" es relativo a su propio contenedor, no al
+   viewport, asi que se dejan con el 0 por defecto. */
+.tabla-scroll:not(.tabla-alto-fijo) th {
+  top: var(--altura-barra-superior);
 }
 
 .barra-superior__titulo {
@@ -242,6 +254,7 @@ body.con-barra-lateral {
     padding: 0;
   }
   body.con-barra-superior { padding-top: 0; }
+  .tabla-scroll:not(.tabla-alto-fijo) th { top: 0; }
 }
 
 /* ---------- Panel General (pantalla de inicio) ---------- */
@@ -551,13 +564,13 @@ input, textarea, select {
   overflow-y: auto;
 }
 
-.tabla-contactos-fija thead th[data-campo] {
+.tabla-ordenable thead th[data-campo] {
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
 }
 
-.tabla-contactos-fija thead th[data-campo]::after {
+.tabla-ordenable thead th[data-campo]::after {
   content: '⇅';
   display: inline-block;
   margin-left: 0.3rem;
@@ -565,12 +578,12 @@ input, textarea, select {
   font-size: 0.75em;
 }
 
-.tabla-contactos-fija thead th[data-campo].orden-asc::after {
+.tabla-ordenable thead th[data-campo].orden-asc::after {
   content: '▲';
   opacity: 1;
 }
 
-.tabla-contactos-fija thead th[data-campo].orden-desc::after {
+.tabla-ordenable thead th[data-campo].orden-desc::after {
   content: '▼';
   opacity: 1;
 }

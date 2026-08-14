@@ -429,12 +429,57 @@ function renderizarDestinos(destinos) {
   }
 }
 
+const columnasNumericasDestinos = new Set(['cotizaciones_count', 'ordenes_count', 'tareas_count']);
+const columnasListaDestinos = new Set(['empresas', 'grupos', 'cadenas']);
+const ordenDestinos = { campo: null, direccion: 1 };
+
+function valorOrdenableDestino(d, campo) {
+  const v = d[campo];
+  if (columnasNumericasDestinos.has(campo)) return Number(v) || 0;
+  if (columnasListaDestinos.has(campo)) return (v || []).join(', ').toLowerCase();
+  return String(v || '').toLowerCase();
+}
+
+function ordenarDestinos(lista) {
+  if (!ordenDestinos.campo) return lista;
+  const campo = ordenDestinos.campo;
+  return [...lista].sort((a, b) => {
+    const va = valorOrdenableDestino(a, campo);
+    const vb = valorOrdenableDestino(b, campo);
+    if (va < vb) return -1 * ordenDestinos.direccion;
+    if (va > vb) return 1 * ordenDestinos.direccion;
+    return 0;
+  });
+}
+
+function actualizarIndicadoresOrdenDestinos() {
+  document.querySelectorAll('#tabla-destinos-tabla thead th[data-campo]').forEach((th) => {
+    th.classList.remove('orden-asc', 'orden-desc');
+    if (th.dataset.campo === ordenDestinos.campo) {
+      th.classList.add(ordenDestinos.direccion === 1 ? 'orden-asc' : 'orden-desc');
+    }
+  });
+}
+
+document.querySelectorAll('#tabla-destinos-tabla thead th[data-campo]').forEach((th) => {
+  th.addEventListener('click', () => {
+    if (ordenDestinos.campo === th.dataset.campo) {
+      ordenDestinos.direccion *= -1;
+    } else {
+      ordenDestinos.campo = th.dataset.campo;
+      ordenDestinos.direccion = 1;
+    }
+    actualizarIndicadoresOrdenDestinos();
+    aplicarFiltroDestinos();
+  });
+});
+
 function aplicarFiltroDestinos() {
   const filtro = destinosBuscador.value.trim();
   const filtrados = destinosCache.filter((d) =>
     coincideTexto(d.destino, filtro) || (d.empresas || []).some((e) => coincideTexto(e, filtro))
   );
-  renderizarDestinos(filtrados);
+  renderizarDestinos(ordenarDestinos(filtrados));
 }
 
 destinosBuscador.addEventListener('input', aplicarFiltroDestinos);

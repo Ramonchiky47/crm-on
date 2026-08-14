@@ -2481,6 +2481,9 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
   const nombreArchivo = `${cotizacion.id_cotizacion}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `${descargar ? 'attachment' : 'inline'}; filename="${nombreArchivo}"`);
+  // El PDF se genera al vuelo con los datos actuales de la cotizacion: nunca debe quedar en
+  // cache (ni del navegador ni de la red de Vercel), o una edicion posterior no se refleja.
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   doc.pipe(res);
 
   const rojoGonpal = '#c0392b';

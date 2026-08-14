@@ -1558,6 +1558,8 @@ function generarHtmlCotizacionPDF(c) {
   .info-der div { margin-bottom: 3px; }
   .caja { border: 1px solid #ddd; border-radius: 8px; padding: 16px 20px; margin-top: 24px; }
   .caja p { margin: 4px 0; }
+  .observaciones-texto { white-space: pre-line; }
+  .clausula-danio { color: #c0392b; font-weight: 700; font-size: 1.05em; }
   table { width: 100%; border-collapse: collapse; margin-top: 26px; page-break-inside: auto; }
   tr { page-break-inside: avoid; }
   th { text-align: left; border-bottom: 2px solid #333; padding: 6px 4px; font-size: 0.8rem; }
@@ -1609,7 +1611,7 @@ function generarHtmlCotizacionPDF(c) {
     ${c.metodo_pago ? `<p><strong>Condiciones de Pago:</strong> ${escaparHtml(c.metodo_pago)}</p>` : ''}
     ${c.lugar_entrega ? `<p><strong>Lugar de envío:</strong> ${escaparHtml(c.lugar_entrega)}</p>` : ''}
     ${c.tiempo_entrega ? `<p><strong>Tiempo de entrega:</strong> ${escaparHtml(c.tiempo_entrega)}</p>` : ''}
-    ${c.observaciones ? `<p>${escaparHtml(c.observaciones)}</p>` : ''}
+    ${c.observaciones ? `<p><strong>Observaciones:</strong></p><p class="observaciones-texto">${observacionesConClausulaResaltada(c.observaciones)}</p>` : ''}
   </div>
 
   <table>

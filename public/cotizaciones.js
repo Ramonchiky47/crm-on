@@ -919,7 +919,10 @@ btnNuevaCotizacionVisualizacion.addEventListener('click', () => {
   abrirFormCotizacion();
 });
 
-btnCancelarCotizacion.addEventListener('click', cerrarFormCotizacion);
+btnCancelarCotizacion.addEventListener('click', () => {
+  cerrarFormCotizacion();
+  activarSubtab('visualizacion');
+});
 
 // Envia esta cotizacion (ya guardada) a Tareas como un pendiente de Seguimiento: nace con la
 // actividad "Seguimiento" y, si la cotizacion tiene Fecha de seguimiento, se usa como Fecha de

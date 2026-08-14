@@ -1386,6 +1386,8 @@ formRapidoContacto.addEventListener('submit', async (e) => {
   const nombre = modalRapidoContactoNombre.value.trim();
   if (!nombre) return;
 
+  // Si ya hay un Hotel/Local elegido en la cotizacion, el contacto nuevo nace asociado a el
+  // (misma asociacion que se administra desde Contactos o desde el Hotel/Local).
   const res = await fetch('/api/contactos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1395,6 +1397,7 @@ formRapidoContacto.addEventListener('submit', async (e) => {
       correo_electronico: modalRapidoContactoCorreo.value.trim(),
       telefono_local: modalRapidoContactoTelLocal.value.trim(),
       telefono_celular: modalRapidoContactoTelCelular.value.trim(),
+      destinos: cotizacionDestino.value ? [Number(cotizacionDestino.value)] : [],
     }),
   });
 
@@ -1455,6 +1458,17 @@ formRapidoDestino.addEventListener('submit', async (e) => {
   }
 
   const creado = await res.json();
+
+  // Si ya hay un Contacto elegido en la cotizacion, el Hotel/Local nuevo nace asociado a el
+  // (viceversa del alta rapida de Contacto: misma asociacion, mismo par contacto_destinos).
+  if (cotizacionContacto.value) {
+    await fetch(`/api/destinos/${creado.id_destino}/contactos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contacto_id: cotizacionContacto.value }),
+    }).catch(() => {});
+  }
+
   await poblarSelectsCotizacion();
   cotizacionDestino.value = creado.id_destino;
   actualizarCampoVacio(cotizacionDestino);

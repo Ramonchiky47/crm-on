@@ -1697,7 +1697,7 @@ td.acciones {
 .observaciones-cotizacion .clausula-danio {
   color: var(--peligro);
   font-weight: 700;
-  font-size: 1.05em;
+  font-size: calc(0.85rem + 2px);
 }
 
 .resumen-cotizacion {

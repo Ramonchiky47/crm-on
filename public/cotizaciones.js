@@ -1559,7 +1559,7 @@ function generarHtmlCotizacionPDF(c) {
   .caja { border: 1px solid #ddd; border-radius: 8px; padding: 16px 20px; margin-top: 24px; }
   .caja p { margin: 4px 0; }
   .observaciones-texto { white-space: pre-line; }
-  .clausula-danio { color: #c0392b; font-weight: 700; font-size: 1.05em; }
+  .clausula-danio { color: #c0392b; font-weight: 700; font-size: 15px; }
   table { width: 100%; border-collapse: collapse; margin-top: 26px; page-break-inside: auto; }
   tr { page-break-inside: avoid; }
   th { text-align: left; border-bottom: 2px solid #333; padding: 6px 4px; font-size: 0.8rem; }

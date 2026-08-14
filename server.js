@@ -2527,7 +2527,7 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
     const CLAUSULA_DANIO_24H = /mercanc[ií]a con da[ñn]o debe reportarse/i;
     for (const linea of cotizacion.observaciones.split('\n')) {
       if (CLAUSULA_DANIO_24H.test(linea)) {
-        doc.font('Helvetica-Bold').fontSize(10).fillColor(rojoGonpal).text(linea);
+        doc.font('Helvetica-Bold').fontSize(11).fillColor(rojoGonpal).text(linea);
       } else {
         doc.font('Helvetica').fontSize(9).fillColor('#000').text(linea);
       }

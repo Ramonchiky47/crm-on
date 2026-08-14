@@ -604,7 +604,16 @@ function replicarContactoYDestinoDeNegocio(negocioId) {
 function activarFiltroNegocio(id, nombre) {
   filtroNegocioId = id;
   filtroPista.hidden = false;
-  filtroPista.innerHTML = `Mostrando cotizaciones de: <strong>${escaparHtml(nombre)}</strong> · <a href="#" id="quitar-filtro-negocio">Quitar filtro</a>`;
+  filtroPista.innerHTML = `
+    <a href="#" id="volver-a-negocios">← Regresar a Negocios</a>
+    · Mostrando cotizaciones de: <strong>${escaparHtml(nombre)}</strong> · <a href="#" id="quitar-filtro-negocio">Quitar filtro</a>
+  `;
+  document.getElementById('volver-a-negocios').addEventListener('click', (e) => {
+    e.preventDefault();
+    filtroNegocioId = null;
+    filtroPista.hidden = true;
+    activarSubtab('negocios');
+  });
   document.getElementById('quitar-filtro-negocio').addEventListener('click', (e) => {
     e.preventDefault();
     filtroNegocioId = null;

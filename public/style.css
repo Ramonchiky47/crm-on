@@ -84,16 +84,6 @@ body.con-barra-superior {
   padding-top: var(--altura-barra-superior);
 }
 
-/* Encabezados de tabla "pegados" (position: sticky) que se posicionan contra el viewport
-   completo (tablas sin su propio contenedor con overflow-y, ej. Hoteles/Locales) deben
-   quedar debajo de la banda superior fija, o el header queda tapado (mismo z-index bajo la
-   banda) al hacer scroll. Las tablas con su propio scroll acotado (ej. Contactos, con
-   .tabla-alto-fijo) no la necesitan: su "top" es relativo a su propio contenedor, no al
-   viewport, asi que se dejan con el 0 por defecto. */
-.tabla-scroll:not(.tabla-alto-fijo) th {
-  top: var(--altura-barra-superior);
-}
-
 .barra-superior__titulo {
   flex: 1 1 auto;
   margin: 0;
@@ -254,7 +244,6 @@ body.con-barra-lateral {
     padding: 0;
   }
   body.con-barra-superior { padding-top: 0; }
-  .tabla-scroll:not(.tabla-alto-fijo) th { top: 0; }
 }
 
 /* ---------- Panel General (pantalla de inicio) ---------- */
@@ -557,8 +546,11 @@ input, textarea, select {
   overflow-x: auto;
 }
 
-/* Contactos: alto acotado con scroll vertical propio para que el titulo (thead, ya sticky)
-   permanezca visible mientras se recorre la lista de contactos. */
+/* Alto acotado con scroll vertical propio para que el encabezado (thead, ya sticky) permanezca
+   visible mientras se recorre la lista. Necesario para que el sticky funcione de verdad: un
+   .tabla-scroll normal (solo overflow-x) no sirve como contenedor de scroll vertical (crece con
+   el contenido, quien scrollea es la pagina), y por la spec de CSS un position:sticky sin un
+   contenedor con overflow-y propio termina sin "pegarse" a nada. */
 .tabla-alto-fijo {
   max-height: 65vh;
   overflow-y: auto;

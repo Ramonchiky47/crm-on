@@ -1319,7 +1319,7 @@ tablaEstadoEntrega.addEventListener('click', async (e) => {
   if (!id) return;
 
   if (e.target.classList.contains('btn-borrar')) {
-    if (!confirmarDoble('¿Borrar este estado de entrega?')) return;
+    if (!confirmarDoble('¿Borrar este estado de la república?')) return;
     await eliminarYRecargar(`/api/estados-entrega/${id}`, cargarEstadosEntrega);
   }
 

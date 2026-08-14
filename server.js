@@ -1587,7 +1587,7 @@ app.post('/api/estados-entrega', requirePermiso('catalogos', 'editar'), ar(async
     const info = await db.prepare('INSERT INTO estados_entrega (estado_entrega) VALUES (?)').run(estadoEntrega);
     res.status(201).json(await db.prepare('SELECT * FROM estados_entrega WHERE id_estado_entrega = ?').get(info.lastInsertRowid));
   } catch (e) {
-    res.status(400).json({ errores: ['Ese estado de entrega ya existe'] });
+    res.status(400).json({ errores: ['Ese estado de la república ya existe'] });
   }
 }));
 
@@ -1596,23 +1596,23 @@ app.put('/api/estados-entrega/:id', requirePermiso('catalogos', 'editar'), ar(as
   if (!estadoEntrega) return res.status(400).json({ errores: ['estado_entrega es requerido'] });
 
   const existente = await db.prepare('SELECT * FROM estados_entrega WHERE id_estado_entrega = ?').get(req.params.id);
-  if (!existente) return res.status(404).json({ error: 'Estado de entrega no encontrado' });
+  if (!existente) return res.status(404).json({ error: 'Estado de la República no encontrado' });
 
   try {
     await db.prepare('UPDATE estados_entrega SET estado_entrega = ? WHERE id_estado_entrega = ?').run(estadoEntrega, req.params.id);
     res.json(await db.prepare('SELECT * FROM estados_entrega WHERE id_estado_entrega = ?').get(req.params.id));
   } catch (e) {
-    res.status(400).json({ errores: ['Ese estado de entrega ya existe'] });
+    res.status(400).json({ errores: ['Ese estado de la república ya existe'] });
   }
 }));
 
 app.delete('/api/estados-entrega/:id', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {
   const enUso = await contarOrdenesQueUsan('estado_entrega_id', req.params.id);
   if (enUso > 0) {
-    return res.status(400).json({ errores: [`No se puede borrar: ${enUso} orden(es) usan este estado de entrega.`] });
+    return res.status(400).json({ errores: [`No se puede borrar: ${enUso} orden(es) usan este estado de la república.`] });
   }
   const info = await db.prepare('DELETE FROM estados_entrega WHERE id_estado_entrega = ?').run(req.params.id);
-  if (info.changes === 0) return res.status(404).json({ error: 'Estado de entrega no encontrado' });
+  if (info.changes === 0) return res.status(404).json({ error: 'Estado de la República no encontrado' });
   res.status(204).end();
 }));
 

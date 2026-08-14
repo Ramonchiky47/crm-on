@@ -106,7 +106,7 @@ const NAV_LATERAL = [
   { grupo: 'Catálogos', texto: 'Contactos', href: 'catalogos.html?tab=contactos', permiso: (p) => p.catalogos.ver },
   { grupo: 'Catálogos', texto: 'Productos', href: 'catalogos.html?tab=productos', permiso: (p) => p.catalogos.ver },
   { grupo: 'Catálogos', texto: 'Estatus', href: 'catalogos.html?tab=estatus', permiso: (p) => p.catalogos.ver },
-  { grupo: 'Catálogos', texto: 'Estado de entrega', href: 'catalogos.html?tab=estado-entrega', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Estado de la República', href: 'catalogos.html?tab=estado-entrega', permiso: (p) => p.catalogos.ver },
   { grupo: 'Catálogos', texto: 'Etapa del Negocio', href: 'catalogos.html?tab=etapa-negocio', permiso: (p) => p.catalogos.ver },
   { grupo: 'Catálogos', texto: 'Actividades', href: 'catalogos.html?tab=actividades', permiso: (p) => p.catalogos.ver },
 

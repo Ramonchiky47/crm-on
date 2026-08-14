@@ -78,7 +78,7 @@ async function abrirDetalle(id) {
       ${campoFicha('Importe', orden.importe !== null ? formatoImporte(orden.importe) : null)}
       ${campoFicha('Hotel / Local', orden.destino_nombre)}
       ${campoFicha('Contacto', orden.contacto_nombre)}
-      ${campoFicha('Estado de entrega', orden.estado_entrega_nombre)}
+      ${campoFicha('Estado de la República', orden.estado_entrega_nombre)}
       ${campoFicha('Imprimir', orden.imprimir)}
     </div>
     ${orden.nota ? `<p><strong>Nota:</strong> ${escaparHtml(orden.nota)}</p>` : ''}

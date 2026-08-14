@@ -14,7 +14,7 @@
       <button type="button" class="tab-catalogo activo" data-tab="destinos">Hoteles / Locales</button>
       <button type="button" class="tab-catalogo" data-tab="contactos">Contactos</button>
       <button type="button" class="tab-catalogo" data-tab="estatus">Estatus</button>
-      <button type="button" class="tab-catalogo" data-tab="estado-entrega">Estado de entrega</button>
+      <button type="button" class="tab-catalogo" data-tab="estado-entrega">Estado de la República</button>
       <button type="button" class="tab-catalogo" data-tab="usuarios" id="tab-usuarios">Usuarios</button>
       <button type="button" class="tab-catalogo" data-tab="productos">Productos</button>
       <button type="button" class="tab-catalogo" data-tab="etapa-negocio">Etapa del Negocio</button>
@@ -247,15 +247,15 @@
     </section>
 
     <section data-panel="estado-entrega" hidden>
-      <h2>Estado de entrega</h2>
+      <h2 hidden>Estado de la República</h2>
       <form id="form-estado-entrega" class="form-catalogo">
         <input type="hidden" id="estado-entrega-id" />
-        <input type="text" id="estado-entrega-nombre" placeholder="Nombre del estado de entrega" required />
+        <input type="text" id="estado-entrega-nombre" placeholder="Nombre del estado de la república" required />
         <button type="submit">Agregar</button>
         <button type="button" id="btn-cancelar-estado-entrega" hidden>Cancelar</button>
       </form>
       <table>
-        <thead><tr><th>Estado de entrega</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Estado de la República</th><th>Acciones</th></tr></thead>
         <tbody id="tabla-estado-entrega"></tbody>
       </table>
     </section>

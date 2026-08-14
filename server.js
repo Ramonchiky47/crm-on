@@ -742,10 +742,10 @@ app.get('/api/destinos/:id/asociados', requirePermiso('catalogos', 'ver'), ar(as
     db.prepare(`${SELECT_ORDENES} WHERE o.destino_id = ? ORDER BY o.creado_en DESC`).all(req.params.id),
     db.prepare(`
       SELECT DISTINCT p.* FROM pendientes p
-      JOIN ordenes o ON o.id = p.orden_id
-      WHERE o.destino_id = ?
+      LEFT JOIN ordenes o ON o.id = p.orden_id
+      WHERE o.destino_id = ? OR p.destino_id = ?
       ORDER BY p.creado_en DESC
-    `).all(req.params.id),
+    `).all(req.params.id, req.params.id),
     db.prepare(`
       SELECT c.id_contacto, c.nombre, c.apellido, c.correo_electronico FROM contacto_destinos cd
       JOIN contactos c ON c.id_contacto = cd.contacto_id
@@ -754,7 +754,10 @@ app.get('/api/destinos/:id/asociados', requirePermiso('catalogos', 'ver'), ar(as
     `).all(req.params.id),
   ]);
 
-  res.json({ cotizaciones: cotizaciones.map(conEstatus), ordenes, tareas, contactos });
+  const actividadesPorTarea = await actividadesDePendientesBatch(tareas.map((t) => t.id_pendiente));
+  const tareasConActividades = tareas.map((t) => ({ ...t, actividades: actividadesPorTarea.get(t.id_pendiente) || [] }));
+
+  res.json({ cotizaciones: cotizaciones.map(conEstatus), ordenes, tareas: tareasConActividades, contactos });
 }));
 
 // Asocia/desasocia un contacto existente a este destino, desde la pantalla de detalle del
@@ -1300,8 +1303,9 @@ function nombreCompletoDe(fila) {
 }
 
 // Cotizaciones, ordenes y tareas asociadas a un contacto (para el detalle desde el catalogo
-// de Contactos). Las tareas se derivan via el negocio o la orden del contacto, ya que
-// pendientes no referencia contacto_id directamente.
+// de Contactos). Las tareas se derivan via el negocio o la orden del contacto (para tareas
+// ligadas a esas entidades), y tambien directamente via pendientes.contacto_id (para tareas
+// sueltas, ej. Llamada/Correo Electronico/Mensaje de Texto registradas desde Tareas).
 app.get('/api/contactos/:id/asociados', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const contacto = await db.prepare('SELECT * FROM contactos WHERE id_contacto = ?').get(req.params.id);
   if (!contacto || !esDueno(contacto, req)) return res.status(404).json({ error: 'Contacto no encontrado' });
@@ -1313,12 +1317,15 @@ app.get('/api/contactos/:id/asociados', requirePermiso('catalogos', 'ver'), ar(a
       SELECT DISTINCT p.* FROM pendientes p
       LEFT JOIN negocios n ON n.id_negocio = p.negocio_id
       LEFT JOIN ordenes o ON o.id = p.orden_id
-      WHERE n.contacto_id = ? OR o.contacto_id = ?
+      WHERE n.contacto_id = ? OR o.contacto_id = ? OR p.contacto_id = ?
       ORDER BY p.creado_en DESC
-    `).all(req.params.id, req.params.id),
+    `).all(req.params.id, req.params.id, req.params.id),
   ]);
 
-  res.json({ cotizaciones: cotizaciones.map(conEstatus), ordenes, tareas });
+  const actividadesPorTarea = await actividadesDePendientesBatch(tareas.map((t) => t.id_pendiente));
+  const tareasConActividades = tareas.map((t) => ({ ...t, actividades: actividadesPorTarea.get(t.id_pendiente) || [] }));
+
+  res.json({ cotizaciones: cotizaciones.map(conEstatus), ordenes, tareas: tareasConActividades });
 }));
 
 app.post('/api/contactos', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
@@ -3245,6 +3252,18 @@ app.get('/api/pendientes', requirePermiso('catalogos', 'ver'), ar(async (req, re
   })));
 }));
 
+// Llamada, Correo Electronico y Mensaje de Texto son actividades de comunicacion: siempre
+// deben quedar ligadas a un Contacto o un Hotel/Local, para que se puedan ver despues en el
+// historial de ese catalogo (no se checa por ID de actividad porque esos IDs no son fijos,
+// se busca por nombre normalizado).
+const ACTIVIDADES_COMUNICACION = ['llamada', 'correo electronico', 'mensaje de texto'];
+
+async function esActividadDeComunicacion(actividadIds) {
+  if (!actividadIds || !actividadIds.length) return false;
+  const filas = await db.prepare('SELECT actividad FROM actividades WHERE id_actividad = ANY(?)').all(actividadIds);
+  return filas.some((f) => ACTIVIDADES_COMUNICACION.includes(quitarAcentos(f.actividad || '').toLowerCase()));
+}
+
 app.post('/api/pendientes', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
   const nombre = (req.body.nombre || '').trim();
   if (!nombre) return res.status(400).json({ errores: ['nombre es requerido'] });
@@ -3257,11 +3276,24 @@ app.post('/api/pendientes', requirePermiso('catalogos', 'editar'), ar(async (req
   if (req.body.orden_id && !(await db.prepare('SELECT 1 FROM ordenes WHERE id = ?').get(req.body.orden_id))) {
     return res.status(400).json({ errores: ['La orden seleccionada no existe'] });
   }
+  if (!(await referenciaPropia('contactos', 'id_contacto', req.body.contacto_id, req))) {
+    return res.status(400).json({ errores: ['El contacto seleccionado no existe'] });
+  }
+  if (!(await referenciaPropia('destinos', 'id_destino', req.body.destino_id, req))) {
+    return res.status(400).json({ errores: ['El hotel/local seleccionado no existe'] });
+  }
+  if (!req.body.contacto_id && !req.body.destino_id && await esActividadDeComunicacion(req.body.actividades)) {
+    return res.status(400).json({ errores: ['Para Llamada, Correo Electrónico o Mensaje de Texto, selecciona un Contacto o un Hotel/Local'] });
+  }
 
   const id = await generarIdPendiente();
   await db.prepare(`
-    INSERT INTO pendientes (id_pendiente, nombre, fecha_compromiso, negocio_id, orden_id) VALUES (?, ?, ?, ?, ?)
-  `).run(id, nombre, req.body.fecha_compromiso || null, req.body.negocio_id || null, req.body.orden_id || null);
+    INSERT INTO pendientes (id_pendiente, nombre, fecha_compromiso, negocio_id, orden_id, contacto_id, destino_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id, nombre, req.body.fecha_compromiso || null, req.body.negocio_id || null, req.body.orden_id || null,
+    req.body.contacto_id || null, req.body.destino_id || null
+  );
   await reemplazarActividadesPendiente(id, req.body.actividades);
   const pendiente = await pendienteConActividades(id);
   await sincronizarCreacionPendienteGoogle(pendiente);
@@ -3277,10 +3309,19 @@ app.put('/api/pendientes/:id', requirePermiso('catalogos', 'editar'), ar(async (
   if (!Array.isArray(req.body.actividades) || req.body.actividades.length === 0) {
     return res.status(400).json({ errores: ['Selecciona al menos una actividad'] });
   }
+  if (!(await referenciaPropia('contactos', 'id_contacto', req.body.contacto_id, req))) {
+    return res.status(400).json({ errores: ['El contacto seleccionado no existe'] });
+  }
+  if (!(await referenciaPropia('destinos', 'id_destino', req.body.destino_id, req))) {
+    return res.status(400).json({ errores: ['El hotel/local seleccionado no existe'] });
+  }
+  if (!req.body.contacto_id && !req.body.destino_id && await esActividadDeComunicacion(req.body.actividades)) {
+    return res.status(400).json({ errores: ['Para Llamada, Correo Electrónico o Mensaje de Texto, selecciona un Contacto o un Hotel/Local'] });
+  }
 
   await db.prepare(`
-    UPDATE pendientes SET nombre = ?, fecha_compromiso = ? WHERE id_pendiente = ?
-  `).run(nombre, req.body.fecha_compromiso || null, req.params.id);
+    UPDATE pendientes SET nombre = ?, fecha_compromiso = ?, contacto_id = ?, destino_id = ? WHERE id_pendiente = ?
+  `).run(nombre, req.body.fecha_compromiso || null, req.body.contacto_id || null, req.body.destino_id || null, req.params.id);
   await reemplazarActividadesPendiente(req.params.id, req.body.actividades);
   const pendiente = await pendienteConActividades(req.params.id);
   await sincronizarEdicionPendienteGoogle(pendiente);

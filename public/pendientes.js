@@ -107,6 +107,39 @@ const btnCancelarPendiente = document.getElementById('btn-cancelar-pendiente');
 const btnMostrarFormPendiente = document.getElementById('btn-mostrar-form-pendiente');
 const tablaPendientes = document.getElementById('tabla-pendientes');
 const btnSincronizarGoogleTasks = document.getElementById('btn-sincronizar-google-tasks');
+const pendienteContacto = document.getElementById('pendiente-contacto');
+const pendienteDestino = document.getElementById('pendiente-destino');
+
+// Llamada, Correo Electronico y Mensaje de Texto siempre deben quedar en el historial de un
+// Contacto o un Hotel/Local (mismo criterio que valida el servidor, por nombre normalizado
+// ya que el ID de la actividad no es fijo).
+const ACTIVIDADES_COMUNICACION = ['llamada', 'correo electronico', 'mensaje de texto'];
+
+function quitarAcentos(texto) {
+  return texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function actividadesSeleccionadasSonDeComunicacion() {
+  return [...pendienteActividadesPanel.querySelectorAll('input[type="checkbox"]:checked')]
+    .some((cb) => ACTIVIDADES_COMUNICACION.includes(quitarAcentos(cb.parentElement.textContent.trim().toLowerCase())));
+}
+
+function poblarSelect(select, lista, valor, texto, valorActual) {
+  const actual = valorActual || select.value;
+  select.innerHTML = '<option value="">-- Selecciona --</option>' + lista.map((item) => `
+    <option value="${item[valor]}">${escaparHtml(item[texto])}</option>
+  `).join('');
+  select.value = actual || '';
+}
+
+async function cargarSelectsContactoDestinoPendiente() {
+  const [contactos, destinos] = await Promise.all([
+    fetch('/api/contactos').then((r) => r.json()),
+    fetch('/api/destinos').then((r) => r.json()),
+  ]);
+  poblarSelect(pendienteContacto, contactos, 'id_contacto', 'nombre_completo_correo');
+  poblarSelect(pendienteDestino, destinos, 'id_destino', 'destino');
+}
 
 // ---------- Multi-select de Actividades (mismo patron que Contacto-Destinos en Catalogos) ----------
 
@@ -260,6 +293,8 @@ function limpiarFormPendiente() {
   pendienteId.value = '';
   formPendiente.reset();
   marcarActividades([]);
+  pendienteContacto.value = '';
+  pendienteDestino.value = '';
   pendienteActividadesBtn.disabled = false;
   btnGuardarPendiente.textContent = 'Agregar';
   btnCancelarPendiente.hidden = true;
@@ -282,10 +317,16 @@ formPendiente.addEventListener('submit', async (e) => {
     alert('Selecciona al menos una actividad.');
     return;
   }
+  if (!pendienteContacto.value && !pendienteDestino.value && actividadesSeleccionadasSonDeComunicacion()) {
+    alert('Para Llamada, Correo Electrónico o Mensaje de Texto, selecciona un Contacto o un Hotel/Local.');
+    return;
+  }
   const payload = {
     nombre: pendienteNombre.value.trim(),
     fecha_compromiso: pendienteFechaCompromiso.value || null,
     actividades: [...actividadesSeleccionadas].map(Number),
+    contacto_id: pendienteContacto.value || null,
+    destino_id: pendienteDestino.value || null,
   };
   const id = pendienteId.value;
   const res = await fetch(id ? `/api/pendientes/${id}` : '/api/pendientes', {
@@ -329,6 +370,8 @@ tablaPendientes.addEventListener('click', async (e) => {
       pendienteNombre.value = p.nombre;
       pendienteFechaCompromiso.value = p.fecha_compromiso || '';
       marcarActividades(p.actividades);
+      pendienteContacto.value = p.contacto_id || '';
+      pendienteDestino.value = p.destino_id || '';
 
       // La actividad de una tarea no se puede cambiar una vez creada.
       pendienteActividadesBtn.disabled = true;
@@ -697,11 +740,13 @@ promesaAuth.then(async (sesion) => {
   btnSincronizarGoogleTasks.hidden = !permisosCatalogos.editar;
 
   await cargarPanelActividades();
+  await cargarSelectsContactoDestinoPendiente();
   await cargarPendientes();
   if (permisosCatalogos.editar) sincronizarConGoogleTasks();
 
   suscribirTiempoReal(['pendientes', 'pendiente_actividades', 'pendiente_notas'], cargarPendientes);
   suscribirTiempoReal(['actividades'], cargarPanelActividades);
+  suscribirTiempoReal(['contactos', 'destinos'], cargarSelectsContactoDestinoPendiente);
 });
 
 btnSincronizarGoogleTasks.addEventListener('click', sincronizarConGoogleTasks);

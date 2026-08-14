@@ -356,7 +356,7 @@ async function cargarAsociados() {
   listaTareas.innerHTML = asociadosActual.tareas.length
     ? asociadosActual.tareas.map((p) => `
         <div class="tarjeta-item">
-          <span>${escaparHtml(p.nombre)}</span>
+          <span>${escaparHtml((p.actividades || []).map((a) => a.actividad).join(', ') || 'Sin actividad')} — ${escaparHtml(p.nombre)}</span>
           <span>${escaparHtml(fechaDe(p.fecha_compromiso))}</span>
         </div>
       `).join('')

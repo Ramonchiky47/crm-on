@@ -102,7 +102,24 @@ const negocioMotivoPerdidaWrap = document.getElementById('negocio-motivo-perdida
 const negocioMotivoPerdida = document.getElementById('negocio-motivo-perdida');
 const btnGuardarNegocio = document.getElementById('btn-guardar-negocio');
 const btnCancelarNegocio = document.getElementById('btn-cancelar-negocio');
+const btnMostrarFormNegocio = document.getElementById('btn-mostrar-form-negocio');
 const tablaNegocios = document.getElementById('tabla-negocios');
+
+function abrirFormNegocio() {
+  formNegocio.hidden = false;
+  btnMostrarFormNegocio.hidden = true;
+  btnCancelarNegocio.hidden = false;
+}
+
+function cerrarFormNegocio() {
+  formNegocio.hidden = true;
+  btnMostrarFormNegocio.hidden = false;
+}
+
+btnMostrarFormNegocio.addEventListener('click', () => {
+  abrirFormNegocio();
+  negocioNombre.focus();
+});
 
 // El campo Motivo solo se muestra cuando la etapa seleccionada es "Perdida".
 function etapaEsPerdida(select) {
@@ -376,6 +393,7 @@ function limpiarFormNegocio() {
   actualizarVisibilidadMotivoPerdida();
   btnGuardarNegocio.textContent = 'Agregar';
   btnCancelarNegocio.hidden = true;
+  cerrarFormNegocio();
 }
 
 formNegocio.addEventListener('submit', async (e) => {
@@ -453,6 +471,7 @@ tablaNegocios.addEventListener('click', async (e) => {
 
     btnGuardarNegocio.textContent = 'Guardar cambios';
     btnCancelarNegocio.hidden = false;
+    abrirFormNegocio();
     negocioNombre.focus();
   }
 });
@@ -1628,7 +1647,7 @@ function descargarPDFCotizacion(id) {
 promesaAuth.then(async (sesion) => {
   if (!sesion) return;
   permisosCatalogos = sesion.permisos.catalogos;
-  formNegocio.hidden = !permisosCatalogos.editar;
+  btnMostrarFormNegocio.hidden = !permisosCatalogos.editar;
   btnMostrarFormCotizacion.hidden = !permisosCatalogos.editar;
 
   poblarSelectsNegocio().then(cargarNegocios);

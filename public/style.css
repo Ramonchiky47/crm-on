@@ -582,10 +582,6 @@ input, textarea, select {
   flex-wrap: wrap;
 }
 
-#inicio-subnav {
-  margin-top: 20mm;
-}
-
 .tab-catalogo {
   background: white;
   color: inherit;

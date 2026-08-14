@@ -1800,8 +1800,25 @@ const productoPrecioUsd = document.getElementById('producto-precio-usd');
 const productoPrecioMxn = document.getElementById('producto-precio-mxn');
 const btnGuardarProducto = document.getElementById('btn-guardar-producto');
 const btnCancelarProducto = document.getElementById('btn-cancelar-producto');
+const btnMostrarFormProducto = document.getElementById('btn-mostrar-form-producto');
 const tablaProductos = document.getElementById('tabla-productos');
 const productosBuscador = document.getElementById('productos-buscador');
+const productosContador = document.getElementById('productos-contador');
+
+function abrirFormProducto() {
+  formProducto.hidden = false;
+  btnMostrarFormProducto.hidden = true;
+}
+
+function cerrarFormProducto() {
+  formProducto.hidden = true;
+  btnMostrarFormProducto.hidden = false;
+}
+
+btnMostrarFormProducto.addEventListener('click', () => {
+  abrirFormProducto();
+  productoItem.focus();
+});
 
 function poblarSelect(select, lista, valor, texto, valorActual) {
   const actual = valorActual || select.value;
@@ -1887,15 +1904,16 @@ formRapidoCatalogoProducto.addEventListener('submit', async (e) => {
 });
 
 function renderizarProductos(productos) {
+  const vacio = '<span class="etiqueta-vacia">—</span>';
   tablaProductos.innerHTML = productos.map((p) => `
     <tr>
       <td>${escaparHtml(p.item)}</td>
       <td>${escaparHtml(p.descripcion || '')}</td>
-      <td>${escaparHtml(p.categoria_nombre || '')}</td>
-      <td>${escaparHtml(p.linea_nombre || '')}</td>
-      <td>${escaparHtml(p.marca_nombre || '')}</td>
-      <td>${formatoImporte(p.precio_usd)}</td>
-      <td>${p.precio_mxn !== null ? formatoImporte(p.precio_mxn) : ''}</td>
+      <td>${p.categoria_nombre ? escaparHtml(p.categoria_nombre) : vacio}</td>
+      <td>${p.linea_nombre ? escaparHtml(p.linea_nombre) : vacio}</td>
+      <td>${p.marca_nombre ? escaparHtml(p.marca_nombre) : vacio}</td>
+      <td class="num">${formatoImporte(p.precio_usd)}</td>
+      <td class="num">${p.precio_mxn !== null ? formatoImporte(p.precio_mxn) : ''}</td>
       <td class="acciones">
         ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${escaparHtml(p.item)}">Editar</button>` : ''}
         ${permisosCatalogos.editar ? `<button class="btn-clonar" data-id="${escaparHtml(p.item)}" title="Crear un producto nuevo con estos mismos datos">Clonar</button>` : ''}
@@ -1903,13 +1921,58 @@ function renderizarProductos(productos) {
       </td>
     </tr>
   `).join('');
+  productosContador.textContent = productos.length;
 }
+
+const columnasNumericasProductos = new Set(['precio_usd', 'precio_mxn']);
+const ordenProductos = { campo: null, direccion: 1 };
+let productosCacheActual = [];
+
+function valorOrdenableProducto(p, campo) {
+  const v = p[campo];
+  if (columnasNumericasProductos.has(campo)) return Number(v) || 0;
+  return String(v || '').toLowerCase();
+}
+
+function ordenarProductos(lista) {
+  if (!ordenProductos.campo) return lista;
+  const campo = ordenProductos.campo;
+  return [...lista].sort((a, b) => {
+    const va = valorOrdenableProducto(a, campo);
+    const vb = valorOrdenableProducto(b, campo);
+    if (va < vb) return -1 * ordenProductos.direccion;
+    if (va > vb) return 1 * ordenProductos.direccion;
+    return 0;
+  });
+}
+
+function actualizarIndicadoresOrdenProductos() {
+  document.querySelectorAll('#tabla-productos-tabla thead th[data-campo]').forEach((th) => {
+    th.classList.remove('orden-asc', 'orden-desc');
+    if (th.dataset.campo === ordenProductos.campo) {
+      th.classList.add(ordenProductos.direccion === 1 ? 'orden-asc' : 'orden-desc');
+    }
+  });
+}
+
+document.querySelectorAll('#tabla-productos-tabla thead th[data-campo]').forEach((th) => {
+  th.addEventListener('click', () => {
+    if (ordenProductos.campo === th.dataset.campo) {
+      ordenProductos.direccion *= -1;
+    } else {
+      ordenProductos.campo = th.dataset.campo;
+      ordenProductos.direccion = 1;
+    }
+    actualizarIndicadoresOrdenProductos();
+    renderizarProductos(ordenarProductos(productosCacheActual));
+  });
+});
 
 async function cargarProductos(q) {
   const parametros = q ? `?q=${encodeURIComponent(q)}` : '';
   const res = await fetch(`/api/productos${parametros}`);
-  const productos = await res.json();
-  renderizarProductos(productos);
+  productosCacheActual = await res.json();
+  renderizarProductos(ordenarProductos(productosCacheActual));
 }
 
 function limpiarFormProducto() {
@@ -1918,6 +1981,7 @@ function limpiarFormProducto() {
   productoItem.readOnly = false;
   btnGuardarProducto.textContent = 'Agregar';
   btnCancelarProducto.hidden = true;
+  cerrarFormProducto();
 }
 
 formProducto.addEventListener('submit', async (e) => {
@@ -1975,6 +2039,7 @@ tablaProductos.addEventListener('click', async (e) => {
 
     btnGuardarProducto.textContent = 'Guardar cambios';
     btnCancelarProducto.hidden = false;
+    abrirFormProducto();
     productoDescripcion.focus();
   }
 
@@ -1995,6 +2060,7 @@ tablaProductos.addEventListener('click', async (e) => {
     productoPrecioMxn.value = p.precio_mxn !== null ? p.precio_mxn : '';
 
     btnCancelarProducto.hidden = false;
+    abrirFormProducto();
     productoItem.focus();
   }
 });
@@ -2018,6 +2084,20 @@ const archivoCsvProductos = document.getElementById('archivo-csv-productos');
 const btnCargarProductos = document.getElementById('btn-cargar-productos');
 const reporteCargaProductos = document.getElementById('reporte-carga-productos');
 const listaErroresProductos = document.getElementById('cp-lista-errores');
+
+const btnAbrirCsvProductos = document.getElementById('btn-abrir-csv-productos');
+const modalCsvProductosOverlay = document.getElementById('modal-csv-productos-overlay');
+const modalCsvProductosCerrar = document.getElementById('modal-csv-productos-cerrar');
+
+btnAbrirCsvProductos.addEventListener('click', () => {
+  modalCsvProductosOverlay.hidden = false;
+});
+modalCsvProductosCerrar.addEventListener('click', () => {
+  modalCsvProductosOverlay.hidden = true;
+});
+modalCsvProductosOverlay.addEventListener('click', (e) => {
+  if (e.target === modalCsvProductosOverlay) modalCsvProductosOverlay.hidden = true;
+});
 
 btnPlantillaProductos.addEventListener('click', () => {
   descargarCsv(
@@ -2247,7 +2327,8 @@ promesaAuth.then((sesion) => {
   formCategoria.hidden = !permisosCatalogos.editar;
   formLinea.hidden = !permisosCatalogos.editar;
   formMarca.hidden = !permisosCatalogos.editar;
-  formProducto.hidden = !permisosCatalogos.editar;
+  btnMostrarFormProducto.hidden = !permisosCatalogos.editar;
+  btnAbrirCsvProductos.hidden = !permisosCatalogos.editar;
   formEtapaNegocio.hidden = !permisosCatalogos.editar;
   formActividad.hidden = !permisosCatalogos.editar;
   btnUnificarContactos.hidden = !permisosCatalogos.borrar;

@@ -346,30 +346,30 @@
     <section data-panel="productos" hidden>
       <h2 hidden>Productos</h2>
 
-      <div class="tarjetas-subcatalogo" id="productos-subnav">
+      <div class="tarjetas-subcatalogo pestanas-compactas" id="productos-subnav">
         <button type="button" class="tarjeta-subcatalogo activo" data-subtab="items">
-          <h3>Productos</h3>
-          <p>Item, descripción, categoría, línea, marca y precios</p>
+          <h3>Productos <span class="contador" id="productos-contador"></span></h3>
         </button>
         <button type="button" class="tarjeta-subcatalogo" data-subtab="categorias">
           <h3>Categoría</h3>
-          <p>Catálogo de categorías (Cat-00001...)</p>
         </button>
         <button type="button" class="tarjeta-subcatalogo" data-subtab="lineas">
           <h3>Línea</h3>
-          <p>Catálogo de líneas (Lin-00001...)</p>
         </button>
         <button type="button" class="tarjeta-subcatalogo" data-subtab="marcas">
           <h3>Marca</h3>
-          <p>Catálogo de marcas (M-00001...)</p>
         </button>
       </div>
 
       <div data-subpanel="items">
-        <p class="pista">Busca por Item o descripción (mínimo 3 letras) antes de dar de alta un producto, para evitar duplicados.</p>
-        <input type="text" autocomplete="off" id="productos-buscador" class="busqueda" placeholder="Buscar por Item o descripción..." />
+        <div class="barra-accion">
+          <input type="text" autocomplete="off" id="productos-buscador" class="busqueda" placeholder="Buscar por Item o descripción..." />
+          <button type="button" id="btn-mostrar-form-producto" class="btn-agregar">+ Agregar producto</button>
+          <button type="button" id="btn-abrir-csv-productos" class="btn-secundario">Importar CSV</button>
+        </div>
+        <p class="pista">Busca antes de dar de alta un producto nuevo, para evitar duplicados.</p>
 
-        <form id="form-producto" class="form-catalogo form-catalogo-vertical">
+        <form id="form-producto" class="form-catalogo form-catalogo-vertical panel-form" hidden>
           <input type="hidden" id="producto-item-original" />
           <input type="text" id="producto-item" placeholder="Item (código único)" required />
           <input type="text" id="producto-descripcion" placeholder="Descripción" />
@@ -412,47 +412,22 @@
           </div>
         </form>
 
-        <div class="tabla-scroll">
-          <table>
-            <thead><tr><th>Item</th><th>Descripción</th><th>Categoría</th><th>Línea</th><th>Marca</th><th>USD</th><th>MXN</th><th>Acciones</th></tr></thead>
+        <div class="tabla-scroll tabla-alto-fijo">
+          <table id="tabla-productos-tabla" class="tabla-ordenable">
+            <thead>
+              <tr>
+                <th data-campo="item">Item</th>
+                <th data-campo="descripcion">Descripción</th>
+                <th data-campo="categoria_nombre">Categoría</th>
+                <th data-campo="linea_nombre">Línea</th>
+                <th data-campo="marca_nombre">Marca</th>
+                <th data-campo="precio_usd" class="num">USD</th>
+                <th data-campo="precio_mxn" class="num">MXN</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
             <tbody id="tabla-productos"></tbody>
           </table>
-        </div>
-
-        <h3>Carga masiva de productos (CSV)</h3>
-        <p class="pista">
-          Sube un archivo CSV para dar de alta o actualizar productos en lote. Si el <strong>Item</strong> ya existe
-          se actualiza; si no, se crea. <strong>Categoría</strong>, <strong>Línea</strong> y <strong>Marca</strong>
-          se autocrean por nombre si todavía no existen en su catálogo.
-        </p>
-        <p>
-          Columnas esperadas en el encabezado (no distingue mayúsculas/minúsculas):<br />
-          <code>item, descripcion, categoria, linea, marca, precio_usd, precio_mxn</code>
-        </p>
-        <div class="acciones-form">
-          <button type="button" id="btn-plantilla-productos">Descargar plantilla CSV</button>
-        </div>
-        <form id="form-carga-productos">
-          <label>
-            Archivo CSV
-            <input type="file" id="archivo-csv-productos" accept=".csv,text/csv" required />
-          </label>
-          <div class="acciones-form">
-            <button type="submit" id="btn-cargar-productos">Cargar archivo</button>
-          </div>
-        </form>
-        <div id="reporte-carga-productos" hidden>
-          <h4>Resultado de la carga</h4>
-          <ul class="resumen-carga">
-            <li>Filas procesadas: <strong id="cp-total"></strong></li>
-            <li>Productos nuevos: <strong id="cp-insertadas"></strong></li>
-            <li>Productos actualizados: <strong id="cp-actualizadas"></strong></li>
-            <li>Filas con error: <strong id="cp-errores-total"></strong></li>
-            <li>Categorías creadas: <strong id="cp-categorias"></strong></li>
-            <li>Líneas creadas: <strong id="cp-lineas"></strong></li>
-            <li>Marcas creadas: <strong id="cp-marcas"></strong></li>
-          </ul>
-          <div id="cp-lista-errores"></div>
         </div>
       </div>
 
@@ -557,6 +532,47 @@
             <button type="submit">Agregar</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div id="modal-csv-productos-overlay" class="modal-overlay" hidden>
+      <div class="modal-caja" role="dialog" aria-modal="true">
+        <button type="button" id="modal-csv-productos-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
+        <h2>Importar productos por CSV</h2>
+        <p class="pista">
+          Sube un archivo CSV para dar de alta o actualizar productos en lote. Si el <strong>Item</strong> ya existe
+          se actualiza; si no, se crea. <strong>Categoría</strong>, <strong>Línea</strong> y <strong>Marca</strong>
+          se autocrean por nombre si todavía no existen en su catálogo.
+        </p>
+        <p>
+          Columnas esperadas en el encabezado (no distingue mayúsculas/minúsculas):<br />
+          <code>item, descripcion, categoria, linea, marca, precio_usd, precio_mxn</code>
+        </p>
+        <div class="acciones-form">
+          <button type="button" id="btn-plantilla-productos">Descargar plantilla CSV</button>
+        </div>
+        <form id="form-carga-productos">
+          <label>
+            Archivo CSV
+            <input type="file" id="archivo-csv-productos" accept=".csv,text/csv" required />
+          </label>
+          <div class="acciones-form">
+            <button type="submit" id="btn-cargar-productos">Cargar archivo</button>
+          </div>
+        </form>
+        <div id="reporte-carga-productos" hidden>
+          <h4>Resultado de la carga</h4>
+          <ul class="resumen-carga">
+            <li>Filas procesadas: <strong id="cp-total"></strong></li>
+            <li>Productos nuevos: <strong id="cp-insertadas"></strong></li>
+            <li>Productos actualizados: <strong id="cp-actualizadas"></strong></li>
+            <li>Filas con error: <strong id="cp-errores-total"></strong></li>
+            <li>Categorías creadas: <strong id="cp-categorias"></strong></li>
+            <li>Líneas creadas: <strong id="cp-lineas"></strong></li>
+            <li>Marcas creadas: <strong id="cp-marcas"></strong></li>
+          </ul>
+          <div id="cp-lista-errores"></div>
+        </div>
       </div>
     </div>
   </div>

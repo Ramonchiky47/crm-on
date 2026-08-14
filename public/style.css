@@ -731,6 +731,58 @@ button:hover {
   width: 100%;
 }
 
+/* Fila de acciones sobre una tabla: buscador + agregar + acciones secundarias, todo en una
+   linea (ej. Productos). */
+.barra-accion {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.35rem;
+}
+
+.barra-accion .busqueda {
+  margin-bottom: 0;
+  flex: 1 1 auto;
+  max-width: 420px;
+}
+
+.barra-accion .btn-agregar {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.btn-secundario {
+  background: #fff;
+  color: #757575;
+  border: 1px solid var(--borde);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.btn-secundario:hover {
+  background: var(--fondo-suave);
+  opacity: 1;
+}
+
+/* Formulario de alta colapsado por default (ej. "+ Agregar producto"): fondo tenue para
+   distinguirlo de la tabla de abajo. */
+.panel-form {
+  background: var(--fondo-suave);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.etiqueta-vacia {
+  color: #9b9b9b;
+}
+
+th.num, td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .fila-filtros {
   display: flex;
   gap: 0.6rem;
@@ -1127,6 +1179,62 @@ button:hover {
   margin: 0;
   color: #757575;
   font-size: 0.8rem;
+}
+
+/* Version compacta (pestañas de una linea) de .tarjetas-subcatalogo/.tarjeta-subcatalogo, para
+   catalogos con muchas sub-vistas donde las tarjetas grandes con descripcion son demasiado
+   texto (ej. Productos: Productos/Categoria/Linea/Marca). Mismo mecanismo de JS (activo,
+   data-subtab), solo mas angosto. */
+.pestanas-compactas {
+  display: flex;
+  gap: 0.3rem;
+  border-bottom: 1px solid var(--borde);
+  margin-bottom: 1.1rem;
+}
+
+.pestanas-compactas.tarjeta-subcatalogo,
+.pestanas-compactas .tarjeta-subcatalogo {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0.55rem 0.9rem;
+  background: none;
+}
+
+.pestanas-compactas .tarjeta-subcatalogo:hover {
+  border-color: transparent;
+}
+
+.pestanas-compactas .tarjeta-subcatalogo h3 {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #757575;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pestanas-compactas .tarjeta-subcatalogo:hover h3 { color: #212121; }
+
+.pestanas-compactas .tarjeta-subcatalogo.activo {
+  border-bottom-color: var(--peligro);
+}
+
+.pestanas-compactas .tarjeta-subcatalogo.activo h3 { color: #212121; }
+
+.pestanas-compactas .tarjeta-subcatalogo .contador {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #757575;
+  background: var(--fondo-suave);
+  border-radius: 999px;
+  padding: 0.06rem 0.42rem;
+}
+
+.pestanas-compactas .tarjeta-subcatalogo.activo .contador {
+  background: rgba(192, 57, 43, 0.12);
+  color: var(--peligro);
 }
 
 .calendario-controles {

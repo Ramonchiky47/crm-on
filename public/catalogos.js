@@ -201,6 +201,34 @@ document.querySelectorAll('.tab-catalogo').forEach((boton) => {
 const tabDesdeUrl = new URLSearchParams(window.location.search).get('tab');
 if (tabDesdeUrl) activarTabCatalogo(tabDesdeUrl);
 
+// ---------- Tarjetas internas (dentro de una seccion): Destinos, Productos y Usuarios ----------
+// Cada seccion (Destinos, Productos, Usuarios) tiene su propio grupo de tarjetas; el cambio de
+// tarjeta solo debe afectar los paneles de esa misma seccion, no los de otras.
+
+function activarSubtabCatalogo(contenedor, nombre) {
+  const boton = contenedor.querySelector(`.tarjeta-subcatalogo[data-subtab="${nombre}"]`);
+  if (!boton) return;
+  contenedor.querySelectorAll('.tarjeta-subcatalogo').forEach((b) => b.classList.remove('activo'));
+  boton.classList.add('activo');
+  contenedor.querySelectorAll('[data-subpanel]').forEach((panel) => {
+    panel.hidden = panel.dataset.subpanel !== nombre;
+  });
+}
+
+document.querySelectorAll('.tarjeta-subcatalogo').forEach((boton) => {
+  boton.addEventListener('click', () => {
+    activarSubtabCatalogo(boton.closest('section'), boton.dataset.subtab);
+  });
+});
+
+// Permite llegar directo a una tarjeta desde la barra lateral (ej. Plaza, Grupo o Cadena
+// dentro de Hoteles/Locales): catalogos.html?tab=destinos&subtab=plaza.
+const subtabDesdeUrl = new URLSearchParams(window.location.search).get('subtab');
+if (subtabDesdeUrl) {
+  const panelDestino = document.querySelector(`[data-subpanel="${subtabDesdeUrl}"]`);
+  if (panelDestino) activarSubtabCatalogo(panelDestino.closest('section'), subtabDesdeUrl);
+}
+
 // ---------- Destinos (con Plaza, Grupo y Cadena asociados) ----------
 
 const formDestino = document.getElementById('form-destino');
@@ -208,23 +236,15 @@ const destinoId = document.getElementById('destino-id');
 const destinoNombre = document.getElementById('destino-nombre');
 const destinoUbicacion = document.getElementById('destino-ubicacion');
 const btnCancelarDestino = document.getElementById('btn-cancelar-destino');
-const btnMostrarFormDestino = document.getElementById('btn-mostrar-form-destino');
 const tablaDestinos = document.getElementById('tabla-destinos');
 
 function abrirFormDestino() {
   formDestino.hidden = false;
-  btnMostrarFormDestino.hidden = true;
 }
 
 function cerrarFormDestino() {
   formDestino.hidden = true;
-  btnMostrarFormDestino.hidden = false;
 }
-
-btnMostrarFormDestino.addEventListener('click', () => {
-  abrirFormDestino();
-  destinoNombre.focus();
-});
 
 let permisosCatalogos = { ver: true, editar: true, borrar: true };
 let esAdminActual = false;
@@ -1521,21 +1541,6 @@ tablaRepresentantes.addEventListener('click', async (e) => {
   }
 });
 
-// ---------- Tarjetas internas (dentro de una seccion): Productos y Usuarios ----------
-// Cada seccion (Productos, Usuarios) tiene su propio grupo de tarjetas; el cambio de
-// tarjeta solo debe afectar los paneles de esa misma seccion, no los de otras.
-
-document.querySelectorAll('.tarjeta-subcatalogo').forEach((boton) => {
-  boton.addEventListener('click', () => {
-    const contenedor = boton.closest('section');
-    contenedor.querySelectorAll('.tarjeta-subcatalogo').forEach((b) => b.classList.remove('activo'));
-    boton.classList.add('activo');
-    contenedor.querySelectorAll('[data-subpanel]').forEach((panel) => {
-      panel.hidden = panel.dataset.subpanel !== boton.dataset.subtab;
-    });
-  });
-});
-
 // ---- Categoria ----
 
 const formCategoria = document.getElementById('form-categoria');
@@ -2187,7 +2192,6 @@ promesaAuth.then((sesion) => {
   esAdminActual = sesion.esAdmin;
 
   formDestino.hidden = true;
-  btnMostrarFormDestino.hidden = !permisosCatalogos.editar;
   formPlaza.hidden = !permisosCatalogos.editar;
   formGrupo.hidden = !permisosCatalogos.editar;
   formCadena.hidden = !permisosCatalogos.editar;
@@ -2201,7 +2205,6 @@ promesaAuth.then((sesion) => {
   formProducto.hidden = !permisosCatalogos.editar;
   formEtapaNegocio.hidden = !permisosCatalogos.editar;
   formActividad.hidden = !permisosCatalogos.editar;
-  btnUnificarDestinos.hidden = !permisosCatalogos.borrar;
   btnUnificarContactos.hidden = !permisosCatalogos.borrar;
   formCargaProductos.hidden = !permisosCatalogos.editar;
   btnPlantillaProductos.hidden = !permisosCatalogos.editar;

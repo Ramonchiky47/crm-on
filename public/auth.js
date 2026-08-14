@@ -12,10 +12,12 @@ function confirmarDoble(mensaje) {
 
 function tituloDePagina(datos) {
   const archivoActual = window.location.pathname.split('/').pop() || 'index.html';
-  const tabActual = new URLSearchParams(window.location.search).get('tab');
+  const parametrosActuales = new URLSearchParams(window.location.search);
+  const tabActual = parametrosActuales.get('tab');
+  const subtabActual = parametrosActuales.get('subtab');
   const item = NAV_LATERAL.find((i) => {
     if (i.soloAdmin ? !datos.esAdmin : !i.permiso(datos.permisos)) return false;
-    return esItemActivo(i, archivoActual, tabActual);
+    return esItemActivo(i, archivoActual, tabActual, subtabActual);
   });
   if (item) return item.texto;
   const h1 = document.querySelector('.contenedor h1');
@@ -97,10 +99,10 @@ const NAV_LATERAL = [
   { grupo: null, texto: 'Tareas', href: 'index.html', permiso: (p) => p.catalogos.ver },
   { grupo: null, texto: 'Datos', href: 'datos.html', permiso: (p) => p.ordenes.ver || p.detalle_compra.ver || p.catalogos.ver },
 
-  { grupo: 'Catálogos', texto: 'Hoteles / Locales', href: 'catalogos.html?tab=destinos', permiso: (p) => p.catalogos.ver },
-  { grupo: 'Catálogos', texto: 'Plaza', href: 'catalogos.html?tab=destinos', permiso: (p) => p.catalogos.ver },
-  { grupo: 'Catálogos', texto: 'Grupo', href: 'catalogos.html?tab=destinos', permiso: (p) => p.catalogos.ver },
-  { grupo: 'Catálogos', texto: 'Cadena', href: 'catalogos.html?tab=destinos', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Hoteles / Locales', href: 'catalogos.html?tab=destinos&subtab=lista', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Plaza', href: 'catalogos.html?tab=destinos&subtab=plaza', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Grupo', href: 'catalogos.html?tab=destinos&subtab=grupo', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Catálogos', texto: 'Cadena', href: 'catalogos.html?tab=destinos&subtab=cadena', permiso: (p) => p.catalogos.ver },
   { grupo: 'Catálogos', texto: 'Contactos', href: 'catalogos.html?tab=contactos', permiso: (p) => p.catalogos.ver },
   { grupo: 'Catálogos', texto: 'Productos', href: 'catalogos.html?tab=productos', permiso: (p) => p.catalogos.ver },
   { grupo: 'Catálogos', texto: 'Estatus', href: 'catalogos.html?tab=estatus', permiso: (p) => p.catalogos.ver },
@@ -119,17 +121,29 @@ const NAV_LATERAL = [
 // correcto (si no, ninguno o el equivocado quedaria resaltado).
 const TAB_POR_DEFECTO = { 'cotizaciones.html': 'negocios', 'catalogos.html': 'destinos' };
 
-function esItemActivo(item, archivoActual, tabActual) {
+// Igual que TAB_POR_DEFECTO pero un nivel mas abajo: dentro de catalogos.html?tab=destinos,
+// varios items (Hoteles/Locales, Plaza, Grupo, Cadena) comparten el mismo tab pero distinto
+// ?subtab=. La llave es el tab efectivo (el de la URL, o el default de arriba).
+const SUBTAB_POR_DEFECTO = { destinos: 'lista' };
+
+function esItemActivo(item, archivoActual, tabActual, subtabActual) {
   const [archivoItem, queryItem] = item.href.split('?');
   if (archivoItem !== archivoActual) return false;
-  const tabItem = queryItem ? new URLSearchParams(queryItem).get('tab') : null;
-  if (!tabItem) return true;
-  return tabItem === (tabActual || TAB_POR_DEFECTO[archivoActual]);
+  if (!queryItem) return true;
+  const paramsItem = new URLSearchParams(queryItem);
+  const tabItem = paramsItem.get('tab');
+  const tabEfectivo = tabActual || TAB_POR_DEFECTO[archivoActual];
+  if (tabItem && tabItem !== tabEfectivo) return false;
+  const subtabItem = paramsItem.get('subtab');
+  if (subtabItem && subtabItem !== (subtabActual || SUBTAB_POR_DEFECTO[tabEfectivo])) return false;
+  return true;
 }
 
 function insertarBarraLateral(datos) {
   const archivoActual = window.location.pathname.split('/').pop() || 'index.html';
-  const tabActual = new URLSearchParams(window.location.search).get('tab');
+  const parametrosActuales = new URLSearchParams(window.location.search);
+  const tabActual = parametrosActuales.get('tab');
+  const subtabActual = parametrosActuales.get('subtab');
 
   const visibles = NAV_LATERAL.filter((item) => (item.soloAdmin ? datos.esAdmin : item.permiso(datos.permisos)));
   const grupos = [{ nombre: null, items: visibles.filter((i) => !i.grupo) }];
@@ -142,7 +156,7 @@ function insertarBarraLateral(datos) {
     <div class="nav-grupo">
       ${g.nombre ? `<div class="nav-grupo__titulo">${escaparHtmlLateral(g.nombre)}</div>` : ''}
       ${g.items.map((item) => {
-        const activo = esItemActivo(item, archivoActual, tabActual);
+        const activo = esItemActivo(item, archivoActual, tabActual, subtabActual);
         return `<a class="nav-item${item.grupo ? ' nav-item--sub' : ''}${activo ? ' activo' : ''}" href="${item.href}"${activo ? ' aria-current="page"' : ''}>${escaparHtmlLateral(item.texto)}</a>`;
       }).join('')}
     </div>

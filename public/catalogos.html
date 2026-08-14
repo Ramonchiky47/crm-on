@@ -25,7 +25,7 @@
     <section data-panel="destinos">
       <h2>Hoteles / Locales</h2>
 
-      <div class="tarjetas-subcatalogo" id="destinos-subnav">
+      <div class="tarjetas-subcatalogo" id="destinos-subnav" hidden>
         <button type="button" class="tarjeta-subcatalogo activo" data-subtab="lista">
           <h3>Hoteles / Locales</h3>
           <p>Nombre, plaza, grupo y cadena asociados</p>
@@ -45,7 +45,7 @@
       </div>
 
       <div data-subpanel="lista">
-        <button type="button" id="btn-mostrar-form-destino" class="btn-agregar">+ Agregar Hotel/Local</button>
+        <button type="button" id="btn-mostrar-form-destino" class="btn-agregar" hidden>+ Agregar Hotel/Local</button>
 
         <form id="form-destino" class="form-catalogo form-catalogo-vertical" hidden>
           <input type="hidden" id="destino-id" />
@@ -90,7 +90,7 @@
         </form>
 
         <div class="acciones-form">
-          <button type="button" id="btn-unificar-destinos">Unificar duplicados</button>
+          <button type="button" id="btn-unificar-destinos" hidden>Unificar duplicados</button>
           <button type="button" id="btn-confirmar-unificar-destinos" hidden disabled>Confirmar unificación</button>
           <button type="button" id="btn-cancelar-unificar-destinos" hidden>Cancelar</button>
         </div>

@@ -910,6 +910,15 @@ btnMostrarFormCotizacion.addEventListener('click', () => {
   abrirFormCotizacion();
 });
 
+// Atajo desde Visualizacion de cotizaciones: manda a Captura y abre el formulario directo,
+// ya que "Captura de cotizaciones" se quito de la barra lateral (este boton la reemplaza).
+const btnNuevaCotizacionVisualizacion = document.getElementById('btn-nueva-cotizacion-visualizacion');
+btnNuevaCotizacionVisualizacion.addEventListener('click', () => {
+  activarSubtab('captura');
+  limpiarFormCotizacion();
+  abrirFormCotizacion();
+});
+
 btnCancelarCotizacion.addEventListener('click', cerrarFormCotizacion);
 
 // Envia esta cotizacion (ya guardada) a Tareas como un pendiente de Seguimiento: nace con la
@@ -1658,6 +1667,7 @@ promesaAuth.then(async (sesion) => {
   permisosCatalogos = sesion.permisos.catalogos;
   btnMostrarFormNegocio.hidden = !permisosCatalogos.editar;
   btnMostrarFormCotizacion.hidden = !permisosCatalogos.editar;
+  btnNuevaCotizacionVisualizacion.hidden = !permisosCatalogos.editar;
 
   poblarSelectsNegocio().then(cargarNegocios);
   poblarSelectsCotizacion().then(cargarCotizaciones);

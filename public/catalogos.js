@@ -1808,6 +1808,7 @@ const productosContador = document.getElementById('productos-contador');
 function abrirFormProducto() {
   formProducto.hidden = false;
   btnMostrarFormProducto.hidden = true;
+  btnCancelarProducto.hidden = false;
 }
 
 function cerrarFormProducto() {
@@ -1837,7 +1838,111 @@ async function poblarSelectsProducto() {
   poblarSelect(productoCategoria, categorias, 'id_categoria', 'categoria');
   poblarSelect(productoLinea, lineas, 'id_linea', 'linea');
   poblarSelect(productoMarca, marcas, 'id_marca', 'marca');
+  filtroProdCategoria.poblarOpciones(categorias, 'id_categoria', 'categoria');
+  filtroProdLinea.poblarOpciones(lineas, 'id_linea', 'linea');
+  filtroProdMarca.poblarOpciones(marcas, 'id_marca', 'marca');
 }
+
+// Filtro de checkboxes que solo se aplica al presionar "Aplicar" (igual que el filtro de Etapa
+// en Negocios/Cotizaciones): reutilizable porque Productos necesita el mismo patron 3 veces
+// (Categoria, Linea, Marca).
+function crearFiltroCheckbox({ wrap, btn, panel, opciones, btnAplicar, btnCancelar, etiquetaTodos, etiquetaSeleccion, alAplicar }) {
+  let seleccionados = new Set();
+
+  function poblarOpciones(lista, campoValor, campoTexto) {
+    opciones.innerHTML = lista.map((item) => `
+      <label class="multi-select-opcion">
+        <input type="checkbox" value="${item[campoValor]}" /><span class="multi-select-texto">${escaparHtml(item[campoTexto])}</span>
+      </label>
+    `).join('');
+  }
+
+  function actualizarBoton() {
+    btn.textContent = seleccionados.size ? etiquetaSeleccion(seleccionados.size) : etiquetaTodos;
+  }
+
+  function sincronizarChecks() {
+    panel.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.checked = seleccionados.has(cb.value);
+    });
+  }
+
+  btn.addEventListener('click', () => {
+    sincronizarChecks();
+    panel.hidden = !panel.hidden;
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target)) panel.hidden = true;
+  });
+
+  btnAplicar.addEventListener('click', () => {
+    seleccionados = new Set([...panel.querySelectorAll('input[type="checkbox"]:checked')].map((cb) => cb.value));
+    actualizarBoton();
+    panel.hidden = true;
+    alAplicar();
+  });
+
+  btnCancelar.addEventListener('click', () => {
+    sincronizarChecks();
+    panel.hidden = true;
+  });
+
+  return {
+    poblarOpciones,
+    limpiar() {
+      seleccionados = new Set();
+      actualizarBoton();
+      sincronizarChecks();
+    },
+    tieneSeleccion(valor) {
+      return seleccionados.size === 0 || (valor !== null && valor !== undefined && seleccionados.has(String(valor)));
+    },
+  };
+}
+
+const filtroProdCategoria = crearFiltroCheckbox({
+  wrap: document.getElementById('filtro-prod-categoria-wrap'),
+  btn: document.getElementById('filtro-prod-categoria-btn'),
+  panel: document.getElementById('filtro-prod-categoria-panel'),
+  opciones: document.getElementById('filtro-prod-categoria-opciones'),
+  btnAplicar: document.getElementById('btn-aplicar-filtro-prod-categoria'),
+  btnCancelar: document.getElementById('btn-cancelar-filtro-prod-categoria'),
+  etiquetaTodos: 'Todas las categorías',
+  etiquetaSeleccion: (n) => `${n} categoría(s) seleccionada(s)`,
+  alAplicar: () => aplicarFiltrosProductos(),
+});
+
+const filtroProdLinea = crearFiltroCheckbox({
+  wrap: document.getElementById('filtro-prod-linea-wrap'),
+  btn: document.getElementById('filtro-prod-linea-btn'),
+  panel: document.getElementById('filtro-prod-linea-panel'),
+  opciones: document.getElementById('filtro-prod-linea-opciones'),
+  btnAplicar: document.getElementById('btn-aplicar-filtro-prod-linea'),
+  btnCancelar: document.getElementById('btn-cancelar-filtro-prod-linea'),
+  etiquetaTodos: 'Todas las líneas',
+  etiquetaSeleccion: (n) => `${n} línea(s) seleccionada(s)`,
+  alAplicar: () => aplicarFiltrosProductos(),
+});
+
+const filtroProdMarca = crearFiltroCheckbox({
+  wrap: document.getElementById('filtro-prod-marca-wrap'),
+  btn: document.getElementById('filtro-prod-marca-btn'),
+  panel: document.getElementById('filtro-prod-marca-panel'),
+  opciones: document.getElementById('filtro-prod-marca-opciones'),
+  btnAplicar: document.getElementById('btn-aplicar-filtro-prod-marca'),
+  btnCancelar: document.getElementById('btn-cancelar-filtro-prod-marca'),
+  etiquetaTodos: 'Todas las marcas',
+  etiquetaSeleccion: (n) => `${n} marca(s) seleccionada(s)`,
+  alAplicar: () => aplicarFiltrosProductos(),
+});
+
+document.getElementById('btn-limpiar-filtros-prod').addEventListener('click', () => {
+  filtroProdCategoria.limpiar();
+  filtroProdLinea.limpiar();
+  filtroProdMarca.limpiar();
+  aplicarFiltrosProductos();
+});
 
 // El catalogo de Productos depende de Categorias/Lineas/Marcas (los selects del formulario y
 // las columnas correspondientes de su tabla): se refresca cada vez que cualquiera de esos tres
@@ -1964,15 +2069,26 @@ document.querySelectorAll('#tabla-productos-tabla thead th[data-campo]').forEach
       ordenProductos.direccion = 1;
     }
     actualizarIndicadoresOrdenProductos();
-    renderizarProductos(ordenarProductos(productosCacheActual));
+    aplicarFiltrosProductos();
   });
 });
+
+// Los filtros de Categoria/Linea/Marca se aplican en el cliente sobre lo ultimo que trajo el
+// servidor (todos los productos, o el subconjunto que ya filtro el buscador por Item/descripcion).
+function aplicarFiltrosProductos() {
+  const filtrados = productosCacheActual.filter((p) =>
+    filtroProdCategoria.tieneSeleccion(p.categoria_id)
+    && filtroProdLinea.tieneSeleccion(p.linea_id)
+    && filtroProdMarca.tieneSeleccion(p.marca_id)
+  );
+  renderizarProductos(ordenarProductos(filtrados));
+}
 
 async function cargarProductos(q) {
   const parametros = q ? `?q=${encodeURIComponent(q)}` : '';
   const res = await fetch(`/api/productos${parametros}`);
   productosCacheActual = await res.json();
-  renderizarProductos(ordenarProductos(productosCacheActual));
+  aplicarFiltrosProductos();
 }
 
 function limpiarFormProducto() {

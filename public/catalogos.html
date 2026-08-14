@@ -369,6 +369,40 @@
         </div>
         <p class="pista">Busca antes de dar de alta un producto nuevo, para evitar duplicados.</p>
 
+        <div class="fila-filtros">
+          <div class="multi-select" id="filtro-prod-categoria-wrap">
+            <button type="button" id="filtro-prod-categoria-btn" class="multi-select-btn">Todas las categorías</button>
+            <div id="filtro-prod-categoria-panel" class="multi-select-panel" hidden>
+              <div id="filtro-prod-categoria-opciones"></div>
+              <div class="acciones-form">
+                <button type="button" id="btn-aplicar-filtro-prod-categoria" class="btn-mini">Aplicar</button>
+                <button type="button" id="btn-cancelar-filtro-prod-categoria" class="btn-mini">Cancelar</button>
+              </div>
+            </div>
+          </div>
+          <div class="multi-select" id="filtro-prod-linea-wrap">
+            <button type="button" id="filtro-prod-linea-btn" class="multi-select-btn">Todas las líneas</button>
+            <div id="filtro-prod-linea-panel" class="multi-select-panel" hidden>
+              <div id="filtro-prod-linea-opciones"></div>
+              <div class="acciones-form">
+                <button type="button" id="btn-aplicar-filtro-prod-linea" class="btn-mini">Aplicar</button>
+                <button type="button" id="btn-cancelar-filtro-prod-linea" class="btn-mini">Cancelar</button>
+              </div>
+            </div>
+          </div>
+          <div class="multi-select" id="filtro-prod-marca-wrap">
+            <button type="button" id="filtro-prod-marca-btn" class="multi-select-btn">Todas las marcas</button>
+            <div id="filtro-prod-marca-panel" class="multi-select-panel" hidden>
+              <div id="filtro-prod-marca-opciones"></div>
+              <div class="acciones-form">
+                <button type="button" id="btn-aplicar-filtro-prod-marca" class="btn-mini">Aplicar</button>
+                <button type="button" id="btn-cancelar-filtro-prod-marca" class="btn-mini">Cancelar</button>
+              </div>
+            </div>
+          </div>
+          <button type="button" id="btn-limpiar-filtros-prod" class="btn-mini" title="Limpiar filtros">✕</button>
+        </div>
+
         <form id="form-producto" class="form-catalogo form-catalogo-vertical panel-form" hidden>
           <input type="hidden" id="producto-item-original" />
           <input type="text" id="producto-item" placeholder="Item (código único)" required />
@@ -377,21 +411,21 @@
             <label>
               Categoría
               <span class="campo-con-boton">
-                <select id="producto-categoria"><option value="">-- Selecciona --</option></select>
+                <select id="producto-categoria" required><option value="">-- Selecciona --</option></select>
                 <button type="button" class="btn-mini btn-agregar-catalogo-producto" data-catalogo="categoria" title="Agregar categoría nueva">+</button>
               </span>
             </label>
             <label>
               Línea
               <span class="campo-con-boton">
-                <select id="producto-linea"><option value="">-- Selecciona --</option></select>
+                <select id="producto-linea" required><option value="">-- Selecciona --</option></select>
                 <button type="button" class="btn-mini btn-agregar-catalogo-producto" data-catalogo="linea" title="Agregar línea nueva">+</button>
               </span>
             </label>
             <label>
               Marca
               <span class="campo-con-boton">
-                <select id="producto-marca"><option value="">-- Selecciona --</option></select>
+                <select id="producto-marca" required><option value="">-- Selecciona --</option></select>
                 <button type="button" class="btn-mini btn-agregar-catalogo-producto" data-catalogo="marca" title="Agregar marca nueva">+</button>
               </span>
             </label>

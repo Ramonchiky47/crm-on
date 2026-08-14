@@ -1779,6 +1779,12 @@ app.post('/api/productos', requirePermiso('catalogos', 'editar'), ar(async (req,
     return res.status(400).json({ errores: ['precio_usd es requerido'] });
   }
 
+  const erroresCatalogo = [];
+  if (!req.body.categoria_id) erroresCatalogo.push('La categoría es requerida');
+  if (!req.body.linea_id) erroresCatalogo.push('La línea es requerida');
+  if (!req.body.marca_id) erroresCatalogo.push('La marca es requerida');
+  if (erroresCatalogo.length) return res.status(400).json({ errores: erroresCatalogo });
+
   const existente = await db.prepare('SELECT item FROM productos WHERE item = ?').get(item);
   if (existente) return res.status(400).json({ errores: ['Ya existe un producto con ese Item'] });
 
@@ -1805,6 +1811,12 @@ app.put('/api/productos/:item', requirePermiso('catalogos', 'editar'), ar(async 
   if (precioUsd === undefined || precioUsd === null || precioUsd === '' || Number.isNaN(Number(precioUsd))) {
     return res.status(400).json({ errores: ['precio_usd es requerido'] });
   }
+
+  const erroresCatalogo = [];
+  if (!req.body.categoria_id) erroresCatalogo.push('La categoría es requerida');
+  if (!req.body.linea_id) erroresCatalogo.push('La línea es requerida');
+  if (!req.body.marca_id) erroresCatalogo.push('La marca es requerida');
+  if (erroresCatalogo.length) return res.status(400).json({ errores: erroresCatalogo });
 
   const nuevoItem = (req.body.item || '').trim();
   const cambiaItem = nuevoItem && nuevoItem !== req.params.item;
@@ -1906,6 +1918,9 @@ app.post('/api/productos/importar-csv', requirePermiso('catalogos', 'editar'), a
       const numeroFila = indice + 2;
       try {
         if (!registro.item) throw new Error('item es requerido');
+        if (!registro.categoria) throw new Error('categoria es requerida');
+        if (!registro.linea) throw new Error('linea es requerida');
+        if (!registro.marca) throw new Error('marca es requerida');
 
         const precioUsd = numeroOpcional(registro.precio_usd);
         if (!registro.precio_usd) throw new Error('precio_usd es requerido');

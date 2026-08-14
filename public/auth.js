@@ -10,10 +10,23 @@ function confirmarDoble(mensaje) {
   return confirm('Esta acción no se puede deshacer. ¿Confirmas que deseas continuar?');
 }
 
+function tituloDePagina(datos) {
+  const archivoActual = window.location.pathname.split('/').pop() || 'index.html';
+  const tabActual = new URLSearchParams(window.location.search).get('tab');
+  const item = NAV_LATERAL.find((i) => {
+    if (i.soloAdmin ? !datos.esAdmin : !i.permiso(datos.permisos)) return false;
+    return esItemActivo(i, archivoActual, tabActual);
+  });
+  if (item) return item.texto;
+  const h1 = document.querySelector('.contenedor h1');
+  return h1 ? h1.textContent.trim() : document.title;
+}
+
 function insertarBarraUsuario(datos) {
   const barra = document.createElement('div');
-  barra.className = 'barra-usuario';
+  barra.className = 'barra-superior';
   barra.innerHTML = `
+    <h2 class="barra-superior__titulo">${escaparHtmlLateral(tituloDePagina(datos))}</h2>
     <form id="form-buscador-global" class="buscador-global" role="search">
       <input type="text" autocomplete="off" id="buscador-global-input" placeholder="Buscar contacto, hotel/local u orden..." />
     </form>
@@ -22,6 +35,7 @@ function insertarBarraUsuario(datos) {
   `;
   const contenedor = document.querySelector('.contenedor');
   contenedor.insertBefore(barra, contenedor.firstChild);
+  document.body.classList.add('con-barra-superior');
 
   document.getElementById('btn-cerrar-sesion').addEventListener('click', async () => {
     await fetch('/api/logout', { method: 'POST' });

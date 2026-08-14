@@ -57,17 +57,47 @@ body {
   margin: 3rem auto 0;
 }
 
-.barra-usuario {
+.barra-superior {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3.2rem;
   display: flex;
-  justify-content: flex-end;
   align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.5rem;
+  gap: 1rem;
+  padding: 0 1rem;
+  background: #ffffff;
+  border-bottom: 1px solid var(--borde);
   font-size: 0.8rem;
   color: #757575;
+  z-index: 9;
 }
 
-.barra-usuario button {
+body.con-barra-lateral .barra-superior {
+  left: 246px;
+}
+
+body.con-barra-superior {
+  padding-top: 3.2rem;
+}
+
+.barra-superior__titulo {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #222;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.barra-superior span {
+  white-space: nowrap;
+}
+
+.barra-superior button {
   background: #757575;
   padding: 0.25rem 0.6rem;
   font-size: 0.78rem;
@@ -201,6 +231,17 @@ body.con-barra-lateral {
   .nav-grupo__titulo { display: none; }
   .nav-item--sub { padding-left: 0.6rem; }
   body.con-barra-lateral { margin: 0.75rem auto; max-width: 1300px; }
+
+  .barra-superior {
+    position: static;
+    height: auto;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+    border-bottom: none;
+    background: transparent;
+    padding: 0;
+  }
+  body.con-barra-superior { padding-top: 0; }
 }
 
 /* ---------- Panel General (pantalla de inicio) ---------- */

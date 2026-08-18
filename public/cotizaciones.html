@@ -155,8 +155,14 @@
             <select id="cotizacion-representante"><option value="">-- Selecciona --</option></select>
           </label>
           <label>
-            % Descuento
-            <input type="number" id="cotizacion-descuento" step="0.01" min="0" max="100" value="0" />
+            Descuento
+            <span class="campo-con-boton">
+              <input type="number" id="cotizacion-descuento" step="0.01" min="0" max="100" value="0" />
+              <select id="cotizacion-descuento-tipo" class="select-descuento-tipo">
+                <option value="porcentaje">%</option>
+                <option value="monto">$</option>
+              </select>
+            </span>
           </label>
         </div>
         <div class="fila">

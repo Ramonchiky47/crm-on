@@ -942,6 +942,10 @@ th.num, td.num {
   text-overflow: ellipsis;
 }
 
+.select-descuento-tipo {
+  flex: 0 0 4.5rem;
+}
+
 .btn-mini {
   padding: 0 0.6rem;
   font-weight: bold;

@@ -494,6 +494,7 @@ const cotizacionContacto = document.getElementById('cotizacion-contacto');
 const cotizacionDestino = document.getElementById('cotizacion-destino');
 const cotizacionRepresentante = document.getElementById('cotizacion-representante');
 const cotizacionDescuento = document.getElementById('cotizacion-descuento');
+const cotizacionDescuentoTipo = document.getElementById('cotizacion-descuento-tipo');
 const cotizacionFechaCreacion = document.getElementById('cotizacion-fecha-creacion');
 const cotizacionVencimientoOpcion = document.getElementById('cotizacion-vencimiento-opcion');
 const cotizacionVencimientoFecha = document.getElementById('cotizacion-vencimiento-fecha');
@@ -656,7 +657,7 @@ function renderizarCotizaciones(cotizaciones) {
       <td>${escaparHtml(c.moneda)}</td>
       <td>${celdaEtapaCotizacion(c.etapa)}</td>
       <td>${formatoImporte(c.subtotal)}</td>
-      <td>${c.descuento_porcentaje ? c.descuento_porcentaje + '%' : '-'}</td>
+      <td>${Number(c.descuento_monto) > 0 ? (c.descuento_tipo === 'monto' ? formatoImporte(c.descuento_monto) : c.descuento_porcentaje + '%') : '-'}</td>
       <td>${formatoImporte(c.iva)}</td>
       <td>${formatoImporte(c.gran_total)}</td>
       <td>${celdaEstatus(c.estatus)}</td>
@@ -770,8 +771,9 @@ function renderizarPartidas() {
 
 function calcularResumen() {
   const subtotal = partidas.reduce((acc, it) => acc + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), 0);
-  const porcentaje = Number(cotizacionDescuento.value) || 0;
-  const descuentoMonto = subtotal * (porcentaje / 100);
+  const valor = Math.max(Number(cotizacionDescuento.value) || 0, 0);
+  // Como importe, el descuento nunca puede rebasar el Sub Total (evita un Gran Total negativo).
+  const descuentoMonto = cotizacionDescuentoTipo.value === 'monto' ? Math.min(valor, subtotal) : subtotal * (valor / 100);
   const base = subtotal - descuentoMonto;
   const iva = base * 0.16;
   const granTotal = base + iva;
@@ -785,6 +787,21 @@ function actualizarResumen() {
   resumenIva.textContent = formatoImporte(iva);
   resumenGranTotal.textContent = formatoImporte(granTotal);
 }
+
+// El limite de 100 solo tiene sentido cuando el descuento es un %; como importe fijo no hay
+// techo fijo (se acota contra el Sub Total al calcular, no aqui donde aun no se conoce).
+function actualizarLimiteDescuento() {
+  if (cotizacionDescuentoTipo.value === 'monto') {
+    cotizacionDescuento.removeAttribute('max');
+  } else {
+    cotizacionDescuento.setAttribute('max', '100');
+  }
+}
+
+cotizacionDescuentoTipo.addEventListener('change', () => {
+  actualizarLimiteDescuento();
+  actualizarResumen();
+});
 
 cotizacionMoneda.addEventListener('change', renderizarPartidas);
 
@@ -879,6 +896,7 @@ cotizacionVencimientoOpcion.addEventListener('change', actualizarVencimientoPorO
 function limpiarFormCotizacion() {
   cotizacionId.value = '';
   formCotizacion.reset();
+  actualizarLimiteDescuento();
   partidas = [];
   renderizarPartidas();
   actualizarResumen();
@@ -970,7 +988,8 @@ formCotizacion.addEventListener('submit', async (e) => {
     representante_id: cotizacionRepresentante.value || null,
     moneda: cotizacionMoneda.value,
     etapa: cotizacionEtapa.value,
-    descuento_porcentaje: Number(cotizacionDescuento.value) || 0,
+    descuento_tipo: cotizacionDescuentoTipo.value,
+    descuento_valor: Number(cotizacionDescuento.value) || 0,
     fecha_vencimiento: cotizacionVencimientoFecha.value || null,
     fecha_seguimiento: cotizacionFechaSeguimiento.value || null,
     metodo_pago: cotizacionMetodoPago.value.trim(),
@@ -1050,7 +1069,9 @@ function cargarCotizacionEnFormulario(c) {
   cotizacionRepresentante.value = c.representante_id || '';
   cotizacionMoneda.value = c.moneda;
   cotizacionEtapa.value = c.etapa || 'Negociacion';
-  cotizacionDescuento.value = c.descuento_porcentaje || 0;
+  cotizacionDescuentoTipo.value = c.descuento_tipo === 'monto' ? 'monto' : 'porcentaje';
+  actualizarLimiteDescuento();
+  cotizacionDescuento.value = (c.descuento_tipo === 'monto' ? c.descuento_monto : c.descuento_porcentaje) || 0;
   partidas = c.items.map((it) => ({
     producto_item: it.producto_item,
     cantidad: it.cantidad,
@@ -1102,7 +1123,9 @@ async function clonarCotizacion(id) {
   cotizacionDestino.value = c.destino_id || '';
   cotizacionRepresentante.value = c.representante_id || '';
   cotizacionMoneda.value = c.moneda;
-  cotizacionDescuento.value = c.descuento_porcentaje || 0;
+  cotizacionDescuentoTipo.value = c.descuento_tipo === 'monto' ? 'monto' : 'porcentaje';
+  actualizarLimiteDescuento();
+  cotizacionDescuento.value = (c.descuento_tipo === 'monto' ? c.descuento_monto : c.descuento_porcentaje) || 0;
   cotizacionMetodoPago.value = c.metodo_pago || '';
   cotizacionLugarEntrega.value = c.lugar_entrega || '';
   cotizacionTiempoEntrega.value = c.tiempo_entrega || '';
@@ -1249,7 +1272,7 @@ async function abrirDetalleCotizacion(id) {
     </div>
     <div class="ficha-detalle resumen-cotizacion">
       <div><span>Sub Total</span><p>${formatoImporte(c.subtotal)}</p></div>
-      <div><span>Descuento (${c.descuento_porcentaje || 0}%)</span><p>${formatoImporte(c.descuento_monto)}</p></div>
+      <div><span>${textoDescuento(c)}</span><p>${formatoImporte(c.descuento_monto)}</p></div>
       <div><span>IVA (16%)</span><p>${formatoImporte(c.iva)}</p></div>
       <div><span>Gran Total</span><p>${formatoImporte(c.gran_total)}</p></div>
     </div>
@@ -1523,6 +1546,12 @@ function money(valor) {
   return '$' + formatoImporte(valor);
 }
 
+// Etiqueta del renglon de descuento, consistente en la tabla, el detalle y el PDF: como % se
+// muestra "Descuento (X%)"; como importe fijo el numero ya lo dice todo, no hace falta el %.
+function textoDescuento(c) {
+  return c.descuento_tipo === 'monto' ? 'Descuento' : `Descuento (${c.descuento_porcentaje || 0}%)`;
+}
+
 function formatoCantidad(valor) {
   const numero = Number(valor);
   return Number.isInteger(numero) ? numero.toLocaleString('es-MX') : formatoImporte(numero);
@@ -1548,35 +1577,45 @@ function generarHtmlCotizacionPDF(c) {
 <title>${escaparHtml(c.nombre)}</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; margin: 0; padding: 30px 40px 40px; font-size: 13px; }
-  .logo { font-size: 1.3rem; font-weight: 800; color: #c0392b; letter-spacing: 1px; margin-bottom: 10px; }
-  .encabezado { background: #fbe4e4; padding: 22px 26px; border-radius: 8px; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2124; margin: 0; padding: 30px 40px 40px; font-size: 13px; }
+  .logo { font-size: 1.3rem; font-weight: 800; color: #c0392b; letter-spacing: 1px; }
+  .logo-caption { font-size: 0.72rem; color: #6b7280; margin: 2px 0 14px; }
+  .encabezado { background: #fbf1ee; border: 1px solid #f0d9d2; padding: 22px 26px; border-radius: 8px; }
   .encabezado h1 { margin: 0 0 18px; font-size: 1.5rem; }
   .info-grid { display: flex; justify-content: space-between; gap: 24px; }
+  .info-izq { max-width: 280px; }
   .info-izq div { margin-bottom: 3px; }
-  .info-der { text-align: right; color: #333; }
+  .info-der { text-align: right; color: #6b7280; flex: 0 0 220px; }
   .info-der div { margin-bottom: 3px; }
-  .caja { border: 1px solid #ddd; border-radius: 8px; padding: 16px 20px; margin-top: 24px; }
+  .caja { border: 1px solid #dcdcdc; border-radius: 8px; padding: 16px 20px; margin-top: 24px; }
   .caja p { margin: 4px 0; }
   .observaciones-texto { white-space: pre-line; }
   .clausula-danio { color: #c0392b; font-weight: 700; font-size: 15px; }
   table { width: 100%; border-collapse: collapse; margin-top: 26px; page-break-inside: auto; }
   tr { page-break-inside: avoid; }
-  th { text-align: left; border-bottom: 2px solid #333; padding: 6px 4px; font-size: 0.8rem; }
+  thead tr { background: #f4f4f5; }
+  th { text-align: left; padding: 8px 4px; font-size: 0.72rem; color: #3f3f46; text-transform: uppercase; letter-spacing: 0.4px; }
   td { padding: 10px 4px; border-bottom: 1px solid #eee; vertical-align: top; }
   td.num, th.num { text-align: right; white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #fafafa; }
   .item-codigo { font-weight: 600; }
   .item-desc { color: #757575; font-size: 0.8rem; }
   .totales { width: 280px; margin-left: auto; margin-top: 10px; }
-  .totales div { display: flex; justify-content: space-between; padding: 6px 4px; border-bottom: 1px solid #eee; }
-  .totales .gran-total { font-weight: 700; font-size: 1.05rem; border-bottom: none; border-top: 2px solid #333; margin-top: 4px; }
-  .condiciones { margin-top: 34px; text-align: justify; font-size: 0.78rem; color: #444; }
-  .consideraciones strong { display: block; font-size: 0.85rem; color: #1a1a1a; margin: 14px 0 6px; }
-  .consideraciones strong:first-child { margin-top: 0; }
+  .totales div { display: flex; justify-content: space-between; padding: 6px 4px; border-bottom: 1px solid #eee; color: #6b7280; }
+  .totales div span:last-child { color: #1f2124; }
+  .totales .gran-total { border-bottom: none; border-top: 2px solid #1f2124; margin-top: 4px; padding-top: 10px; align-items: baseline; }
+  .totales .gran-total span:first-child { font-weight: 700; color: #1f2124; }
+  .totales .gran-total span:last-child { font-weight: 700; font-size: 1.3rem; color: #c0392b; }
+  .etiqueta { display: block; font-size: 0.78rem; font-weight: 700; color: #c0392b; text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 8px; }
+  .etiqueta:first-child { margin-top: 0; }
+  .condiciones { margin-top: 34px; text-align: left; font-size: 0.78rem; color: #4b4b4b; }
   .consideraciones ol { margin: 0; padding-left: 1.2rem; }
   .consideraciones li { margin-bottom: 6px; }
-  .footer { margin-top: 40px; }
+  .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e7e2df; }
   .footer p { margin: 0 0 10px; }
+  .footer-pregunta { font-weight: 700; }
+  .footer-firma { color: #6b7280; }
+  .footer-firma strong { color: #1f2124; }
   @media print {
     body { padding: 0 30px 20px; }
     @page { size: letter; margin: 18mm 15mm; }
@@ -1585,6 +1624,7 @@ function generarHtmlCotizacionPDF(c) {
 </head>
 <body>
   <div class="logo">GONPAL</div>
+  <div class="logo-caption">${escaparHtml(EMISOR_COTIZACION.empresa)}</div>
   <div class="encabezado">
     <h1>${escaparHtml(c.nombre)}</h1>
     <div class="info-grid">
@@ -1597,9 +1637,9 @@ function generarHtmlCotizacionPDF(c) {
       </div>
       <div class="info-der">
         <div>Referencia: ${escaparHtml(referenciaCotizacion(c))}</div>
-        <div>Creación del presupuesto: ${fechaLarga(c.fecha_creacion)}</div>
-        <div>Caducidad del presupuesto: ${fechaLarga(c.fecha_vencimiento)}</div>
-        <div>Presupuesto creado por: ${escaparHtml(c.representante_nombre || EMISOR_COTIZACION.nombre)}</div>
+        <div>Creación: ${fechaLarga(c.fecha_creacion)}</div>
+        <div>Caducidad: ${fechaLarga(c.fecha_vencimiento)}</div>
+        <div>Presupuesto por: ${escaparHtml(c.representante_nombre || EMISOR_COTIZACION.nombre)}</div>
         <div>${escaparHtml(c.representante_correo || EMISOR_COTIZACION.correo)}</div>
       </div>
     </div>
@@ -1607,36 +1647,36 @@ function generarHtmlCotizacionPDF(c) {
 
   <div class="caja">
     <p><strong>Comentarios de ${escaparHtml(c.representante_nombre || EMISOR_COTIZACION.nombre)}</strong></p>
-    <p><strong>Cotización Basada en:</strong> ${escaparHtml(c.moneda)}</p>
-    ${c.metodo_pago ? `<p><strong>Condiciones de Pago:</strong> ${escaparHtml(c.metodo_pago)}</p>` : ''}
-    ${c.lugar_entrega ? `<p><strong>Lugar de envío:</strong> ${escaparHtml(c.lugar_entrega)}</p>` : ''}
-    ${c.tiempo_entrega ? `<p><strong>Tiempo de entrega:</strong> ${escaparHtml(c.tiempo_entrega)}</p>` : ''}
+    <p>Cotización basada en: ${escaparHtml(c.moneda)}</p>
+    ${c.metodo_pago ? `<p>Condiciones de pago: ${escaparHtml(c.metodo_pago)}</p>` : ''}
+    ${c.lugar_entrega ? `<p>Lugar de envío: ${escaparHtml(c.lugar_entrega)}</p>` : ''}
+    ${c.tiempo_entrega ? `<p>Tiempo de entrega: ${escaparHtml(c.tiempo_entrega)}</p>` : ''}
     ${c.observaciones ? `<p><strong>Observaciones:</strong></p><p class="observaciones-texto">${observacionesConClausulaResaltada(c.observaciones)}</p>` : ''}
   </div>
 
   <table>
     <thead>
-      <tr><th>Artículo y descripción</th><th class="num">Cantidad</th><th class="num">Precio unitario</th><th class="num">Total</th></tr>
+      <tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unitario</th><th class="num">Total</th></tr>
     </thead>
     <tbody>${filasItems}</tbody>
   </table>
 
   <div class="totales">
     <div><span>Subtotal</span><span>${money(c.subtotal)}</span></div>
-    ${c.descuento_monto ? `<div><span>Descuento (${c.descuento_porcentaje}%)</span><span>-${money(c.descuento_monto)}</span></div>` : ''}
+    ${c.descuento_monto ? `<div><span>${textoDescuento(c)}</span><span>-${money(c.descuento_monto)}</span></div>` : ''}
     <div><span>IVA (16%)</span><span>${money(c.iva)}</span></div>
     <div class="gran-total"><span>Total</span><span>${money(c.gran_total)}</span></div>
   </div>
 
   <div class="condiciones">
-    <strong>Condiciones de compra</strong><br />
-    <strong>NOTA:</strong> TODA NUESTRA MERCANCÍA ESTA ASEGURADA EN TRANSPORTE, CUALQUIER INCIDENCIA SE DEBE
-    REPORTAR EN LAS PRIMERAS 24 HORAS DE LA RECEPCIÓN PARA APLICAR EL SEGURO YA QUE DE LO
-    CONTRARIO EL TRANSPORTE DEJA DE HACERSE RESPONSABLE.
+    <span class="etiqueta">Condiciones de compra</span>
+    <strong>NOTA:</strong> Toda nuestra mercancía está asegurada en transporte; cualquier incidencia se debe
+    reportar en las primeras 24 horas de la recepción para aplicar el seguro, ya que de lo
+    contrario el transporte deja de hacerse responsable.
   </div>
 
   <div class="condiciones consideraciones">
-    <strong>Consideraciones de la Oferta</strong>
+    <span class="etiqueta">Consideraciones de la oferta</span>
     <ol>
       <li>Esta cotización se basa en las cantidades y modelos especificados por el cliente.</li>
       <li>Los precios están sujetos a cambio si se modifican las condiciones originales requeridas por el cliente.</li>
@@ -1644,7 +1684,7 @@ function generarHtmlCotizacionPDF(c) {
       <li>Envío: Si no se especifica cargo por flete, los precios incluyen envío a 1 solo punto en la República Mexicana. No incluye gastos no indicados en la cotización.</li>
     </ol>
 
-    <strong>PUNTO IMPORTANTE</strong>
+    <span class="etiqueta">Punto importante</span>
     <ol>
       <li>Al momento de la entrega, el cliente debe verificar que los productos lleguen en condiciones óptimas. Una vez recibidos, serán responsabilidad del cliente. LA MERCANCÍA CON DAÑO DEBE REPORTARSE EN LAS PRIMERAS 24 HORAS DE LA RECEPCIÓN</li>
       <li>La información sobre las características de los productos a adquirir corresponde única y exclusivamente al cliente.</li>
@@ -1658,9 +1698,9 @@ function generarHtmlCotizacionPDF(c) {
   </div>
 
   <div class="footer">
-    <p>¿Tienes alguna pregunta? Ponte en contacto conmigo</p>
-    <p>
-      ${lineasFirma(c).map(escaparHtml).join('<br />')}
+    <p class="footer-pregunta">¿Tienes alguna pregunta? Ponte en contacto conmigo</p>
+    <p class="footer-firma">
+      ${lineasFirma(c).map((linea, i) => (i === 0 ? `<strong>${escaparHtml(linea)}</strong>` : escaparHtml(linea))).join('<br />')}
     </p>
   </div>
 </body>

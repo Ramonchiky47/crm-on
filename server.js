@@ -411,13 +411,15 @@ async function generarIdCotizacion() {
 // Calculos de una cotizacion a partir de sus partidas:
 // Total (por fila) = Cantidad * Precio Unitario
 // Sub Total = suma de los totales de fila
-// Descuento (monto) = Sub Total * (% Descuento / 100)
+// Descuento (monto) = Sub Total * (% Descuento / 100), o el importe fijo capturado si el
+// descuento se aplica como monto (nunca mayor al Sub Total, para no generar un total negativo)
 // IVA = (Sub Total - Descuento) * 0.16
 // Gran Total = (Sub Total - Descuento) + IVA
-function calcularTotalesCotizacion(items, descuentoPorcentaje) {
+function calcularTotalesCotizacion(items, descuento) {
   const subtotal = items.reduce((acc, it) => acc + Number(it.cantidad) * Number(it.precio_unitario), 0);
-  const porcentaje = Number(descuentoPorcentaje) || 0;
-  const descuentoMonto = subtotal * (porcentaje / 100);
+  const tipo = (descuento && descuento.tipo) === 'monto' ? 'monto' : 'porcentaje';
+  const valor = Math.max(Number(descuento && descuento.valor) || 0, 0);
+  const descuentoMonto = tipo === 'monto' ? Math.min(valor, subtotal) : subtotal * (valor / 100);
   const base = subtotal - descuentoMonto;
   const iva = base * 0.16;
   const granTotal = base + iva;
@@ -2311,6 +2313,12 @@ function validarCamposCotizacion(body) {
   if (body.fecha_seguimiento && !/^\d{4}-\d{2}-\d{2}$/.test(body.fecha_seguimiento)) {
     errores.push('fecha_seguimiento debe tener el formato AAAA-MM-DD');
   }
+  if (body.descuento_tipo && !['porcentaje', 'monto'].includes(body.descuento_tipo)) {
+    errores.push('descuento_tipo debe ser porcentaje o monto');
+  }
+  if (body.descuento_valor !== undefined && (Number.isNaN(Number(body.descuento_valor)) || Number(body.descuento_valor) < 0)) {
+    errores.push('descuento_valor debe ser un numero mayor o igual a 0');
+  }
   return errores;
 }
 
@@ -2337,20 +2345,25 @@ app.post('/api/cotizaciones', requirePermiso('catalogos', 'editar'), ar(async (r
   const erroresCampos = validarCamposCotizacion(req.body);
   if (erroresCampos.length) return res.status(400).json({ errores: erroresCampos });
 
-  const { subtotal, descuentoMonto, iva, granTotal } = calcularTotalesCotizacion(req.body.items, req.body.descuento_porcentaje);
+  const descuentoTipo = req.body.descuento_tipo === 'monto' ? 'monto' : 'porcentaje';
+  const descuentoValor = Number(req.body.descuento_valor) || 0;
+  // descuento_porcentaje solo tiene sentido cuando el descuento se aplica como %; cuando se
+  // aplica como importe fijo se guarda en 0 para no mostrar un "(X%)" que no aplica.
+  const descuentoPorcentajeGuardado = descuentoTipo === 'porcentaje' ? descuentoValor : 0;
+  const { subtotal, descuentoMonto, iva, granTotal } = calcularTotalesCotizacion(req.body.items, { tipo: descuentoTipo, valor: descuentoValor });
   const id = await generarIdCotizacion();
 
   await transaction(async (db) => {
     await db.prepare(`
       INSERT INTO cotizaciones (
         id_cotizacion, negocio_id, nombre, contacto_id, destino_id, moneda, etapa,
-        descuento_porcentaje, subtotal, descuento_monto, iva, gran_total, fecha_creacion,
+        descuento_tipo, descuento_porcentaje, subtotal, descuento_monto, iva, gran_total, fecha_creacion,
         fecha_vencimiento, fecha_seguimiento, metodo_pago, lugar_entrega, tiempo_entrega, observaciones,
         usuario_id, representante_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (CURRENT_DATE)::text, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (CURRENT_DATE)::text, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, req.body.negocio_id, nombre, req.body.contacto_id || null, req.body.destino_id || null, req.body.moneda, etapa,
-      Number(req.body.descuento_porcentaje) || 0, subtotal, descuentoMonto, iva, granTotal,
+      descuentoTipo, descuentoPorcentajeGuardado, subtotal, descuentoMonto, iva, granTotal,
       req.body.fecha_vencimiento || null,
       req.body.fecha_seguimiento || null,
       (req.body.metodo_pago || '').trim() || null,
@@ -2393,19 +2406,22 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
   const erroresCampos = validarCamposCotizacion(req.body);
   if (erroresCampos.length) return res.status(400).json({ errores: erroresCampos });
 
-  const { subtotal, descuentoMonto, iva, granTotal } = calcularTotalesCotizacion(req.body.items, req.body.descuento_porcentaje);
+  const descuentoTipo = req.body.descuento_tipo === 'monto' ? 'monto' : 'porcentaje';
+  const descuentoValor = Number(req.body.descuento_valor) || 0;
+  const descuentoPorcentajeGuardado = descuentoTipo === 'porcentaje' ? descuentoValor : 0;
+  const { subtotal, descuentoMonto, iva, granTotal } = calcularTotalesCotizacion(req.body.items, { tipo: descuentoTipo, valor: descuentoValor });
 
   await transaction(async (db) => {
     await db.prepare(`
       UPDATE cotizaciones SET
         negocio_id = ?, nombre = ?, contacto_id = ?, destino_id = ?, moneda = ?, etapa = ?,
-        descuento_porcentaje = ?, subtotal = ?, descuento_monto = ?, iva = ?, gran_total = ?,
+        descuento_tipo = ?, descuento_porcentaje = ?, subtotal = ?, descuento_monto = ?, iva = ?, gran_total = ?,
         fecha_vencimiento = ?, fecha_seguimiento = ?, metodo_pago = ?, lugar_entrega = ?,
         tiempo_entrega = ?, observaciones = ?, representante_id = ?
       WHERE id_cotizacion = ?
     `).run(
       req.body.negocio_id, nombre, req.body.contacto_id || null, req.body.destino_id || null, req.body.moneda, etapa,
-      Number(req.body.descuento_porcentaje) || 0, subtotal, descuentoMonto, iva, granTotal,
+      descuentoTipo, descuentoPorcentajeGuardado, subtotal, descuentoMonto, iva, granTotal,
       req.body.fecha_vencimiento || null,
       req.body.fecha_seguimiento || null,
       (req.body.metodo_pago || '').trim() || null,
@@ -2474,6 +2490,73 @@ function formatoMoneda(valor) {
   return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function formatoCantidadPdf(valor) {
+  const n = Number(valor) || 0;
+  return Number.isInteger(n)
+    ? n.toLocaleString('es-MX')
+    : n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Mismo texto legal que ya ve el cliente en la vista HTML "Ver cotizacion" (cotizaciones.js):
+// se duplica aqui porque ese archivo corre en el navegador y este en el servidor, pero el
+// contenido debe ser identico en ambos formatos.
+const CONSIDERACIONES_OFERTA = [
+  'Esta cotización se basa en las cantidades y modelos especificados por el cliente.',
+  'Los precios están sujetos a cambio si se modifican las condiciones originales requeridas por el cliente.',
+  'Los orden de compra debe coincidir y liquidarse en la moneda en que se ha cotizado. La factura se emitirá en la misma moneda.',
+  'Envío: Si no se especifica cargo por flete, los precios incluyen envío a 1 solo punto en la República Mexicana. No incluye gastos no indicados en la cotización.',
+];
+
+const PUNTO_IMPORTANTE = [
+  'Al momento de la entrega, el cliente debe verificar que los productos lleguen en condiciones óptimas. Una vez recibidos, serán responsabilidad del cliente. LA MERCANCÍA CON DAÑO DEBE REPORTARSE EN LAS PRIMERAS 24 HORAS DE LA RECEPCIÓN',
+  'La información sobre las características de los productos a adquirir corresponde única y exclusivamente al cliente.',
+  'Los modelos ofertados pueden ser sustituidos sin previo aviso por modelos de características idénticas o superiores.',
+  'Las garantías para las pantallas LED ofertadas tienen una duración de 3 años, conforme al certificado de garantía incluido en el empaque del producto. La garantía de los productos varía según el modelo y marca.',
+  'Los detalles de la garantía y su funcionamiento se encuentran en el certificado de garantía incluido en el empaque del producto.',
+  'La garantía es limitada y no incluye condiciones especiales de servicio (como montaje, instalación y otros). Es importante verificar la mercancía al recibirla, ya que productos dañados o no son haberse reclamado antes no entran en garantía.',
+  'Comercializadora Gonpal se deslinda de cualquier daño o perjuicio que el cliente pudiera tener derivado del uso inadecuado de los equipos cotizados/adquiridos.',
+  'Una vez generada la orden de compra, esta no podrá ser cancelada ni modificada.',
+];
+
+const PDF_ROJO = '#c0392b';
+const PDF_BANDA = '#fbf1ee';
+const PDF_GRIS = '#6b7280';
+const PDF_GRIS_LINEA = '#e7e2df';
+const PDF_TINTA = '#1f2124';
+const PDF_L = 50;
+const PDF_W = 512;
+const PDF_R = PDF_L + PDF_W;
+
+function etiquetaSeccionPdf(doc, texto, { x = PDF_L, width = PDF_W, color = PDF_ROJO } = {}) {
+  doc.font('Helvetica-Bold').fontSize(8.5).fillColor(color)
+    .text(texto.toUpperCase(), x, doc.y, { width, characterSpacing: 0.6 });
+  doc.fillColor(PDF_TINTA);
+  doc.moveDown(0.35);
+}
+
+// Escribe una lista numerada con sangria francesa (numero + parrafo), respetando saltos de
+// pagina para no cortar un punto de las condiciones legales a la mitad.
+function listaNumeradaPdf(doc, items, { x = PDF_L, width = PDF_W, fontSize = 8, color = '#4b4b4b', gap = 6, indent = 15 } = {}) {
+  items.forEach((texto, i) => {
+    doc.font('Helvetica').fontSize(fontSize).fillColor(color);
+    const altura = doc.heightOfString(texto, { width: width - indent });
+    if (doc.y + altura > 715) {
+      doc.addPage();
+      doc.y = 50;
+      doc.font('Helvetica').fontSize(fontSize).fillColor(color);
+    }
+    const y = doc.y;
+    doc.text(`${i + 1}.`, x, y, { width: indent });
+    doc.text(texto, x + indent, y, { width: width - indent });
+    doc.y = y + altura + gap;
+  });
+  doc.fillColor(PDF_TINTA);
+}
+
+function lineaDivisoriaPdf(doc, { y = doc.y, color = PDF_GRIS_LINEA, grosor = 1 } = {}) {
+  doc.moveTo(PDF_L, y).lineTo(PDF_R, y).strokeColor(color).lineWidth(grosor).stroke();
+}
+
 // Genera el documento PDF de una cotizacion y lo transmite directo a la respuesta.
 // inline (Ver) muestra el PDF en el navegador; attachment (Descargar) fuerza la descarga.
 function generarPdfCotizacion(cotizacion, res, { descargar }) {
@@ -2486,128 +2569,266 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   doc.pipe(res);
 
-  const rojoGonpal = '#c0392b';
-  const inicioTabla = 50;
-  const finTabla = 545;
+  doc.fillColor(PDF_TINTA);
 
-  doc.fontSize(16).font('Helvetica-Bold').fillColor(rojoGonpal).text('GONPAL');
-  doc.fillColor('#000');
-  doc.moveDown(0.6);
-  doc.fontSize(15).font('Helvetica-Bold').text(cotizacion.nombre);
-  doc.moveDown(0.4);
+  // ---------- Logotipo ----------
+  doc.font('Helvetica-Bold').fontSize(15).fillColor(PDF_ROJO)
+    .text('GONPAL', PDF_L, 50, { characterSpacing: 1 });
+  doc.font('Helvetica').fontSize(7.5).fillColor(PDF_GRIS)
+    .text(EMISOR_COTIZACION.empresa, PDF_L, doc.y + 1);
+  doc.fillColor(PDF_TINTA);
 
-  const yInfo = doc.y;
-  doc.fontSize(10).font('Helvetica-Bold').text(cotizacion.negocio_nombre || '', inicioTabla, yInfo, { width: 260 });
-  doc.font('Helvetica').text(cotizacion.destino_nombre || '', { width: 260 });
-  doc.moveDown(0.3);
-  doc.font('Helvetica-Bold').text(cotizacion.contacto_nombre || '', { width: 260 });
-  doc.font('Helvetica').text(cotizacion.contacto_correo || '', { width: 260 });
+  // ---------- Banda de encabezado: titulo + datos de cliente/cotizacion ----------
+  const padBanda = 20;
+  const colIzqAncho = 270;
+  const colDerAncho = PDF_W - padBanda * 2 - colIzqAncho - 20;
 
-  doc.fontSize(9).font('Helvetica').fillColor('#333');
-  doc.text(`Referencia: ${referenciaCotizacionPdf(cotizacion)}`, 340, yInfo, { width: 205, align: 'right' });
-  doc.text(`Creación: ${fechaLargaPdf(cotizacion.fecha_creacion)}`, { width: 205, align: 'right' });
-  doc.text(`Caducidad: ${fechaLargaPdf(cotizacion.fecha_vencimiento)}`, { width: 205, align: 'right' });
-  doc.text(`Presupuesto por: ${cotizacion.representante_nombre || EMISOR_COTIZACION.nombre}`, { width: 205, align: 'right' });
-  doc.text(cotizacion.representante_correo || EMISOR_COTIZACION.correo, { width: 205, align: 'right' });
-  doc.fillColor('#000');
+  doc.font('Helvetica-Bold').fontSize(16);
+  const alturaTitulo = doc.heightOfString(cotizacion.nombre, { width: PDF_W - padBanda * 2 });
 
-  doc.y = Math.max(doc.y, yInfo + 90);
-  doc.moveDown(0.8);
-
-  doc.font('Helvetica-Bold').fontSize(10).text('Comentarios');
-  doc.font('Helvetica').fontSize(9);
-  doc.text(`Cotización basada en: ${cotizacion.moneda}`);
-  if (cotizacion.metodo_pago) doc.text(`Condiciones de pago: ${cotizacion.metodo_pago}`);
-  if (cotizacion.lugar_entrega) doc.text(`Lugar de envío: ${cotizacion.lugar_entrega}`);
-  if (cotizacion.tiempo_entrega) doc.text(`Tiempo de entrega: ${cotizacion.tiempo_entrega}`);
-  if (cotizacion.observaciones) {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#000').text('Observaciones:');
-    // La clausula de "reportar daño en 24 horas" se resalta en rojo/negrita/mas grande que el
-    // resto del texto, sin importar en que parte de Observaciones venga escrita.
-    const CLAUSULA_DANIO_24H = /mercanc[ií]a con da[ñn]o debe reportarse/i;
-    for (const linea of cotizacion.observaciones.split('\n')) {
-      if (CLAUSULA_DANIO_24H.test(linea)) {
-        doc.font('Helvetica-Bold').fontSize(11).fillColor(rojoGonpal).text(linea);
-      } else {
-        doc.font('Helvetica').fontSize(9).fillColor('#000').text(linea);
-      }
-    }
-    doc.fillColor('#000');
-  }
-  doc.moveDown(0.8);
-
-  const columnas = [
-    { etiqueta: 'Producto', ancho: 195 },
-    { etiqueta: 'Cant.', ancho: 60 },
-    { etiqueta: 'P. Unitario', ancho: 120 },
-    { etiqueta: 'Total', ancho: 120 },
+  const lineasIzq = [
+    { texto: cotizacion.negocio_nombre || '', font: 'Helvetica-Bold', size: 10.5 },
+    { texto: cotizacion.destino_nombre || '', font: 'Helvetica', size: 10 },
+    { texto: '', font: 'Helvetica', size: 5 },
+    { texto: cotizacion.contacto_nombre || '', font: 'Helvetica-Bold', size: 10.5 },
+    { texto: cotizacion.contacto_correo || '', font: 'Helvetica', size: 10 },
   ];
 
-  function encabezadoTabla() {
-    let x = inicioTabla;
-    const y = doc.y;
-    doc.font('Helvetica-Bold').fontSize(9);
-    for (const c of columnas) { doc.text(c.etiqueta, x, y, { width: c.ancho, align: c.etiqueta === 'Producto' ? 'left' : 'right' }); x += c.ancho; }
-    doc.y = y + 14;
-    doc.moveTo(inicioTabla, doc.y).lineTo(finTabla, doc.y).strokeColor('#333').lineWidth(1).stroke();
-    doc.moveDown(0.3);
+  const lineasDer = [
+    `Referencia: ${referenciaCotizacionPdf(cotizacion)}`,
+    `Creación: ${fechaLargaPdf(cotizacion.fecha_creacion)}`,
+    `Caducidad: ${fechaLargaPdf(cotizacion.fecha_vencimiento)}`,
+    `Presupuesto por: ${cotizacion.representante_nombre || EMISOR_COTIZACION.nombre}`,
+    cotizacion.representante_correo || EMISOR_COTIZACION.correo,
+  ];
+
+  const alturaIzq = lineasIzq.reduce((acc, l) => {
+    doc.font(l.font).fontSize(l.size);
+    return acc + doc.heightOfString(l.texto || ' ', { width: colIzqAncho }) + 3;
+  }, 0);
+  doc.font('Helvetica').fontSize(9);
+  const alturaDer = lineasDer.reduce((acc, l) => acc + doc.heightOfString(l, { width: colDerAncho }) + 4, 0);
+
+  const alturaInfo = Math.max(alturaIzq, alturaDer);
+  const alturaBanda = padBanda + alturaTitulo + 12 + alturaInfo + padBanda - 4;
+  const yBanda = doc.y + 14;
+
+  doc.roundedRect(PDF_L, yBanda, PDF_W, alturaBanda, 8).fill(PDF_BANDA);
+  doc.roundedRect(PDF_L + 0.5, yBanda + 0.5, PDF_W - 1, alturaBanda - 1, 8).lineWidth(0.75).strokeColor('#f0d9d2').stroke();
+
+  let yCursor = yBanda + padBanda;
+  doc.font('Helvetica-Bold').fontSize(16).fillColor(PDF_TINTA)
+    .text(cotizacion.nombre, PDF_L + padBanda, yCursor, { width: PDF_W - padBanda * 2 });
+  yCursor += alturaTitulo + 12;
+
+  let yIzq = yCursor;
+  for (const l of lineasIzq) {
+    doc.font(l.font).fontSize(l.size).fillColor(PDF_TINTA)
+      .text(l.texto || ' ', PDF_L + padBanda, yIzq, { width: colIzqAncho });
+    yIzq = doc.y + 3;
   }
 
-  encabezadoTabla();
+  let yDer = yCursor;
+  doc.font('Helvetica').fontSize(9).fillColor(PDF_GRIS);
+  for (const l of lineasDer) {
+    doc.text(l, PDF_R - padBanda - colDerAncho, yDer, { width: colDerAncho, align: 'right' });
+    yDer = doc.y + 4;
+  }
+  doc.fillColor(PDF_TINTA);
+
+  doc.y = yBanda + alturaBanda + 22;
+
+  // ---------- Comentarios (caja con borde, como en la vista HTML) ----------
+  if (doc.y > 620) { doc.addPage(); doc.y = 50; }
+  const yCaja = doc.y;
+  const padCaja = 16;
+
+  const lineasComentario = [`Cotización basada en: ${cotizacion.moneda}`];
+  if (cotizacion.metodo_pago) lineasComentario.push(`Condiciones de pago: ${cotizacion.metodo_pago}`);
+  if (cotizacion.lugar_entrega) lineasComentario.push(`Lugar de envío: ${cotizacion.lugar_entrega}`);
+  if (cotizacion.tiempo_entrega) lineasComentario.push(`Tiempo de entrega: ${cotizacion.tiempo_entrega}`);
+
+  // La clausula de "reportar daño en 24 horas" se resalta en rojo/negrita/mas grande que el
+  // resto del texto, sin importar en que parte de Observaciones venga escrita.
+  const CLAUSULA_DANIO_24H = /mercanc[ií]a con da[ñn]o debe reportarse/i;
+  const lineasObservaciones = cotizacion.observaciones ? cotizacion.observaciones.split('\n') : [];
+
+  doc.font('Helvetica-Bold').fontSize(9);
+  let alturaCaja = padCaja + doc.heightOfString(`Comentarios de ${cotizacion.representante_nombre || EMISOR_COTIZACION.nombre}`, { width: PDF_W - padCaja * 2 }) + 8;
   doc.font('Helvetica').fontSize(9);
-  for (const it of cotizacion.items) {
-    if (doc.y > 660) { doc.addPage(); encabezadoTabla(); }
-    const y = doc.y;
-    let x = inicioTabla;
-    doc.font('Helvetica-Bold').text(it.producto_item || '', x, y, { width: columnas[0].ancho });
-    if (it.producto_descripcion) {
-      doc.font('Helvetica').fontSize(8).fillColor('#666').text(it.producto_descripcion, x, doc.y, { width: columnas[0].ancho });
-      doc.fillColor('#000').fontSize(9);
+  for (const l of lineasComentario) alturaCaja += doc.heightOfString(l, { width: PDF_W - padCaja * 2 }) + 4;
+  if (lineasObservaciones.length) {
+    alturaCaja += 6;
+    doc.font('Helvetica-Bold').fontSize(9);
+    alturaCaja += doc.heightOfString('Observaciones:', { width: PDF_W - padCaja * 2 }) + 4;
+    for (const linea of lineasObservaciones) {
+      const esClausula = CLAUSULA_DANIO_24H.test(linea);
+      doc.font(esClausula ? 'Helvetica-Bold' : 'Helvetica').fontSize(esClausula ? 10.5 : 9);
+      alturaCaja += doc.heightOfString(linea || ' ', { width: PDF_W - padCaja * 2 }) + 4;
     }
-    const yFilaFinal = doc.y;
+  }
+  alturaCaja += padCaja;
+
+  doc.roundedRect(PDF_L, yCaja, PDF_W, alturaCaja, 8).lineWidth(1).strokeColor('#dcdcdc').stroke();
+
+  let yCajaCursor = yCaja + padCaja;
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(PDF_TINTA)
+    .text(`Comentarios de ${cotizacion.representante_nombre || EMISOR_COTIZACION.nombre}`, PDF_L + padCaja, yCajaCursor, { width: PDF_W - padCaja * 2 });
+  yCajaCursor = doc.y + 8;
+
+  doc.font('Helvetica').fontSize(9).fillColor(PDF_TINTA);
+  for (const l of lineasComentario) {
+    doc.text(l, PDF_L + padCaja, yCajaCursor, { width: PDF_W - padCaja * 2 });
+    yCajaCursor = doc.y + 4;
+  }
+
+  if (lineasObservaciones.length) {
+    yCajaCursor += 2;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(PDF_TINTA)
+      .text('Observaciones:', PDF_L + padCaja, yCajaCursor, { width: PDF_W - padCaja * 2 });
+    yCajaCursor = doc.y + 4;
+    for (const linea of lineasObservaciones) {
+      const esClausula = CLAUSULA_DANIO_24H.test(linea);
+      doc.font(esClausula ? 'Helvetica-Bold' : 'Helvetica').fontSize(esClausula ? 10.5 : 9).fillColor(esClausula ? PDF_ROJO : PDF_TINTA)
+        .text(linea || ' ', PDF_L + padCaja, yCajaCursor, { width: PDF_W - padCaja * 2 });
+      yCajaCursor = doc.y + 4;
+    }
+  }
+  doc.fillColor(PDF_TINTA);
+
+  doc.y = yCaja + alturaCaja + 26;
+
+  // ---------- Tabla de partidas ----------
+  const columnas = [
+    { etiqueta: 'Producto', ancho: 232 },
+    { etiqueta: 'Cant.', ancho: 60 },
+    { etiqueta: 'P. unitario', ancho: 110 },
+    { etiqueta: 'Total', ancho: 110 },
+  ];
+
+  function encabezadoTabla(continuacion) {
+    if (continuacion) {
+      // El nombre se recorta a una sola linea corta: es solo una referencia de contexto al
+      // pasar de pagina, no necesita repetir el titulo completo (que puede medir varias lineas).
+      const nombreCorto = cotizacion.nombre.length > 70 ? `${cotizacion.nombre.slice(0, 70)}…` : cotizacion.nombre;
+      doc.font('Helvetica').fontSize(8).fillColor(PDF_GRIS)
+        .text(`GONPAL — ${nombreCorto} (continuación)`, PDF_L, 40, { width: PDF_W, height: 12, ellipsis: true });
+      doc.fillColor(PDF_TINTA);
+      doc.y = 50;
+    }
+    doc.roundedRect(PDF_L, doc.y, PDF_W, 22, 3).fill('#f4f4f5');
+    let x = PDF_L + 10;
+    const y = doc.y + 6;
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#3f3f46');
+    for (const c of columnas) {
+      doc.text(c.etiqueta.toUpperCase(), x, y, { width: c.ancho - (c.etiqueta === 'Producto' ? 10 : 0), align: c.etiqueta === 'Producto' ? 'left' : 'right', characterSpacing: 0.4 });
+      x += c.ancho;
+    }
+    doc.fillColor(PDF_TINTA);
+    doc.y += 22;
+  }
+
+  encabezadoTabla(false);
+
+  cotizacion.items.forEach((it, i) => {
+    doc.font('Helvetica').fontSize(9);
+    const alturaDesc = it.producto_descripcion ? doc.heightOfString(it.producto_descripcion, { width: columnas[0].ancho - 10, fontSize: 8 }) + 3 : 0;
+    const alturaFila = Math.max(14 + alturaDesc, 14) + 16;
+
+    if (doc.y + alturaFila > 725) { doc.addPage(); encabezadoTabla(true); }
+
+    if (i % 2 === 1) {
+      doc.rect(PDF_L, doc.y, PDF_W, alturaFila).fill('#fafafa');
+      doc.fillColor(PDF_TINTA);
+    }
+
+    const y = doc.y + 8;
+    let x = PDF_L + 10;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(PDF_TINTA).text(it.producto_item || '', x, y, { width: columnas[0].ancho - 10 });
+    if (it.producto_descripcion) {
+      doc.font('Helvetica').fontSize(8).fillColor(PDF_GRIS).text(it.producto_descripcion, x, doc.y + 2, { width: columnas[0].ancho - 10 });
+      doc.fillColor(PDF_TINTA);
+    }
     x += columnas[0].ancho;
-    doc.font('Helvetica').text(String(it.cantidad), x, y, { width: columnas[1].ancho, align: 'right' });
+    doc.font('Helvetica').fontSize(9).fillColor(PDF_TINTA).text(formatoCantidadPdf(it.cantidad), x, y, { width: columnas[1].ancho, align: 'right' });
     x += columnas[1].ancho;
     doc.text(formatoMoneda(it.precio_unitario), x, y, { width: columnas[2].ancho, align: 'right' });
     x += columnas[2].ancho;
-    doc.text(formatoMoneda(it.total), x, y, { width: columnas[3].ancho, align: 'right' });
-    doc.y = Math.max(yFilaFinal, y + 12);
-    doc.moveDown(0.5);
-    doc.moveTo(inicioTabla, doc.y).lineTo(finTabla, doc.y).strokeColor('#eee').lineWidth(0.5).stroke();
-    doc.moveDown(0.3);
+    doc.font('Helvetica-Bold').text(formatoMoneda(it.total), x, y, { width: columnas[3].ancho, align: 'right' });
+
+    doc.y = y - 8 + alturaFila;
+    lineaDivisoriaPdf(doc, { y: doc.y });
+  });
+
+  doc.y += 18;
+
+  // ---------- Totales ----------
+  if (doc.y > 660) { doc.addPage(); doc.y = 50; }
+  const anchoTotales = 230;
+  const xTotales = PDF_R - anchoTotales;
+
+  function filaTotal(etiqueta, valor, { colorValor = PDF_TINTA } = {}) {
+    const y = doc.y;
+    doc.font('Helvetica').fontSize(9).fillColor(PDF_GRIS).text(etiqueta, xTotales, y, { width: anchoTotales - 100 });
+    doc.font('Helvetica').fontSize(9).fillColor(colorValor).text(valor, xTotales, y, { width: anchoTotales, align: 'right' });
+    doc.y = y + doc.currentLineHeight() + 5;
   }
 
-  doc.moveDown(0.5);
-  const anchoTotales = 220;
-  const xTotales = finTabla - anchoTotales;
-  doc.fontSize(9).font('Helvetica');
-  doc.text(`Subtotal: ${formatoMoneda(cotizacion.subtotal)}`, xTotales, doc.y, { width: anchoTotales, align: 'right' });
+  filaTotal('Subtotal', formatoMoneda(cotizacion.subtotal));
   if (Number(cotizacion.descuento_monto) > 0) {
-    doc.text(`Descuento (${cotizacion.descuento_porcentaje}%): -${formatoMoneda(cotizacion.descuento_monto)}`, xTotales, doc.y, { width: anchoTotales, align: 'right' });
+    const etiquetaDescuento = cotizacion.descuento_tipo === 'monto' ? 'Descuento' : `Descuento (${cotizacion.descuento_porcentaje}%)`;
+    filaTotal(etiquetaDescuento, `-${formatoMoneda(cotizacion.descuento_monto)}`, { colorValor: PDF_ROJO });
   }
-  doc.text(`IVA (16%): ${formatoMoneda(cotizacion.iva)}`, xTotales, doc.y, { width: anchoTotales, align: 'right' });
-  doc.font('Helvetica-Bold').fontSize(11).text(`Total: ${formatoMoneda(cotizacion.gran_total)}`, xTotales, doc.y, { width: anchoTotales, align: 'right' });
+  filaTotal('IVA (16%)', formatoMoneda(cotizacion.iva));
+  doc.moveDown(0.1);
 
-  doc.moveDown(1.5);
-  doc.fontSize(7.5).font('Helvetica-Bold').text('Condiciones de compra');
-  doc.font('Helvetica').fillColor('#444').text(
-    'NOTA: TODA NUESTRA MERCANCÍA ESTA ASEGURADA EN TRANSPORTE, CUALQUIER INCIDENCIA SE DEBE REPORTAR EN LAS PRIMERAS '
-    + '24 HORAS DE LA RECEPCIÓN PARA APLICAR EL SEGURO YA QUE DE LO CONTRARIO EL TRANSPORTE DEJA DE HACERSE RESPONSABLE.'
+  lineaDivisoriaPdf(doc, { y: doc.y, color: PDF_TINTA, grosor: 1.2 });
+  doc.moveDown(0.5);
+
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor(PDF_TINTA).text('Total', xTotales, doc.y, { width: anchoTotales - 130 });
+  doc.font('Helvetica-Bold').fontSize(15).fillColor(PDF_ROJO).text(formatoMoneda(cotizacion.gran_total), xTotales, doc.y - 4, { width: anchoTotales, align: 'right' });
+
+  doc.y += 12;
+  doc.fillColor(PDF_TINTA);
+
+  // ---------- Condiciones de compra ----------
+  if (doc.y > 640) { doc.addPage(); doc.y = 50; }
+  doc.moveDown(2);
+  etiquetaSeccionPdf(doc, 'Condiciones de compra');
+  doc.font('Helvetica').fontSize(7.8).fillColor('#4b4b4b').text(
+    'NOTA: Toda nuestra mercancía está asegurada en transporte; cualquier incidencia se debe reportar en las '
+    + 'primeras 24 horas de la recepción para aplicar el seguro, ya que de lo contrario el transporte deja de hacerse responsable.',
+    PDF_L, doc.y, { width: PDF_W, align: 'justify' }
   );
-  doc.fillColor('#000');
-
-  if (doc.y > 680) doc.addPage();
+  doc.fillColor(PDF_TINTA);
   doc.moveDown(1);
-  doc.fontSize(9).font('Helvetica-Bold').text('¿Tienes alguna pregunta? Ponte en contacto conmigo');
-  doc.font('Helvetica').fontSize(9);
+
+  etiquetaSeccionPdf(doc, 'Consideraciones de la oferta');
+  listaNumeradaPdf(doc, CONSIDERACIONES_OFERTA, { x: PDF_L, width: PDF_W });
+  doc.moveDown(0.6);
+
+  etiquetaSeccionPdf(doc, 'Punto importante');
+  listaNumeradaPdf(doc, PUNTO_IMPORTANTE, { x: PDF_L, width: PDF_W });
+
+  // ---------- Firma / contacto ----------
+  if (doc.y > 660) { doc.addPage(); doc.y = 50; }
+  doc.moveDown(1.2);
+  lineaDivisoriaPdf(doc, { y: doc.y });
+  doc.moveDown(0.9);
+
+  doc.fontSize(9.5).font('Helvetica-Bold').fillColor(PDF_TINTA).text('¿Tienes alguna pregunta? Ponte en contacto conmigo');
+  doc.moveDown(0.3);
+  doc.font('Helvetica').fontSize(9).fillColor(PDF_GRIS);
   // La firma del representante seleccionado (texto libre, tal cual la capturo) reemplaza el
   // bloque fijo de Ramon Villanueva/Gonpal cuando esta capturada; si no, se usa ese bloque como
   // respaldo para no dejar el pie de la cotizacion en blanco.
   const lineasFirma = (cotizacion.representante_firma || '').trim()
     ? cotizacion.representante_firma.split('\n').map((l) => l.trim()).filter(Boolean)
     : [EMISOR_COTIZACION.nombre, EMISOR_COTIZACION.puesto, EMISOR_COTIZACION.correo, EMISOR_COTIZACION.telefono, EMISOR_COTIZACION.empresa, EMISOR_COTIZACION.direccion];
-  lineasFirma.forEach((linea) => doc.text(linea));
-  doc.fillColor('#000');
+  lineasFirma.forEach((linea, i) => {
+    doc.fillColor(i === 0 ? PDF_TINTA : PDF_GRIS).font(i === 0 ? 'Helvetica-Bold' : 'Helvetica').text(linea);
+  });
+  doc.fillColor(PDF_TINTA);
 
   doc.end();
 }

@@ -3991,6 +3991,15 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
   let desde = (req.query.desde || inicioMes).slice(0, 10);
   let hasta = (req.query.hasta || hoy).slice(0, 10);
   if (desde > hasta) [desde, hasta] = [hasta, desde];
+  // El periodo anterior por default es "los N dias justo antes de desde" (N = duracion del
+  // periodo actual). Para comparaciones alineadas a dia-de-la-semana (ej. "Semana": Lun-Mie vs.
+  // el Lun-Mie de la semana pasada, no los 3 dias de calendario justo antes) el cliente puede
+  // mandar su propio desdePrevio/hastaPrevio y se respeta tal cual.
+  const largoPeriodo = diasEntre(desde, hasta) + 1;
+  const hastaPrevioDefault = restarDiasIso(desde, 1);
+  const desdePrevioDefault = restarDiasIso(hastaPrevioDefault, largoPeriodo - 1);
+  const hastaPrevio = (req.query.hastaPrevio || hastaPrevioDefault).slice(0, 10);
+  const desdePrevio = (req.query.desdePrevio || desdePrevioDefault).slice(0, 10);
   const resultado = {};
 
   if (permisos.catalogos.ver) {
@@ -4023,6 +4032,18 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
         fecha_vencimiento: c.fecha_vencimiento,
       }));
 
+    // Cotizaciones vencidas que siguen en Negociacion (no se cerraron Ganada/Perdida antes de
+    // caducar): son las que necesitan mantenimiento, ya sea renovar la fecha o cerrarlas.
+    resultado.cotizacionesVencidas = cotizaciones
+      .filter((c) => c.estatus === 'Vencido' && c.etapa === 'Negociacion')
+      .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento))
+      .slice(0, 6)
+      .map((c) => ({
+        id_cotizacion: c.id_cotizacion, nombre: c.nombre, destino_nombre: c.destino_nombre,
+        contacto_nombre: c.contacto_nombre, gran_total: c.gran_total, moneda: c.moneda,
+        fecha_vencimiento: c.fecha_vencimiento,
+      }));
+
     resultado.tareasHoy = await db.prepare(`
       SELECT id_pendiente, nombre, fecha_compromiso FROM pendientes
       WHERE fecha_compromiso = ? ORDER BY nombre
@@ -4036,9 +4057,6 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
       .filter((c) => c.moneda === moneda)
       .reduce((acc, c) => acc + Number(c.gran_total || 0), 0);
 
-    const largoPeriodo = diasEntre(desde, hasta) + 1;
-    const hastaPrevio = restarDiasIso(desde, 1);
-    const desdePrevio = restarDiasIso(hastaPrevio, largoPeriodo - 1);
     const enRango = (fecha, ini, fin) => fecha >= ini && fecha <= fin;
 
     const cotizacionesPeriodo = cotizaciones.filter((c) => enRango(c.fecha_creacion, desde, hasta));
@@ -4067,17 +4085,6 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
     resultado.ordenesPendientes = Number(enUso.c);
     const ventasMes = await db.prepare('SELECT COALESCE(SUM(importe), 0) ventas FROM ordenes WHERE fecha >= ?').get(inicioMes);
     resultado.ventasMes = Number(ventasMes.ventas);
-  }
-
-  if (permisos.detalle_compra.ver) {
-    resultado.topArticulos = await db.prepare(`
-      SELECT articulo, SUM(cantidad_vendida) AS total
-      FROM detalle_de_compra
-      WHERE articulo IS NOT NULL AND fecha >= ?
-      GROUP BY articulo
-      ORDER BY total DESC
-      LIMIT 6
-    `).all(inicioMes);
   }
 
   res.json(resultado);

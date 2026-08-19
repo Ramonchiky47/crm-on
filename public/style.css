@@ -560,41 +560,6 @@ body.con-barra-lateral {
 .chip.es-alerta { color: var(--alerta); background: #fbf1e0; }
 .chip.es-bueno { color: var(--exito); background: #eaf3ea; }
 
-.articulos { display: flex; flex-direction: column; gap: 0.6rem; }
-
-.articulo__fila {
-  display: grid;
-  grid-template-columns: 1fr 34px;
-  align-items: center;
-  gap: 0.5rem;
-  border-radius: 6px;
-  padding: 0.15rem 0.3rem;
-  cursor: pointer;
-}
-
-.articulo__fila:hover, .articulo__fila:focus-visible { background: var(--fondo-suave); }
-.articulo__fila:focus-visible { outline: 2px solid var(--dato-450); outline-offset: 1px; }
-
-.articulo__nombre {
-  font-size: 0.79rem;
-  color: #555;
-  margin-bottom: 0.3rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.articulo__pista { background: var(--fondo-suave); border-radius: 4px; height: 7px; overflow: hidden; }
-.articulo__barra { height: 100%; border-radius: 4px; background: var(--dato-450); }
-
-.articulo__valor {
-  font-size: 0.78rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  color: #555;
-}
-
 @media (max-width: 880px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .cuadricula { grid-template-columns: 1fr; }

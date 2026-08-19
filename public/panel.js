@@ -74,20 +74,24 @@ function renderizarCotizacionesPorVencer(lista) {
     : '<p class="tarjeta-vacio">Sin cotizaciones por vencer.</p>';
 }
 
-function renderizarTopArticulos(lista) {
-  const contenedor = document.getElementById('lista-articulos');
-  const maximo = Math.max(1, ...lista.map((a) => Number(a.total)));
+function chipVencida(fechaIso) {
+  const dias = -diasHasta(fechaIso);
+  return `<span class="chip es-critico">Vencida hace ${dias} día${dias === 1 ? '' : 's'}</span>`;
+}
+
+function renderizarCotizacionesVencidas(lista) {
+  const contenedor = document.getElementById('lista-vencidas');
   contenedor.innerHTML = lista.length
-    ? lista.map((a) => `
-        <div class="articulo__fila" tabindex="0" data-href="buscar.html?q=${encodeURIComponent(a.articulo)}" title="Buscar órdenes con este artículo">
-          <div>
-            <div class="articulo__nombre">${escaparHtml(a.articulo)}</div>
-            <div class="articulo__pista"><span class="articulo__barra" style="width:${Math.max(4, Math.round((Number(a.total) / maximo) * 100))}%"></span></div>
+    ? lista.map((c) => `
+        <div class="fila-lista" tabindex="0" data-href="cotizaciones.html?cotizacion=${encodeURIComponent(c.id_cotizacion)}" title="Abrir cotización">
+          <div class="fila-lista__texto">
+            <div class="fila-lista__principal">${escaparHtml(c.id_cotizacion)} &middot; ${escaparHtml(c.destino_nombre || c.nombre)}</div>
+            <div class="fila-lista__secundario">${escaparHtml(c.contacto_nombre || '')} &middot; ${escaparHtml(c.moneda)} ${formatoImporte(c.gran_total)}</div>
           </div>
-          <span class="articulo__valor">${Number(a.total).toLocaleString('es-MX')}</span>
+          ${chipVencida(c.fecha_vencimiento)}
         </div>
       `).join('')
-    : '<p class="tarjeta-vacio">Sin ventas registradas este mes.</p>';
+    : '<p class="tarjeta-vacio">Sin cotizaciones vencidas.</p>';
 }
 
 function renderizarTareasHoy(lista) {
@@ -202,9 +206,25 @@ rangoBotones.addEventListener('click', (e) => {
     return;
   }
   const hoy = hoyISO();
-  if (rango === 'hoy') rangoPanel = { desde: hoy, hasta: hoy };
-  else if (rango === 'semana') rangoPanel = { desde: sumarDiasIso(hoy, -6), hasta: hoy };
-  else rangoPanel = { desde: `${hoy.slice(0, 7)}-01`, hasta: hoy };
+  if (rango === 'hoy') {
+    rangoPanel = { desde: hoy, hasta: hoy };
+  } else if (rango === 'semana') {
+    // La semana inicia en lunes. Si hoy es sabado/domingo la semana ya se completo (Lun-Vie);
+    // si no, se corta en hoy (no se muestran dias futuros de la semana en curso). El periodo
+    // anterior es exactamente 7 dias atras (mismos dias de la semana pasada), no los N dias de
+    // calendario justo antes de "desde": eso compararia, por ejemplo, Lun-Mie contra
+    // Vie-Dom de la semana pasada en vez de contra su propio Lun-Mie.
+    const diaSemanaIso = (new Date(`${hoy}T00:00:00`).getDay() + 6) % 7; // 0 = lunes ... 6 = domingo
+    const lunes = sumarDiasIso(hoy, -diaSemanaIso);
+    const viernes = sumarDiasIso(lunes, 4);
+    const hastaSemana = hoy < viernes ? hoy : viernes;
+    rangoPanel = {
+      desde: lunes, hasta: hastaSemana,
+      desdePrevio: sumarDiasIso(lunes, -7), hastaPrevio: sumarDiasIso(hastaSemana, -7),
+    };
+  } else {
+    rangoPanel = { desde: `${hoy.slice(0, 7)}-01`, hasta: hoy };
+  }
   cargarPanel();
 });
 
@@ -217,8 +237,10 @@ btnAplicarRango.addEventListener('click', () => {
 marcarBotonActivo('mes');
 
 async function cargarPanel() {
-  const parametros = `?desde=${encodeURIComponent(rangoPanel.desde)}&hasta=${encodeURIComponent(rangoPanel.hasta)}`;
-  const res = await fetch(`/api/panel/resumen${parametros}`);
+  const query = new URLSearchParams({ desde: rangoPanel.desde, hasta: rangoPanel.hasta });
+  if (rangoPanel.desdePrevio) query.set('desdePrevio', rangoPanel.desdePrevio);
+  if (rangoPanel.hastaPrevio) query.set('hastaPrevio', rangoPanel.hastaPrevio);
+  const res = await fetch(`/api/panel/resumen?${query}`);
   if (!res.ok) return;
   const d = await res.json();
 
@@ -251,9 +273,9 @@ async function cargarPanel() {
     document.getElementById('tarjeta-vencer').hidden = false;
     renderizarCotizacionesPorVencer(d.cotizacionesPorVencer);
   }
-  if (d.topArticulos) {
-    document.getElementById('tarjeta-articulos').hidden = false;
-    renderizarTopArticulos(d.topArticulos);
+  if (d.cotizacionesVencidas) {
+    document.getElementById('tarjeta-vencidas').hidden = false;
+    renderizarCotizacionesVencidas(d.cotizacionesVencidas);
   }
   if (d.tareasHoy) {
     document.getElementById('tarjeta-tareas').hidden = false;
@@ -281,7 +303,7 @@ function activarNavegacionLista(contenedorId) {
   });
 }
 
-['pipeline-lista', 'lista-vencer', 'lista-articulos', 'lista-tareas'].forEach(activarNavegacionLista);
+['pipeline-lista', 'lista-vencer', 'lista-vencidas', 'lista-tareas'].forEach(activarNavegacionLista);
 
 promesaAuth.then((sesion) => {
   if (!sesion) return;
@@ -290,6 +312,5 @@ promesaAuth.then((sesion) => {
   suscribirTiempoReal(['negocios', 'etapas_negocio'], cargarPanel);
   suscribirTiempoReal(['cotizaciones'], cargarPanel);
   suscribirTiempoReal(['ordenes', 'estatus_catalogo'], cargarPanel);
-  suscribirTiempoReal(['detalle_de_compra'], cargarPanel);
   suscribirTiempoReal(['pendientes'], cargarPanel);
 });

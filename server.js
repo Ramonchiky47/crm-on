@@ -2211,7 +2211,8 @@ app.post('/api/negocios/:id/notas', requirePermiso('catalogos', 'editar'), ar(as
 // moneda de la cotizacion) pero se puede editar libremente en la captura.
 
 const SELECT_COTIZACIONES = `
-  SELECT q.*, n.negocio AS negocio_nombre, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre,
+  SELECT q.*, n.negocio AS negocio_nombre, n.fecha_estimada_cierre AS negocio_fecha_estimada_cierre,
+    TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre,
     c.correo_electronico AS contacto_correo, d.destino AS destino_nombre,
     r.representante AS representante_nombre, r.correo_electronico AS representante_correo, r.celular AS representante_celular,
     r.firma AS representante_firma
@@ -2222,16 +2223,23 @@ const SELECT_COTIZACIONES = `
   LEFT JOIN representantes r ON r.id_representante = q.representante_id
 `;
 
-// Estatus de una cotizacion: "Vencido" si hoy es posterior a su Fecha de vencimiento,
-// "Vigente" en cualquier otro caso (incluida una cotizacion sin vencimiento capturado).
+// Estatus de una fecha: "Vencido" si hoy es posterior a ella, "Vigente" en cualquier otro caso
+// (incluida la ausencia de fecha). Se reutiliza tanto para el vencimiento de una cotizacion
+// como para el Cierre estimado de un negocio.
 function estatusCotizacion(fechaVencimiento) {
   if (!fechaVencimiento) return 'Vigente';
   const hoy = new Date().toISOString().slice(0, 10);
   return hoy > fechaVencimiento ? 'Vencido' : 'Vigente';
 }
 
+// Una cotizacion se ve Vencida por su propia Fecha de vencimiento, o si el negocio al que
+// pertenece ya paso su Cierre estimado (un negocio vencido "arrastra" a todas sus cotizaciones,
+// aunque alguna todavia no llegue a su propia fecha de vencimiento).
 function conEstatus(fila) {
-  return { ...fila, estatus: estatusCotizacion(fila.fecha_vencimiento) };
+  const negocioVencido = fila.negocio_fecha_estimada_cierre
+    && estatusCotizacion(fila.negocio_fecha_estimada_cierre) === 'Vencido';
+  const estatus = negocioVencido ? 'Vencido' : estatusCotizacion(fila.fecha_vencimiento);
+  return { ...fila, estatus };
 }
 
 async function itemsDeCotizacion(cotizacionId) {

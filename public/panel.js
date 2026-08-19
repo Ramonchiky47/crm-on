@@ -223,7 +223,14 @@ rangoBotones.addEventListener('click', (e) => {
   }
   const hoy = hoyISO();
   if (rango === 'hoy') {
-    rangoPanel = { desde: hoy, hasta: hoy };
+    // Se compara contra el mismo dia-de-mes del mes anterior (no contra "ayer": un lunes
+    // siempre compararia contra domingo, un dia sin actividad de negocio). Si ese dia cae en
+    // fin de semana se recorre al dia habil mas cercano (sabado -> viernes, domingo -> lunes).
+    let comparar = mesAnteriorMismoDia(hoy);
+    const diaSemana = new Date(`${comparar}T00:00:00`).getDay(); // 0 = domingo ... 6 = sabado
+    if (diaSemana === 0) comparar = sumarDiasIso(comparar, 1);
+    else if (diaSemana === 6) comparar = sumarDiasIso(comparar, -1);
+    rangoPanel = { desde: hoy, hasta: hoy, desdePrevio: comparar, hastaPrevio: comparar };
   } else if (rango === 'semana') {
     // La semana inicia en lunes. Si hoy es sabado/domingo la semana ya se completo (Lun-Vie);
     // si no, se corta en hoy (no se muestran dias futuros de la semana en curso). El periodo

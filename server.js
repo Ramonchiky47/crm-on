@@ -2046,9 +2046,11 @@ const SELECT_NEGOCIOS = `
   LEFT JOIN etapas_negocio e ON e.id_etapa = n.etapa_id
 `;
 
-// Estatus de un negocio: "Vencido" solo si TODAS sus cotizaciones estan vencidas; si tiene al
-// menos una vigente (o no tiene cotizaciones), el negocio es "Vigente".
-async function estatusNegocio(negocioId) {
+// Estatus de un negocio: "Vencido" si su Cierre estimado ya paso, o si TODAS sus cotizaciones
+// estan vencidas; si tiene al menos una cotizacion vigente (o no tiene cotizaciones ni fecha
+// de cierre capturada), el negocio es "Vigente".
+async function estatusNegocio(negocioId, fechaEstimadaCierre) {
+  if (fechaEstimadaCierre && estatusCotizacion(fechaEstimadaCierre) === 'Vencido') return 'Vencido';
   const vencimientos = await db.prepare('SELECT fecha_vencimiento FROM cotizaciones WHERE negocio_id = ?').all(negocioId);
   if (vencimientos.length === 0) return 'Vigente';
   const todasVencidas = vencimientos.every((v) => estatusCotizacion(v.fecha_vencimiento) === 'Vencido');
@@ -2069,7 +2071,7 @@ async function negocioConImportes(fila) {
     ...fila,
     importe_usd: importeUsd ? importeUsd.importe : 0,
     importe_mxn: importeMxn ? importeMxn.importe : 0,
-    estatus: await estatusNegocio(fila.id_negocio),
+    estatus: await estatusNegocio(fila.id_negocio, fila.fecha_estimada_cierre),
     tiene_tarea_activa: Boolean(tienePendiente),
   };
 }
@@ -2105,9 +2107,11 @@ async function negociosConImportesBatch(filas) {
   return filas.map((fila) => {
     const importesNegocio = importesPorNegocio.get(fila.id_negocio) || {};
     const vencimientosNegocio = vencimientosPorNegocio.get(fila.id_negocio) || [];
-    const estatus = vencimientosNegocio.length === 0
-      ? 'Vigente'
-      : (vencimientosNegocio.every((v) => estatusCotizacion(v) === 'Vencido') ? 'Vencido' : 'Vigente');
+    const estatus = (fila.fecha_estimada_cierre && estatusCotizacion(fila.fecha_estimada_cierre) === 'Vencido')
+      ? 'Vencido'
+      : (vencimientosNegocio.length === 0
+        ? 'Vigente'
+        : (vencimientosNegocio.every((v) => estatusCotizacion(v) === 'Vencido') ? 'Vencido' : 'Vigente'));
     return {
       ...fila,
       importe_usd: importesNegocio.USD || 0,

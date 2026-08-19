@@ -4030,10 +4030,12 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
       : await db.prepare(SELECT_COTIZACIONES).all()
     ).map(conEstatus);
     resultado.cotizacionesVigentes = cotizaciones.filter((c) => c.estatus === 'Vigente').length;
+    // "Por vencer" = vigente y su vencimiento cae dentro de los proximos 14 dias (no solo las
+    // 6 mas cercanas sin importar que tan lejos esten).
+    const limiteProximos14Dias = restarDiasIso(hoy, -14);
     resultado.cotizacionesPorVencer = cotizaciones
-      .filter((c) => c.estatus === 'Vigente' && c.fecha_vencimiento)
+      .filter((c) => c.estatus === 'Vigente' && c.fecha_vencimiento && c.fecha_vencimiento <= limiteProximos14Dias)
       .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento))
-      .slice(0, 6)
       .map((c) => ({
         id_cotizacion: c.id_cotizacion, nombre: c.nombre, destino_nombre: c.destino_nombre,
         contacto_nombre: c.contacto_nombre, gran_total: c.gran_total, moneda: c.moneda,

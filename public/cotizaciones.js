@@ -105,17 +105,24 @@ const btnGuardarNegocio = document.getElementById('btn-guardar-negocio');
 const btnCancelarNegocio = document.getElementById('btn-cancelar-negocio');
 const btnMostrarFormNegocio = document.getElementById('btn-mostrar-form-negocio');
 const tablaNegocios = document.getElementById('tabla-negocios');
+const modalNegocioOverlay = document.getElementById('modal-negocio-overlay');
+const modalNegocioCerrar = document.getElementById('modal-negocio-cerrar');
 
+// La alta y edicion de un Negocio se hacen en el mismo formulario, mostrado como ventana
+// emergente (igual que el detalle de una cotizacion): abrirFormNegocio() lo abre ya sea vacio
+// (+ Agregar negocio) o precargado (clic en una fila / boton Editar).
 function abrirFormNegocio() {
-  formNegocio.hidden = false;
-  btnMostrarFormNegocio.hidden = true;
-  btnCancelarNegocio.hidden = false;
+  modalNegocioOverlay.hidden = false;
 }
 
 function cerrarFormNegocio() {
-  formNegocio.hidden = true;
-  btnMostrarFormNegocio.hidden = false;
+  modalNegocioOverlay.hidden = true;
 }
+
+modalNegocioCerrar.addEventListener('click', limpiarFormNegocio);
+modalNegocioOverlay.addEventListener('click', (e) => {
+  if (e.target === modalNegocioOverlay) limpiarFormNegocio();
+});
 
 btnMostrarFormNegocio.addEventListener('click', () => {
   abrirFormNegocio();
@@ -251,15 +258,15 @@ function actualizarBotonEnviarTareasNegocios() {
 }
 
 function claseFilaNegocio(n) {
-  const clases = [];
+  const clases = ['fila-clicable'];
   if (etapaNegocioEsGanada(n.etapa_nombre)) clases.push('fila-ganada');
   if (n.tiene_tarea_activa) clases.push('fila-en-tareas');
-  return clases.length ? ` class="${clases.join(' ')}"` : '';
+  return ` class="${clases.join(' ')}"`;
 }
 
 function renderizarNegocios(negocios) {
   tablaNegocios.innerHTML = negocios.map((n) => `
-    <tr${claseFilaNegocio(n)}>
+    <tr${claseFilaNegocio(n)} data-id="${escaparHtml(n.id_negocio)}">
       <td><input type="checkbox" class="check-negocio" value="${escaparHtml(n.id_negocio)}" ${negociosSeleccionados.has(n.id_negocio) ? 'checked' : ''} /></td>
       <td>${escaparHtml(n.id_negocio)}</td>
       <td>${escaparHtml(fechaDe(n.creado_en))}</td>
@@ -461,23 +468,39 @@ tablaNegocios.addEventListener('click', async (e) => {
   }
 
   if (e.target.classList.contains('btn-editar')) {
-    const negocios = await cargarNegocios();
-    const n = negocios.find((x) => x.id_negocio === id);
-    if (!n) return;
-
-    negocioId.value = n.id_negocio;
-    negocioNombre.value = n.negocio;
-    negocioContacto.value = n.contacto_id || '';
-    negocioEtapa.value = n.etapa_id || '';
-    negocioFechaEstimadaCierre.value = n.fecha_estimada_cierre || '';
-    negocioMotivoPerdida.value = n.motivo_perdida || '';
-    actualizarVisibilidadMotivoPerdida();
-
-    btnGuardarNegocio.textContent = 'Guardar cambios';
-    btnCancelarNegocio.hidden = false;
-    abrirFormNegocio();
-    negocioNombre.focus();
+    editarNegocio(id);
   }
+});
+
+// Carga un negocio (ya obtenido del servidor) en el formulario y lo abre como ventana
+// emergente. Se usa tanto desde el boton "Editar" como desde el clic en la fila.
+async function editarNegocio(id) {
+  const negocios = await cargarNegocios();
+  const n = negocios.find((x) => x.id_negocio === id);
+  if (!n) return;
+
+  negocioId.value = n.id_negocio;
+  negocioNombre.value = n.negocio;
+  negocioContacto.value = n.contacto_id || '';
+  negocioEtapa.value = n.etapa_id || '';
+  negocioFechaEstimadaCierre.value = n.fecha_estimada_cierre || '';
+  negocioMotivoPerdida.value = n.motivo_perdida || '';
+  actualizarVisibilidadMotivoPerdida();
+
+  btnGuardarNegocio.textContent = 'Guardar cambios';
+  btnCancelarNegocio.hidden = false;
+  abrirFormNegocio();
+  negocioNombre.focus();
+}
+
+// Clic en cualquier parte de la fila (fuera de botones/checkbox) abre la edicion del negocio,
+// igual que el clic en una fila de Cotizaciones abre su detalle.
+tablaNegocios.addEventListener('click', (e) => {
+  if (!permisosCatalogos.editar) return;
+  if (e.target.closest('button, input')) return;
+  const fila = e.target.closest('tr');
+  if (!fila) return;
+  editarNegocio(fila.dataset.id);
 });
 
 // ---------- Cotizaciones ----------

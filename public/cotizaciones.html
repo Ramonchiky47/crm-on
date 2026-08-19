@@ -36,32 +36,37 @@
 
       <button type="button" id="btn-mostrar-form-negocio" class="btn-agregar">+ Agregar negocio</button>
 
-      <form id="form-negocio" class="form-catalogo form-catalogo-vertical panel-form" hidden>
-        <input type="hidden" id="negocio-id" />
-        <input type="text" id="negocio-nombre" placeholder="Nombre del negocio" required />
-        <div class="fila">
-          <label>
-            Contacto
-            <select id="negocio-contacto" class="select-contacto-ancho"><option value="">-- Selecciona --</option></select>
-          </label>
-          <label>
-            Etapa del negocio
-            <select id="negocio-etapa"><option value="">-- Selecciona --</option></select>
-          </label>
-          <label>
-            Fecha estimada de cierre
-            <input type="date" id="negocio-fecha-estimada-cierre" />
-          </label>
+      <div id="modal-negocio-overlay" class="modal-overlay" hidden>
+        <div class="modal-caja" role="dialog" aria-modal="true">
+          <button type="button" id="modal-negocio-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
+          <form id="form-negocio" class="form-catalogo form-catalogo-vertical panel-form">
+            <input type="hidden" id="negocio-id" />
+            <input type="text" id="negocio-nombre" placeholder="Nombre del negocio" required />
+            <div class="fila">
+              <label>
+                Contacto
+                <select id="negocio-contacto" class="select-contacto-ancho"><option value="">-- Selecciona --</option></select>
+              </label>
+              <label>
+                Etapa del negocio
+                <select id="negocio-etapa"><option value="">-- Selecciona --</option></select>
+              </label>
+              <label>
+                Fecha estimada de cierre
+                <input type="date" id="negocio-fecha-estimada-cierre" />
+              </label>
+            </div>
+            <label id="negocio-motivo-perdida-wrap" hidden>
+              Motivo (por qué no compraron la propuesta)
+              <input type="text" id="negocio-motivo-perdida" />
+            </label>
+            <div class="acciones-form">
+              <button type="submit" id="btn-guardar-negocio">Agregar</button>
+              <button type="button" id="btn-cancelar-negocio" hidden>Cancelar</button>
+            </div>
+          </form>
         </div>
-        <label id="negocio-motivo-perdida-wrap" hidden>
-          Motivo (por qué no compraron la propuesta)
-          <input type="text" id="negocio-motivo-perdida" />
-        </label>
-        <div class="acciones-form">
-          <button type="submit" id="btn-guardar-negocio">Agregar</button>
-          <button type="button" id="btn-cancelar-negocio" hidden>Cancelar</button>
-        </div>
-      </form>
+      </div>
 
       <div class="fila-filtros">
         <input type="text" id="filtro-neg-id" placeholder="ID negocio" />

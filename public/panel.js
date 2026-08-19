@@ -139,6 +139,18 @@ function sumarDiasIso(fechaISO, dias) {
   return fecha.toISOString().slice(0, 10);
 }
 
+// Mismo dia-de-mes pero en el mes anterior (para "Mes": 1-19 de agosto se compara contra
+// 1-19 de julio, no contra los 19 dias de calendario justo antes). Si el mes anterior es mas
+// corto y no tiene ese dia (ej. 31 de marzo -> febrero), se recorta a su ultimo dia.
+function mesAnteriorMismoDia(fechaISO) {
+  const [y, m, d] = fechaISO.split('-').map(Number);
+  const mesPrevio = m === 1 ? 12 : m - 1;
+  const anioPrevio = m === 1 ? y - 1 : y;
+  const ultimoDiaMesPrevio = new Date(Date.UTC(anioPrevio, mesPrevio, 0)).getUTCDate();
+  const dia = Math.min(d, ultimoDiaMesPrevio);
+  return `${anioPrevio}-${String(mesPrevio).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
 function fechaCortaIso(fechaISO) {
   const [y, m, d] = fechaISO.split('-').map(Number);
   return `${d} de ${MESES[m - 1]} de ${y}`;
@@ -186,7 +198,11 @@ const resumenDesde = document.getElementById('resumen-desde');
 const resumenHasta = document.getElementById('resumen-hasta');
 const btnAplicarRango = document.getElementById('btn-aplicar-rango');
 
-let rangoPanel = { desde: `${hoyISO().slice(0, 7)}-01`, hasta: hoyISO() };
+const inicioMesInicial = `${hoyISO().slice(0, 7)}-01`;
+let rangoPanel = {
+  desde: inicioMesInicial, hasta: hoyISO(),
+  desdePrevio: mesAnteriorMismoDia(inicioMesInicial), hastaPrevio: mesAnteriorMismoDia(hoyISO()),
+};
 
 function marcarBotonActivo(rango) {
   rangoBotones.querySelectorAll('.rango-periodo__boton').forEach((b) => {
@@ -223,7 +239,13 @@ rangoBotones.addEventListener('click', (e) => {
       desdePrevio: sumarDiasIso(lunes, -7), hastaPrevio: sumarDiasIso(hastaSemana, -7),
     };
   } else {
-    rangoPanel = { desde: `${hoy.slice(0, 7)}-01`, hasta: hoy };
+    // "Mes": del dia 1 a hoy, comparado contra el mismo tramo de dias del mes anterior
+    // (1 al 19 de julio si hoy es 19 de agosto), no contra los N dias justo antes del dia 1.
+    const inicioMes = `${hoy.slice(0, 7)}-01`;
+    rangoPanel = {
+      desde: inicioMes, hasta: hoy,
+      desdePrevio: mesAnteriorMismoDia(inicioMes), hastaPrevio: mesAnteriorMismoDia(hoy),
+    };
   }
   cargarPanel();
 });

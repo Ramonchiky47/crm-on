@@ -585,7 +585,63 @@ const filtroCotEtapaBtn = document.getElementById('filtro-cot-etapa-btn');
 const filtroCotEtapaPanel = document.getElementById('filtro-cot-etapa-panel');
 const btnAplicarFiltroCotEtapa = document.getElementById('btn-aplicar-filtro-cot-etapa');
 const btnCancelarFiltroCotEtapa = document.getElementById('btn-cancelar-filtro-cot-etapa');
+const filtroCotRepresentanteWrap = document.getElementById('filtro-cot-representante-wrap');
+const filtroCotRepresentanteBtn = document.getElementById('filtro-cot-representante-btn');
+const filtroCotRepresentantePanel = document.getElementById('filtro-cot-representante-panel');
+const filtroCotRepresentanteOpciones = document.getElementById('filtro-cot-representante-opciones');
+const btnAplicarFiltroCotRepresentante = document.getElementById('btn-aplicar-filtro-cot-representante');
+const btnCancelarFiltroCotRepresentante = document.getElementById('btn-cancelar-filtro-cot-representante');
 const btnLimpiarFiltrosCot = document.getElementById('btn-limpiar-filtros-cot');
+
+// Filtro de Responsable de ventas (Cotizaciones): checkboxes generados a partir del catalogo
+// de representantes, mismo patron que el filtro de Etapa (se aplica al presionar "Aplicar").
+// "Sin asignar" agrupa las cotizaciones sin representante capturado. Vacio = sin filtro (todas).
+const SIN_REPRESENTANTE_ASIGNADO = 'Sin asignar';
+let representantesCotSeleccionados = new Set();
+
+function poblarOpcionesFiltroCotRepresentante(representantes) {
+  const nombres = [...representantes.map((r) => r.representante), SIN_REPRESENTANTE_ASIGNADO];
+  filtroCotRepresentanteOpciones.innerHTML = nombres.map((nombre) => `
+    <label class="multi-select-opcion">
+      <input type="checkbox" value="${escaparHtml(nombre)}" /><span class="multi-select-texto">${escaparHtml(nombre)}</span>
+    </label>
+  `).join('');
+}
+
+function actualizarBotonFiltroCotRepresentante() {
+  filtroCotRepresentanteBtn.textContent = representantesCotSeleccionados.size
+    ? `${representantesCotSeleccionados.size} responsable(s) seleccionado(s)`
+    : 'Todos los responsables';
+}
+
+function sincronizarChecksFiltroCotRepresentante() {
+  filtroCotRepresentantePanel.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.checked = representantesCotSeleccionados.has(cb.value);
+  });
+}
+
+filtroCotRepresentanteBtn.addEventListener('click', () => {
+  sincronizarChecksFiltroCotRepresentante();
+  filtroCotRepresentantePanel.hidden = !filtroCotRepresentantePanel.hidden;
+});
+
+document.addEventListener('click', (e) => {
+  if (!filtroCotRepresentanteWrap.contains(e.target)) filtroCotRepresentantePanel.hidden = true;
+});
+
+btnAplicarFiltroCotRepresentante.addEventListener('click', () => {
+  representantesCotSeleccionados = new Set(
+    [...filtroCotRepresentantePanel.querySelectorAll('input[type="checkbox"]:checked')].map((cb) => cb.value)
+  );
+  actualizarBotonFiltroCotRepresentante();
+  filtroCotRepresentantePanel.hidden = true;
+  aplicarFiltrosCotizaciones();
+});
+
+btnCancelarFiltroCotRepresentante.addEventListener('click', () => {
+  sincronizarChecksFiltroCotRepresentante();
+  filtroCotRepresentantePanel.hidden = true;
+});
 
 let productosCache = [];
 let negociosCache = [];
@@ -610,6 +666,7 @@ async function poblarSelectsCotizacion() {
   poblarSelect(cotizacionContacto, contactos, 'id_contacto', 'nombre_completo_correo');
   poblarSelect(cotizacionDestino, destinos, 'id_destino', 'destino');
   poblarSelect(cotizacionRepresentante, representantes, 'id_representante', 'representante');
+  poblarOpcionesFiltroCotRepresentante(representantes);
   negociosCache = negocios;
   contactosCache = contactos;
   productosCache = productos;
@@ -657,6 +714,9 @@ function activarFiltroNegocio(id, nombre) {
   etapasCotSeleccionadas = new Set();
   sincronizarChecksFiltroCotEtapa();
   actualizarBotonFiltroCotEtapa();
+  representantesCotSeleccionados = new Set();
+  sincronizarChecksFiltroCotRepresentante();
+  actualizarBotonFiltroCotRepresentante();
 
   cargarCotizaciones();
 }
@@ -755,6 +815,8 @@ function aplicarFiltrosCotizaciones() {
     && coincideTexto(c.contacto_nombre, filtroCotContacto.value.trim())
     && (!filtroCotFecha.value || c.fecha_creacion === filtroCotFecha.value)
     && (etapasCotSeleccionadas.size === 0 || etapasCotSeleccionadas.has(c.etapa))
+    && (representantesCotSeleccionados.size === 0
+      || representantesCotSeleccionados.has(c.representante_nombre || SIN_REPRESENTANTE_ASIGNADO))
   );
   ordenadorCotizaciones.actualizarDatos(filtradas);
 }
@@ -768,6 +830,9 @@ btnLimpiarFiltrosCot.addEventListener('click', () => {
   etapasCotSeleccionadas = new Set();
   sincronizarChecksFiltroCotEtapa();
   actualizarBotonFiltroCotEtapa();
+  representantesCotSeleccionados = new Set();
+  sincronizarChecksFiltroCotRepresentante();
+  actualizarBotonFiltroCotRepresentante();
   aplicarFiltrosCotizaciones();
 });
 

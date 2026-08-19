@@ -13,33 +13,45 @@
       <div class="fecha-panel" id="panel-fecha"></div>
     </div>
 
+    <section class="resumen-periodo" id="resumen-periodo" aria-label="Resumen del periodo" hidden>
+      <div class="rango-periodo">
+        <div class="rango-periodo__botones" id="rango-botones">
+          <button type="button" class="rango-periodo__boton" data-rango="hoy">Hoy</button>
+          <button type="button" class="rango-periodo__boton" data-rango="semana">Semana</button>
+          <button type="button" class="rango-periodo__boton" data-rango="mes">Mes</button>
+          <button type="button" class="rango-periodo__boton" data-rango="personalizado">Personalizado</button>
+        </div>
+        <div class="rango-periodo__fechas" id="rango-fechas" hidden>
+          <input type="date" id="resumen-desde" />
+          <input type="date" id="resumen-hasta" />
+          <button type="button" class="btn-mini" id="btn-aplicar-rango">Aplicar</button>
+        </div>
+      </div>
+      <p class="rango-periodo__descripcion" id="resumen-descripcion"></p>
+      <div class="resumen-cot-dia">
+        <div class="resumen-cot-dia__grupo">
+          <span class="resumen-cot-dia__etiqueta">Cotizaciones creadas</span>
+          <span class="resumen-cot-dia__valor" id="resumen-creadas">0</span>
+          <span class="resumen-cot-dia__delta" id="resumen-creadas-delta"></span>
+        </div>
+        <div class="resumen-cot-dia__grupo es-bueno">
+          <span class="resumen-cot-dia__etiqueta">Cotizaciones ganadas</span>
+          <span class="resumen-cot-dia__valor" id="resumen-ganadas">0</span>
+          <span class="resumen-cot-dia__delta" id="resumen-ganadas-delta"></span>
+          <span class="resumen-cot-dia__importe" id="resumen-ganadas-importe"></span>
+        </div>
+        <div class="resumen-cot-dia__grupo es-critico">
+          <span class="resumen-cot-dia__etiqueta">Cotizaciones perdidas</span>
+          <span class="resumen-cot-dia__valor" id="resumen-perdidas">0</span>
+          <span class="resumen-cot-dia__delta" id="resumen-perdidas-delta"></span>
+        </div>
+      </div>
+    </section>
+
     <section class="kpis" id="panel-kpis" aria-label="Indicadores clave"></section>
 
     <div class="cuadricula">
       <div class="columna">
-        <section class="tarjeta" id="tarjeta-cotizaciones-dia" hidden>
-          <div class="tarjeta__cabecera">
-            <h2 class="tarjeta__titulo">Cotizaciones del día</h2>
-            <input type="date" id="panel-filtro-fecha" />
-          </div>
-          <div class="resumen-cot-dia">
-            <div class="resumen-cot-dia__grupo">
-              <span class="resumen-cot-dia__etiqueta">Realizadas</span>
-              <span class="resumen-cot-dia__valor" id="cot-dia-realizadas">0</span>
-              <span class="resumen-cot-dia__importe" id="cot-dia-realizadas-importe"></span>
-            </div>
-            <div class="resumen-cot-dia__grupo es-bueno">
-              <span class="resumen-cot-dia__etiqueta">Ganadas</span>
-              <span class="resumen-cot-dia__valor" id="cot-dia-ganadas">0</span>
-              <span class="resumen-cot-dia__importe" id="cot-dia-ganadas-importe"></span>
-            </div>
-            <div class="resumen-cot-dia__grupo es-critico">
-              <span class="resumen-cot-dia__etiqueta">Perdidas</span>
-              <span class="resumen-cot-dia__valor" id="cot-dia-perdidas">0</span>
-            </div>
-          </div>
-        </section>
-
         <section class="tarjeta" id="tarjeta-pipeline" hidden>
           <div class="tarjeta__cabecera">
             <h2 class="tarjeta__titulo">Negocios por etapa</h2>

@@ -262,6 +262,76 @@ body.con-barra-lateral {
 .fecha-panel { color: #757575; font-size: 0.82rem; }
 .fecha-panel strong { color: inherit; font-weight: 600; }
 
+.resumen-periodo {
+  background: var(--fondo-modal);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 1rem 1.1rem 1.1rem;
+  margin-bottom: 1.1rem;
+}
+
+.rango-periodo {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.rango-periodo__botones {
+  display: flex;
+  gap: 0.2rem;
+  background: var(--fondo-suave);
+  border-radius: 8px;
+  padding: 0.2rem;
+}
+
+.rango-periodo__boton {
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rango-periodo__boton.activo {
+  background: var(--peligro);
+  color: #fff;
+}
+
+.rango-periodo__fechas {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.rango-periodo__fechas input[type="date"] {
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.82rem;
+  color: inherit;
+  background: #fff;
+}
+
+.rango-periodo__descripcion {
+  color: #757575;
+  font-size: 0.78rem;
+  margin: 0.6rem 0 0.9rem;
+}
+
+.resumen-cot-dia__delta {
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  min-height: 1em;
+  color: #757575;
+}
+
+.resumen-cot-dia__delta.es-bueno { color: var(--exito); }
+.resumen-cot-dia__delta.es-alerta { color: var(--peligro); }
+
 .kpis {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -302,15 +372,6 @@ body.con-barra-lateral {
 .kpi__delta.es-bueno { color: var(--exito); }
 .kpi__delta.es-alerta { color: var(--alerta); }
 .kpi__delta.es-neutro { color: #757575; }
-
-#panel-filtro-fecha {
-  border: 1px solid var(--borde);
-  border-radius: 6px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.78rem;
-  color: inherit;
-  background: #fff;
-}
 
 .resumen-cot-dia {
   display: grid;

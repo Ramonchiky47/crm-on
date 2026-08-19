@@ -123,20 +123,101 @@ function textoImportePorMoneda(usd, mxn) {
   return partes.join(' · ');
 }
 
-function renderizarCotizacionesDia(d) {
-  document.getElementById('cot-dia-realizadas').textContent = d.cotizacionesRealizadas;
-  document.getElementById('cot-dia-realizadas-importe').textContent =
-    textoImportePorMoneda(d.cotizacionesRealizadasImporteUsd, d.cotizacionesRealizadasImporteMxn);
-  document.getElementById('cot-dia-ganadas').textContent = d.cotizacionesGanadas;
-  document.getElementById('cot-dia-ganadas-importe').textContent =
-    textoImportePorMoneda(d.cotizacionesGanadasImporteUsd, d.cotizacionesGanadasImporteMxn);
-  document.getElementById('cot-dia-perdidas').textContent = d.cotizacionesPerdidas;
+function hoyISO() {
+  const hoy = new Date();
+  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
 }
 
-const filtroFechaPanel = document.getElementById('panel-filtro-fecha');
+function sumarDiasIso(fechaISO, dias) {
+  const [y, m, d] = fechaISO.split('-').map(Number);
+  const fecha = new Date(Date.UTC(y, m - 1, d));
+  fecha.setUTCDate(fecha.getUTCDate() + dias);
+  return fecha.toISOString().slice(0, 10);
+}
+
+function fechaCortaIso(fechaISO) {
+  const [y, m, d] = fechaISO.split('-').map(Number);
+  return `${d} de ${MESES[m - 1]} de ${y}`;
+}
+
+// Texto de comparacion tipo "↑ 30.8% · 39 periodo anterior". positivoEsBueno indica si subir
+// es una buena noticia (creadas/ganadas) o mala (perdidas), para colorear en verde/rojo.
+function textoDelta(actual, previo, positivoEsBueno) {
+  if (!previo) {
+    if (!actual) return { texto: 'Sin cambio vs. periodo anterior', clase: '' };
+    return { texto: `${previo} el periodo anterior`, clase: positivoEsBueno ? 'es-bueno' : 'es-alerta' };
+  }
+  const cambio = actual - previo;
+  if (cambio === 0) return { texto: `${previo} el periodo anterior`, clase: '' };
+  const pct = Math.round((cambio / previo) * 100);
+  const flecha = cambio > 0 ? '↑' : '↓';
+  const clase = (cambio > 0) === positivoEsBueno ? 'es-bueno' : 'es-alerta';
+  return { texto: `${flecha} ${Math.abs(pct)}% · ${previo} el periodo anterior`, clase };
+}
+
+function renderizarResumenPeriodo(rp) {
+  document.getElementById('resumen-periodo').hidden = false;
+  document.getElementById('resumen-descripcion').textContent =
+    `Del ${fechaCortaIso(rp.desde)} al ${fechaCortaIso(rp.hasta)}, vs. periodo anterior `
+    + `(${fechaCortaIso(rp.desdePrevio)}–${fechaCortaIso(rp.hastaPrevio)})`;
+
+  function pintar(idValor, idDelta, valor, previo, positivoEsBueno) {
+    document.getElementById(idValor).textContent = valor;
+    const { texto, clase } = textoDelta(valor, previo, positivoEsBueno);
+    const el = document.getElementById(idDelta);
+    el.textContent = texto;
+    el.className = `resumen-cot-dia__delta ${clase}`;
+  }
+
+  pintar('resumen-creadas', 'resumen-creadas-delta', rp.creadas, rp.creadasPrevio, true);
+  pintar('resumen-ganadas', 'resumen-ganadas-delta', rp.ganadas, rp.ganadasPrevio, true);
+  pintar('resumen-perdidas', 'resumen-perdidas-delta', rp.perdidas, rp.perdidasPrevio, false);
+  document.getElementById('resumen-ganadas-importe').textContent =
+    textoImportePorMoneda(rp.ganadasImporteUsd, rp.ganadasImporteMxn);
+}
+
+const rangoBotones = document.getElementById('rango-botones');
+const rangoFechasContenedor = document.getElementById('rango-fechas');
+const resumenDesde = document.getElementById('resumen-desde');
+const resumenHasta = document.getElementById('resumen-hasta');
+const btnAplicarRango = document.getElementById('btn-aplicar-rango');
+
+let rangoPanel = { desde: `${hoyISO().slice(0, 7)}-01`, hasta: hoyISO() };
+
+function marcarBotonActivo(rango) {
+  rangoBotones.querySelectorAll('.rango-periodo__boton').forEach((b) => {
+    b.classList.toggle('activo', b.dataset.rango === rango);
+  });
+  rangoFechasContenedor.hidden = rango !== 'personalizado';
+}
+
+rangoBotones.addEventListener('click', (e) => {
+  const boton = e.target.closest('[data-rango]');
+  if (!boton) return;
+  const rango = boton.dataset.rango;
+  marcarBotonActivo(rango);
+  if (rango === 'personalizado') {
+    resumenDesde.value = rangoPanel.desde;
+    resumenHasta.value = rangoPanel.hasta;
+    return;
+  }
+  const hoy = hoyISO();
+  if (rango === 'hoy') rangoPanel = { desde: hoy, hasta: hoy };
+  else if (rango === 'semana') rangoPanel = { desde: sumarDiasIso(hoy, -6), hasta: hoy };
+  else rangoPanel = { desde: `${hoy.slice(0, 7)}-01`, hasta: hoy };
+  cargarPanel();
+});
+
+btnAplicarRango.addEventListener('click', () => {
+  if (!resumenDesde.value || !resumenHasta.value || resumenDesde.value > resumenHasta.value) return;
+  rangoPanel = { desde: resumenDesde.value, hasta: resumenHasta.value };
+  cargarPanel();
+});
+
+marcarBotonActivo('mes');
 
 async function cargarPanel() {
-  const parametros = filtroFechaPanel.value ? `?fecha=${encodeURIComponent(filtroFechaPanel.value)}` : '';
+  const parametros = `?desde=${encodeURIComponent(rangoPanel.desde)}&hasta=${encodeURIComponent(rangoPanel.hasta)}`;
   const res = await fetch(`/api/panel/resumen${parametros}`);
   if (!res.ok) return;
   const d = await res.json();
@@ -178,14 +259,10 @@ async function cargarPanel() {
     document.getElementById('tarjeta-tareas').hidden = false;
     renderizarTareasHoy(d.tareasHoy);
   }
-  if (d.filtroFecha) {
-    document.getElementById('tarjeta-cotizaciones-dia').hidden = false;
-    if (!filtroFechaPanel.value) filtroFechaPanel.value = d.filtroFecha;
-    renderizarCotizacionesDia(d);
+  if (d.resumenPeriodo) {
+    renderizarResumenPeriodo(d.resumenPeriodo);
   }
 }
-
-filtroFechaPanel.addEventListener('change', cargarPanel);
 
 // Las tarjetas del panel son informativas pero tambien un acceso directo: un clic (o Enter/
 // espacio con teclado) en una fila lleva a la pantalla real donde vive ese dato.

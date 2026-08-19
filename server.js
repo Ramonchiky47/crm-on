@@ -399,6 +399,21 @@ async function generarIdPendiente() {
   return id;
 }
 
+// Resta dias a una fecha AAAA-MM-DD (aritmetica en UTC para no depender de la zona horaria
+// del proceso de Node). Usada para calcular el periodo anterior en el resumen del panel.
+function restarDiasIso(fechaIso, dias) {
+  const [y, m, d] = fechaIso.split('-').map(Number);
+  const fecha = new Date(Date.UTC(y, m - 1, d));
+  fecha.setUTCDate(fecha.getUTCDate() - dias);
+  return fecha.toISOString().slice(0, 10);
+}
+
+function diasEntre(desde, hasta) {
+  const [y1, m1, d1] = desde.split('-').map(Number);
+  const [y2, m2, d2] = hasta.split('-').map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+}
+
 // Genera un ID unico "COT-" + 12 digitos aleatorios para Cotizaciones.
 async function generarIdCotizacion() {
   let id;
@@ -3969,7 +3984,9 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
   // (que siempre es UTC): evita que "hoy" se adelante un dia por la tarde/noche en Mexico.
   const { hoy } = await db.prepare('SELECT (CURRENT_DATE)::text AS hoy').get();
   const inicioMes = `${hoy.slice(0, 7)}-01`;
-  const fechaFiltro = (req.query.fecha || hoy).slice(0, 10);
+  let desde = (req.query.desde || inicioMes).slice(0, 10);
+  let hasta = (req.query.hasta || hoy).slice(0, 10);
+  if (desde > hasta) [desde, hasta] = [hasta, desde];
   const resultado = {};
 
   if (permisos.catalogos.ver) {
@@ -4007,24 +4024,34 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
       WHERE fecha_compromiso = ? ORDER BY nombre
     `).all(hoy);
 
-    // Cotizaciones del dia (filtro por Fecha de creacion, default hoy): cuantas se hicieron,
-    // su importe por moneda (USD y MXN se suman aparte, no se mezclan), y de esas cuantas ya
-    // estan en etapa Ganada/Perdida.
+    // Resumen del periodo (filtro por Fecha de creacion, default el mes en curso): cuantas
+    // cotizaciones se crearon, cuantas de esas ya estan Ganada/Perdida, su importe por moneda
+    // (USD y MXN se suman aparte, no se mezclan), y la comparacion contra el periodo
+    // inmediato anterior de la misma duracion (igual que "vs. el mes pasado").
     const sumaPorMoneda = (lista, moneda) => lista
       .filter((c) => c.moneda === moneda)
       .reduce((acc, c) => acc + Number(c.gran_total || 0), 0);
 
-    const cotizacionesDelDia = cotizaciones.filter((c) => c.fecha_creacion === fechaFiltro);
-    const cotizacionesGanadasDelDia = cotizacionesDelDia.filter((c) => c.etapa === 'Ganada');
+    const largoPeriodo = diasEntre(desde, hasta) + 1;
+    const hastaPrevio = restarDiasIso(desde, 1);
+    const desdePrevio = restarDiasIso(hastaPrevio, largoPeriodo - 1);
+    const enRango = (fecha, ini, fin) => fecha >= ini && fecha <= fin;
 
-    resultado.filtroFecha = fechaFiltro;
-    resultado.cotizacionesRealizadas = cotizacionesDelDia.length;
-    resultado.cotizacionesRealizadasImporteUsd = sumaPorMoneda(cotizacionesDelDia, 'USD');
-    resultado.cotizacionesRealizadasImporteMxn = sumaPorMoneda(cotizacionesDelDia, 'MXN');
-    resultado.cotizacionesGanadas = cotizacionesGanadasDelDia.length;
-    resultado.cotizacionesGanadasImporteUsd = sumaPorMoneda(cotizacionesGanadasDelDia, 'USD');
-    resultado.cotizacionesGanadasImporteMxn = sumaPorMoneda(cotizacionesGanadasDelDia, 'MXN');
-    resultado.cotizacionesPerdidas = cotizacionesDelDia.filter((c) => c.etapa === 'Perdida').length;
+    const cotizacionesPeriodo = cotizaciones.filter((c) => enRango(c.fecha_creacion, desde, hasta));
+    const cotizacionesPeriodoPrevio = cotizaciones.filter((c) => enRango(c.fecha_creacion, desdePrevio, hastaPrevio));
+    const cotizacionesGanadasPeriodo = cotizacionesPeriodo.filter((c) => c.etapa === 'Ganada');
+
+    resultado.resumenPeriodo = {
+      desde, hasta, desdePrevio, hastaPrevio,
+      creadas: cotizacionesPeriodo.length,
+      creadasPrevio: cotizacionesPeriodoPrevio.length,
+      ganadas: cotizacionesGanadasPeriodo.length,
+      ganadasPrevio: cotizacionesPeriodoPrevio.filter((c) => c.etapa === 'Ganada').length,
+      ganadasImporteUsd: sumaPorMoneda(cotizacionesGanadasPeriodo, 'USD'),
+      ganadasImporteMxn: sumaPorMoneda(cotizacionesGanadasPeriodo, 'MXN'),
+      perdidas: cotizacionesPeriodo.filter((c) => c.etapa === 'Perdida').length,
+      perdidasPrevio: cotizacionesPeriodoPrevio.filter((c) => c.etapa === 'Perdida').length,
+    };
   }
 
   if (permisos.ordenes.ver) {

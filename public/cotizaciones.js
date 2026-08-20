@@ -1238,6 +1238,7 @@ async function clonarCotizacion(id) {
 // ---------- Detalle de una cotizacion (clic en la fila) ----------
 
 const modalOverlay = document.getElementById('modal-overlay');
+const modalCaja = document.getElementById('modal-caja');
 const modalContenido = document.getElementById('modal-contenido');
 const modalCerrar = document.getElementById('modal-cerrar');
 
@@ -1309,6 +1310,7 @@ async function abrirNotasNegocio(id, nombre) {
     });
   }
 
+  modalCaja.classList.remove('modal-caja-ancha');
   modalOverlay.hidden = false;
 }
 
@@ -1341,47 +1343,54 @@ async function abrirDetalleCotizacion(id) {
         </div>
       </form>
     ` : ''}
-    <div class="ficha-detalle">
-      ${campoFicha('ID', c.id_cotizacion)}
-      ${campoFicha('Negocio', c.negocio_nombre)}
-      ${campoFicha('Contacto', c.contacto_nombre)}
-      ${campoFicha('Hotel / Local', c.destino_nombre)}
-      ${campoFicha('Representante de ventas', c.representante_nombre)}
-      ${campoFicha('Moneda', c.moneda)}
-      ${campoFicha('Fecha de creación', c.fecha_creacion)}
-      ${campoFicha('Fecha de vencimiento', c.fecha_vencimiento)}
-      <div><span>Estatus</span><p>${celdaEstatus(c.estatus)}</p></div>
-      ${campoFicha('Método de pago', c.metodo_pago)}
-      ${campoFicha('Lugar de entrega', c.lugar_entrega)}
-      ${campoFicha('Tiempo de entrega', c.tiempo_entrega)}
-      ${campoFicha('Fecha de seguimiento', c.fecha_seguimiento)}
-      ${c.etapa === 'Perdida' ? campoFicha('Motivo de pérdida', c.motivo_perdida) : ''}
-    </div>
-    ${c.observaciones ? `<p><strong>Observaciones:</strong></p><p class="observaciones-cotizacion">${observacionesConClausulaResaltada(c.observaciones)}</p>` : ''}
-    <h3>Productos (${c.items.length})</h3>
-    <div class="tabla-scroll">
-      <table>
-        <thead><tr><th>Producto</th><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th></tr></thead>
-        <tbody>
-          ${c.items.map((it) => `
-            <tr>
-              <td>${escaparHtml(it.producto_item)}</td>
-              <td>${escaparHtml(it.producto_descripcion || '')}</td>
-              <td>${formatoImporte(it.cantidad)}</td>
-              <td>${formatoImporte(it.precio_unitario)}</td>
-              <td>${formatoImporte(it.total)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-    <div class="ficha-detalle resumen-cotizacion">
-      <div><span>Sub Total</span><p>${formatoImporte(c.subtotal)}</p></div>
-      <div><span>${textoDescuento(c)}</span><p>${formatoImporte(c.descuento_monto)}</p></div>
-      <div><span>IVA (16%)</span><p>${formatoImporte(c.iva)}</p></div>
-      <div><span>Gran Total</span><p>${formatoImporte(c.gran_total)}</p></div>
+    <div class="detalle-cotizacion-grid">
+      <div class="detalle-cotizacion-info">
+        <div class="ficha-detalle">
+          ${campoFicha('ID', c.id_cotizacion)}
+          ${campoFicha('Negocio', c.negocio_nombre)}
+          ${campoFicha('Contacto', c.contacto_nombre)}
+          ${campoFicha('Hotel / Local', c.destino_nombre)}
+          ${campoFicha('Representante de ventas', c.representante_nombre)}
+          ${campoFicha('Moneda', c.moneda)}
+          ${campoFicha('Fecha de creación', c.fecha_creacion)}
+          ${campoFicha('Fecha de vencimiento', c.fecha_vencimiento)}
+          <div><span>Estatus</span><p>${celdaEstatus(c.estatus)}</p></div>
+          ${campoFicha('Método de pago', c.metodo_pago)}
+          ${campoFicha('Lugar de entrega', c.lugar_entrega)}
+          ${campoFicha('Tiempo de entrega', c.tiempo_entrega)}
+          ${campoFicha('Fecha de seguimiento', c.fecha_seguimiento)}
+          ${c.etapa === 'Perdida' ? campoFicha('Motivo de pérdida', c.motivo_perdida) : ''}
+        </div>
+        ${c.observaciones ? `<p><strong>Observaciones:</strong></p><p class="observaciones-cotizacion">${observacionesConClausulaResaltada(c.observaciones)}</p>` : ''}
+      </div>
+      <div class="detalle-cotizacion-productos">
+        <h3>Productos (${c.items.length})</h3>
+        <div class="tabla-scroll">
+          <table>
+            <thead><tr><th>Producto</th><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th></tr></thead>
+            <tbody>
+              ${c.items.map((it) => `
+                <tr>
+                  <td>${escaparHtml(it.producto_item)}</td>
+                  <td>${escaparHtml(it.producto_descripcion || '')}</td>
+                  <td>${formatoImporte(it.cantidad)}</td>
+                  <td>${formatoImporte(it.precio_unitario)}</td>
+                  <td>${formatoImporte(it.total)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div class="ficha-detalle resumen-cotizacion">
+          <div><span>Sub Total</span><p>${formatoImporte(c.subtotal)}</p></div>
+          <div><span>${textoDescuento(c)}</span><p>${formatoImporte(c.descuento_monto)}</p></div>
+          <div><span>IVA (16%)</span><p>${formatoImporte(c.iva)}</p></div>
+          <div><span>Gran Total</span><p>${formatoImporte(c.gran_total)}</p></div>
+        </div>
+      </div>
     </div>
   `;
+  modalCaja.classList.add('modal-caja-ancha');
 
   const formPerdida = document.getElementById('form-marcar-perdida-cotizacion');
   if (formPerdida) {
@@ -1417,6 +1426,7 @@ async function marcarEtapaCotizacion(id, etapa, motivoPerdida) {
 function cerrarModal() {
   modalOverlay.hidden = true;
   modalContenido.innerHTML = '';
+  modalCaja.classList.remove('modal-caja-ancha');
 }
 
 modalCerrar.addEventListener('click', cerrarModal);

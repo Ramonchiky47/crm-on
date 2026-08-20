@@ -595,9 +595,9 @@ async function empresasDeDestinosBatch(destinoIds) {
 // para destinos las tareas solo se derivan por ese camino, a diferencia de los contactos).
 async function conteosAsociadosDestinosBatch(destinoIds) {
   const vacio = new Map();
-  if (!destinoIds.length) return { cotizaciones: vacio, ordenes: vacio, tareas: vacio };
+  if (!destinoIds.length) return { cotizaciones: vacio, ordenes: vacio, tareas: vacio, contactos: vacio };
 
-  const [cotizaciones, ordenes, tareas] = await Promise.all([
+  const [cotizaciones, ordenes, tareas, contactos] = await Promise.all([
     db.prepare('SELECT destino_id, COUNT(*) c FROM cotizaciones WHERE destino_id = ANY(?) GROUP BY destino_id').all(destinoIds),
     db.prepare('SELECT destino_id, COUNT(*) c FROM ordenes WHERE destino_id = ANY(?) GROUP BY destino_id').all(destinoIds),
     db.prepare(`
@@ -606,10 +606,11 @@ async function conteosAsociadosDestinosBatch(destinoIds) {
       WHERE o.destino_id = ANY(?)
       GROUP BY o.destino_id
     `).all(destinoIds),
+    db.prepare('SELECT destino_id, COUNT(*) c FROM contacto_destinos WHERE destino_id = ANY(?) GROUP BY destino_id').all(destinoIds),
   ]);
 
   const aMapa = (filas) => new Map(filas.map((f) => [f.destino_id, Number(f.c)]));
-  return { cotizaciones: aMapa(cotizaciones), ordenes: aMapa(ordenes), tareas: aMapa(tareas) };
+  return { cotizaciones: aMapa(cotizaciones), ordenes: aMapa(ordenes), tareas: aMapa(tareas), contactos: aMapa(contactos) };
 }
 
 async function reemplazarEmpresasDestino(destinoId, empresas) {
@@ -731,6 +732,7 @@ app.get('/api/destinos', requirePermiso('catalogos', 'ver'), ar(async (req, res)
     cotizaciones_count: conteos.cotizaciones.get(d.id_destino) || 0,
     ordenes_count: conteos.ordenes.get(d.id_destino) || 0,
     tareas_count: conteos.tareas.get(d.id_destino) || 0,
+    contactos_count: conteos.contactos.get(d.id_destino) || 0,
   })));
 }));
 
@@ -744,6 +746,7 @@ app.get('/api/destinos/:id', requirePermiso('catalogos', 'ver'), ar(async (req, 
     cotizaciones_count: conteos.cotizaciones.get(destino.id_destino) || 0,
     ordenes_count: conteos.ordenes.get(destino.id_destino) || 0,
     tareas_count: conteos.tareas.get(destino.id_destino) || 0,
+    contactos_count: conteos.contactos.get(destino.id_destino) || 0,
   });
 }));
 

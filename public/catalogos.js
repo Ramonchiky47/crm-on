@@ -420,6 +420,7 @@ function renderizarDestinos(destinos) {
       <td>${d.cotizaciones_count ? `<button type="button" class="btn-mini btn-ver-asociados" data-entidad="destinos" data-id="${d.id_destino}" data-tipo="cotizaciones">${d.cotizaciones_count}</button>` : '0'}</td>
       <td>${d.ordenes_count ? `<button type="button" class="btn-mini btn-ver-asociados" data-entidad="destinos" data-id="${d.id_destino}" data-tipo="ordenes">${d.ordenes_count}</button>` : '0'}</td>
       <td>${d.tareas_count ? `<button type="button" class="btn-mini btn-ver-asociados" data-entidad="destinos" data-id="${d.id_destino}" data-tipo="tareas">${d.tareas_count}</button>` : '0'}</td>
+      <td>${d.contactos_count ? `<button type="button" class="btn-mini btn-ver-asociados" data-entidad="destinos" data-id="${d.id_destino}" data-tipo="contactos">${d.contactos_count}</button>` : '0'}</td>
       <td class="acciones">
         ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${d.id_destino}">Editar</button>` : ''}
         ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${d.id_destino}">Borrar</button>` : ''}
@@ -429,7 +430,7 @@ function renderizarDestinos(destinos) {
   }
 }
 
-const columnasNumericasDestinos = new Set(['cotizaciones_count', 'ordenes_count', 'tareas_count']);
+const columnasNumericasDestinos = new Set(['cotizaciones_count', 'ordenes_count', 'tareas_count', 'contactos_count']);
 const columnasListaDestinos = new Set(['empresas', 'grupos', 'cadenas']);
 const ordenDestinos = { campo: null, direccion: 1 };
 

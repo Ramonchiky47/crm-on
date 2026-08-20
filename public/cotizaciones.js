@@ -570,6 +570,7 @@ const btnCancelarCotizacion = document.getElementById('btn-cancelar-cotizacion')
 const btnEnviarTareasSeguimiento = document.getElementById('btn-enviar-tareas-seguimiento');
 const tablaCotizaciones = document.getElementById('tabla-cotizaciones');
 
+const cotizacionMostrarTotales = document.getElementById('cotizacion-mostrar-totales');
 const resumenSubtotal = document.getElementById('resumen-subtotal');
 const resumenDescuento = document.getElementById('resumen-descuento');
 const resumenIva = document.getElementById('resumen-iva');
@@ -851,6 +852,7 @@ function renderizarPartidas() {
       <td><input type="text" class="partida-producto" list="lista-productos" placeholder="Código" value="${escaparHtml(it.producto_item || '')}" ${sinMoneda ? 'disabled title="Selecciona primero la Moneda"' : ''} /></td>
       <td><input type="number" class="partida-cantidad" step="1" min="0" value="${it.cantidad || ''}" /></td>
       <td><input type="number" class="partida-precio" step="0.01" min="0" value="${it.precio_unitario || ''}" /></td>
+      <td class="celda-check"><input type="checkbox" class="partida-causa-impuesto" ${it.causa_impuesto !== false ? 'checked' : ''} title="Si se desmarca, esta partida no suma IVA" /></td>
       <td class="partida-total">${formatoImporte((it.cantidad || 0) * (it.precio_unitario || 0))}</td>
       <td><button type="button" class="btn-quitar-partida" title="Quitar">✕</button></td>
     </tr>
@@ -858,12 +860,22 @@ function renderizarPartidas() {
 }
 
 function calcularResumen() {
-  const subtotal = partidas.reduce((acc, it) => acc + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), 0);
+  const montos = partidas.map((it) => ({
+    monto: (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0),
+    gravable: it.causa_impuesto !== false,
+  }));
+  const subtotal = montos.reduce((acc, m) => acc + m.monto, 0);
+  const subtotalGravable = montos.filter((m) => m.gravable).reduce((acc, m) => acc + m.monto, 0);
+
   const valor = Math.max(Number(cotizacionDescuento.value) || 0, 0);
   // Como importe, el descuento nunca puede rebasar el Sub Total (evita un Gran Total negativo).
   const descuentoMonto = cotizacionDescuentoTipo.value === 'monto' ? Math.min(valor, subtotal) : subtotal * (valor / 100);
+
+  // El descuento se prorratea entre lo gravable y lo no gravable, en proporcion a su peso en el Sub Total.
+  const descuentoGravable = subtotal > 0 ? descuentoMonto * (subtotalGravable / subtotal) : 0;
+  const iva = (subtotalGravable - descuentoGravable) * 0.16;
+
   const base = subtotal - descuentoMonto;
-  const iva = base * 0.16;
   const granTotal = base + iva;
   return { subtotal, descuentoMonto, iva, granTotal };
 }
@@ -899,7 +911,7 @@ btnAgregarPartida.addEventListener('click', () => {
     cotizacionMoneda.focus();
     return;
   }
-  partidas.push({ producto_item: '', cantidad: 1, precio_unitario: 0 });
+  partidas.push({ producto_item: '', cantidad: 1, precio_unitario: 0, causa_impuesto: true });
   renderizarPartidas();
   actualizarResumen();
   mostrarDetallesGeneralesCotizacion(false);
@@ -925,6 +937,10 @@ tablaPartidas.addEventListener('input', (e) => {
         tr.querySelector('.partida-precio').value = sugerido;
       }
     }
+  } else if (e.target.classList.contains('partida-causa-impuesto')) {
+    partidas[i].causa_impuesto = e.target.checked;
+    actualizarResumen();
+    return;
   } else {
     return;
   }
@@ -1084,6 +1100,7 @@ formCotizacion.addEventListener('submit', async (e) => {
     lugar_entrega: cotizacionLugarEntrega.value.trim(),
     tiempo_entrega: cotizacionTiempoEntrega.value.trim(),
     observaciones: cotizacionObservaciones.value.trim(),
+    mostrar_totales: cotizacionMostrarTotales.checked,
     items: partidas.filter((it) => it.producto_item),
   };
 
@@ -1164,8 +1181,10 @@ function cargarCotizacionEnFormulario(c) {
     producto_item: it.producto_item,
     cantidad: it.cantidad,
     precio_unitario: it.precio_unitario,
+    causa_impuesto: it.causa_impuesto !== false,
   }));
   renderizarPartidas();
+  cotizacionMostrarTotales.checked = c.mostrar_totales !== false;
   actualizarResumen();
 
   cotizacionFechaCreacion.value = c.fecha_creacion || '';
@@ -1223,8 +1242,10 @@ async function clonarCotizacion(id) {
     producto_item: it.producto_item,
     cantidad: it.cantidad,
     precio_unitario: it.precio_unitario,
+    causa_impuesto: it.causa_impuesto !== false,
   }));
   renderizarPartidas();
+  cotizacionMostrarTotales.checked = c.mostrar_totales !== false;
   actualizarResumen();
 
   mostrarDetallesGeneralesCotizacion(true);
@@ -1318,6 +1339,7 @@ async function abrirDetalleCotizacion(id) {
   const res = await fetch(`/api/cotizaciones/${encodeURIComponent(id)}`);
   if (!res.ok) return;
   const c = await res.json();
+  c.mostrarImpuesto = c.items.some((it) => it.causa_impuesto !== false);
 
   modalContenido.innerHTML = `
     <h2>${escaparHtml(c.nombre)}</h2>
@@ -1367,7 +1389,11 @@ async function abrirDetalleCotizacion(id) {
         <h3>Productos (${c.items.length})</h3>
         <div class="tabla-scroll">
           <table>
-            <thead><tr><th>Producto</th><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th></tr></thead>
+            <thead><tr>
+              <th>Producto</th><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th>
+              ${c.mostrarImpuesto ? '<th>Impuesto %</th><th>Impuesto</th>' : ''}
+              <th>Total</th>
+            </tr></thead>
             <tbody>
               ${c.items.map((it) => `
                 <tr>
@@ -1375,18 +1401,21 @@ async function abrirDetalleCotizacion(id) {
                   <td>${escaparHtml(it.producto_descripcion || '')}</td>
                   <td>${formatoImporte(it.cantidad)}</td>
                   <td>${formatoImporte(it.precio_unitario)}</td>
+                  ${c.mostrarImpuesto ? `<td>${it.impuesto_porcentaje}%</td><td>${formatoImporte(it.impuesto_monto)}</td>` : ''}
                   <td>${formatoImporte(it.total)}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
         </div>
+        ${c.mostrar_totales === false ? '' : `
         <div class="ficha-detalle resumen-cotizacion">
           <div><span>Sub Total</span><p>${formatoImporte(c.subtotal)}</p></div>
           <div><span>${textoDescuento(c)}</span><p>${formatoImporte(c.descuento_monto)}</p></div>
-          <div><span>IVA (16%)</span><p>${formatoImporte(c.iva)}</p></div>
+          ${c.mostrarImpuesto ? `<div><span>IVA (16%)</span><p>${formatoImporte(c.iva)}</p></div>` : ''}
           <div><span>Gran Total</span><p>${formatoImporte(c.gran_total)}</p></div>
         </div>
+        `}
       </div>
     </div>
   `;
@@ -1711,6 +1740,7 @@ function formatoCantidad(valor) {
 }
 
 function generarHtmlCotizacionPDF(c) {
+  const mostrarImpuesto = c.items.some((it) => it.causa_impuesto !== false);
   const filasItems = c.items.map((it) => `
     <tr>
       <td>
@@ -1719,6 +1749,7 @@ function generarHtmlCotizacionPDF(c) {
       </td>
       <td class="num">${formatoCantidad(it.cantidad)}</td>
       <td class="num">${money(it.precio_unitario)}</td>
+      ${mostrarImpuesto ? `<td class="num">${it.impuesto_porcentaje}%</td><td class="num">${money(it.impuesto_monto)}</td>` : ''}
       <td class="num">${money(it.total)}</td>
     </tr>
   `).join('');
@@ -1809,17 +1840,23 @@ function generarHtmlCotizacionPDF(c) {
 
   <table>
     <thead>
-      <tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unitario</th><th class="num">Total</th></tr>
+      <tr>
+        <th>Producto</th><th class="num">Cant.</th><th class="num">P. unitario</th>
+        ${mostrarImpuesto ? '<th class="num">Impuesto %</th><th class="num">Impuesto</th>' : ''}
+        <th class="num">Total</th>
+      </tr>
     </thead>
     <tbody>${filasItems}</tbody>
   </table>
 
+  ${c.mostrar_totales === false ? '' : `
   <div class="totales">
     <div><span>Subtotal</span><span>${money(c.subtotal)}</span></div>
     ${c.descuento_monto ? `<div><span>${textoDescuento(c)}</span><span>-${money(c.descuento_monto)}</span></div>` : ''}
-    <div><span>IVA (16%)</span><span>${money(c.iva)}</span></div>
+    ${mostrarImpuesto ? `<div><span>IVA (16%)</span><span>${money(c.iva)}</span></div>` : ''}
     <div class="gran-total"><span>Total</span><span>${money(c.gran_total)}</span></div>
   </div>
+  `}
 
   <div class="condiciones">
     <span class="etiqueta">Condiciones de compra</span>

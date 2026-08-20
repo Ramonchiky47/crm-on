@@ -1672,6 +1672,11 @@ td.acciones {
   max-width: none;
 }
 
+td.celda-check {
+  text-align: center;
+  max-width: none;
+}
+
 #estado-vacio {
   text-align: center;
   color: #757575;

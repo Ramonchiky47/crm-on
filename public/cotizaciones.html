@@ -225,7 +225,7 @@
           <table>
             <thead>
               <tr>
-                <th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th><th></th>
+                <th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th title="Si se desmarca, esta partida no suma IVA">Causa impuesto</th><th>Total</th><th></th>
               </tr>
             </thead>
             <tbody id="tabla-partidas"></tbody>
@@ -233,6 +233,13 @@
         </div>
         <div class="acciones-form">
           <button type="button" id="btn-agregar-partida">+ Agregar producto</button>
+        </div>
+
+        <div class="acciones-form">
+          <span>
+            <input type="checkbox" id="cotizacion-mostrar-totales" checked />
+            Mostrar totales en la cotización
+          </span>
         </div>
 
         <div class="ficha-detalle resumen-cotizacion">

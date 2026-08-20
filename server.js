@@ -428,15 +428,26 @@ async function generarIdCotizacion() {
 // Sub Total = suma de los totales de fila
 // Descuento (monto) = Sub Total * (% Descuento / 100), o el importe fijo capturado si el
 // descuento se aplica como monto (nunca mayor al Sub Total, para no generar un total negativo)
-// IVA = (Sub Total - Descuento) * 0.16
+// El descuento se prorratea entre partidas gravables y no gravables (causa_impuesto), en
+// proporcion a su peso en el Sub Total, antes de calcular el IVA solo sobre lo gravable.
+// IVA = (Sub Total gravable - Descuento prorrateado a lo gravable) * 0.16
 // Gran Total = (Sub Total - Descuento) + IVA
 function calcularTotalesCotizacion(items, descuento) {
-  const subtotal = items.reduce((acc, it) => acc + Number(it.cantidad) * Number(it.precio_unitario), 0);
+  const detalles = items.map((it) => ({
+    monto: Number(it.cantidad) * Number(it.precio_unitario),
+    gravable: it.causa_impuesto !== false,
+  }));
+  const subtotal = detalles.reduce((acc, d) => acc + d.monto, 0);
+  const subtotalGravable = detalles.filter((d) => d.gravable).reduce((acc, d) => acc + d.monto, 0);
+
   const tipo = (descuento && descuento.tipo) === 'monto' ? 'monto' : 'porcentaje';
   const valor = Math.max(Number(descuento && descuento.valor) || 0, 0);
   const descuentoMonto = tipo === 'monto' ? Math.min(valor, subtotal) : subtotal * (valor / 100);
+
+  const descuentoGravable = subtotal > 0 ? descuentoMonto * (subtotalGravable / subtotal) : 0;
+  const iva = (subtotalGravable - descuentoGravable) * 0.16;
+
   const base = subtotal - descuentoMonto;
-  const iva = base * 0.16;
   const granTotal = base + iva;
   return { subtotal, descuentoMonto, iva, granTotal };
 }
@@ -2253,7 +2264,13 @@ async function itemsDeCotizacion(cotizacionId) {
     WHERE ci.cotizacion_id = ?
     ORDER BY ci.id
   `).all(cotizacionId);
-  return filas.map((it) => ({ ...it, total: it.cantidad * it.precio_unitario }));
+  return filas.map((it) => {
+    const total = it.cantidad * it.precio_unitario;
+    const gravable = it.causa_impuesto !== false;
+    const impuestoPorcentaje = gravable ? 16 : 0;
+    const impuestoMonto = gravable ? total * 0.16 : 0;
+    return { ...it, total, impuesto_porcentaje: impuestoPorcentaje, impuesto_monto: impuestoMonto, total_con_impuesto: total + impuestoMonto };
+  });
 }
 
 async function cotizacionConDetalle(id) {
@@ -2297,8 +2314,8 @@ async function guardarItems(db, cotizacionId, items) {
   await db.prepare('DELETE FROM cotizacion_items WHERE cotizacion_id = ?').run(cotizacionId);
   for (const it of items) {
     await db.prepare(`
-      INSERT INTO cotizacion_items (cotizacion_id, producto_item, cantidad, precio_unitario) VALUES (?, ?, ?, ?)
-    `).run(cotizacionId, it.producto_item, Number(it.cantidad), Number(it.precio_unitario));
+      INSERT INTO cotizacion_items (cotizacion_id, producto_item, cantidad, precio_unitario, causa_impuesto) VALUES (?, ?, ?, ?, ?)
+    `).run(cotizacionId, it.producto_item, Number(it.cantidad), Number(it.precio_unitario), it.causa_impuesto !== false);
   }
 }
 
@@ -2389,8 +2406,8 @@ app.post('/api/cotizaciones', requirePermiso('catalogos', 'editar'), ar(async (r
         id_cotizacion, negocio_id, nombre, contacto_id, destino_id, moneda, etapa,
         descuento_tipo, descuento_porcentaje, subtotal, descuento_monto, iva, gran_total, fecha_creacion,
         fecha_vencimiento, fecha_seguimiento, metodo_pago, lugar_entrega, tiempo_entrega, observaciones,
-        usuario_id, representante_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (CURRENT_DATE)::text, ?, ?, ?, ?, ?, ?, ?, ?)
+        usuario_id, representante_id, mostrar_totales
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (CURRENT_DATE)::text, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, req.body.negocio_id, nombre, req.body.contacto_id || null, req.body.destino_id || null, req.body.moneda, etapa,
       descuentoTipo, descuentoPorcentajeGuardado, subtotal, descuentoMonto, iva, granTotal,
@@ -2401,7 +2418,8 @@ app.post('/api/cotizaciones', requirePermiso('catalogos', 'editar'), ar(async (r
       (req.body.tiempo_entrega || '').trim() || null,
       (req.body.observaciones || '').trim() || null,
       req.session.usuarioId,
-      req.body.representante_id || null
+      req.body.representante_id || null,
+      req.body.mostrar_totales !== false
     );
     await guardarItems(db, id, req.body.items);
     await avanzarNegocioSiTodoGanado(db, req.body.negocio_id);
@@ -2447,7 +2465,7 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
         negocio_id = ?, nombre = ?, contacto_id = ?, destino_id = ?, moneda = ?, etapa = ?,
         descuento_tipo = ?, descuento_porcentaje = ?, subtotal = ?, descuento_monto = ?, iva = ?, gran_total = ?,
         fecha_vencimiento = ?, fecha_seguimiento = ?, metodo_pago = ?, lugar_entrega = ?,
-        tiempo_entrega = ?, observaciones = ?, representante_id = ?
+        tiempo_entrega = ?, observaciones = ?, representante_id = ?, mostrar_totales = ?
       WHERE id_cotizacion = ?
     `).run(
       req.body.negocio_id, nombre, req.body.contacto_id || null, req.body.destino_id || null, req.body.moneda, etapa,
@@ -2459,6 +2477,7 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
       (req.body.tiempo_entrega || '').trim() || null,
       (req.body.observaciones || '').trim() || null,
       req.body.representante_id || null,
+      req.body.mostrar_totales !== false,
       req.params.id
     );
     await guardarItems(db, req.params.id, req.body.items);
@@ -2752,7 +2771,17 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
   doc.y = yCaja + alturaCaja + 26;
 
   // ---------- Tabla de partidas ----------
-  const columnas = [
+  // El Impuesto solo se muestra si al menos una partida "Causa impuesto"; si ninguna causa,
+  // las columnas de Impuesto se omiten por completo (no solo se muestran en 0).
+  const mostrarImpuesto = cotizacion.items.some((it) => it.causa_impuesto !== false);
+  const columnas = mostrarImpuesto ? [
+    { etiqueta: 'Producto', ancho: 162 },
+    { etiqueta: 'Cant.', ancho: 40 },
+    { etiqueta: 'P. unitario', ancho: 80 },
+    { etiqueta: 'Imp. %', ancho: 65 },
+    { etiqueta: 'Impuesto', ancho: 75 },
+    { etiqueta: 'Total', ancho: 90 },
+  ] : [
     { etiqueta: 'Producto', ancho: 232 },
     { etiqueta: 'Cant.', ancho: 60 },
     { etiqueta: 'P. unitario', ancho: 110 },
@@ -2807,7 +2836,15 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
     x += columnas[1].ancho;
     doc.text(formatoMoneda(it.precio_unitario), x, y, { width: columnas[2].ancho, align: 'right' });
     x += columnas[2].ancho;
-    doc.font('Helvetica-Bold').text(formatoMoneda(it.total), x, y, { width: columnas[3].ancho, align: 'right' });
+    if (mostrarImpuesto) {
+      doc.text(`${it.impuesto_porcentaje}%`, x, y, { width: columnas[3].ancho, align: 'right' });
+      x += columnas[3].ancho;
+      doc.text(formatoMoneda(it.impuesto_monto), x, y, { width: columnas[4].ancho, align: 'right' });
+      x += columnas[4].ancho;
+      doc.font('Helvetica-Bold').text(formatoMoneda(it.total), x, y, { width: columnas[5].ancho, align: 'right' });
+    } else {
+      doc.font('Helvetica-Bold').text(formatoMoneda(it.total), x, y, { width: columnas[3].ancho, align: 'right' });
+    }
 
     doc.y = y - 8 + alturaFila;
     lineaDivisoriaPdf(doc, { y: doc.y });
@@ -2816,32 +2853,36 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
   doc.y += 18;
 
   // ---------- Totales ----------
-  if (doc.y > 660) { doc.addPage(); doc.y = 50; }
-  const anchoTotales = 230;
-  const xTotales = PDF_R - anchoTotales;
+  if (cotizacion.mostrar_totales === false) {
+    doc.moveDown(0.5);
+  } else {
+    if (doc.y > 660) { doc.addPage(); doc.y = 50; }
+    const anchoTotales = 230;
+    const xTotales = PDF_R - anchoTotales;
 
-  function filaTotal(etiqueta, valor, { colorValor = PDF_TINTA } = {}) {
-    const y = doc.y;
-    doc.font('Helvetica').fontSize(9).fillColor(PDF_GRIS).text(etiqueta, xTotales, y, { width: anchoTotales - 100 });
-    doc.font('Helvetica').fontSize(9).fillColor(colorValor).text(valor, xTotales, y, { width: anchoTotales, align: 'right' });
-    doc.y = y + doc.currentLineHeight() + 5;
+    function filaTotal(etiqueta, valor, { colorValor = PDF_TINTA } = {}) {
+      const y = doc.y;
+      doc.font('Helvetica').fontSize(9).fillColor(PDF_GRIS).text(etiqueta, xTotales, y, { width: anchoTotales - 100 });
+      doc.font('Helvetica').fontSize(9).fillColor(colorValor).text(valor, xTotales, y, { width: anchoTotales, align: 'right' });
+      doc.y = y + doc.currentLineHeight() + 5;
+    }
+
+    filaTotal('Subtotal', formatoMoneda(cotizacion.subtotal));
+    if (Number(cotizacion.descuento_monto) > 0) {
+      const etiquetaDescuento = cotizacion.descuento_tipo === 'monto' ? 'Descuento' : `Descuento (${cotizacion.descuento_porcentaje}%)`;
+      filaTotal(etiquetaDescuento, `-${formatoMoneda(cotizacion.descuento_monto)}`, { colorValor: PDF_ROJO });
+    }
+    if (mostrarImpuesto) filaTotal('IVA (16%)', formatoMoneda(cotizacion.iva));
+    doc.moveDown(0.1);
+
+    lineaDivisoriaPdf(doc, { y: doc.y, color: PDF_TINTA, grosor: 1.2 });
+    doc.moveDown(0.5);
+
+    doc.font('Helvetica-Bold').fontSize(9.5).fillColor(PDF_TINTA).text('Total', xTotales, doc.y, { width: anchoTotales - 130 });
+    doc.font('Helvetica-Bold').fontSize(15).fillColor(PDF_ROJO).text(formatoMoneda(cotizacion.gran_total), xTotales, doc.y - 4, { width: anchoTotales, align: 'right' });
+
+    doc.y += 12;
   }
-
-  filaTotal('Subtotal', formatoMoneda(cotizacion.subtotal));
-  if (Number(cotizacion.descuento_monto) > 0) {
-    const etiquetaDescuento = cotizacion.descuento_tipo === 'monto' ? 'Descuento' : `Descuento (${cotizacion.descuento_porcentaje}%)`;
-    filaTotal(etiquetaDescuento, `-${formatoMoneda(cotizacion.descuento_monto)}`, { colorValor: PDF_ROJO });
-  }
-  filaTotal('IVA (16%)', formatoMoneda(cotizacion.iva));
-  doc.moveDown(0.1);
-
-  lineaDivisoriaPdf(doc, { y: doc.y, color: PDF_TINTA, grosor: 1.2 });
-  doc.moveDown(0.5);
-
-  doc.font('Helvetica-Bold').fontSize(9.5).fillColor(PDF_TINTA).text('Total', xTotales, doc.y, { width: anchoTotales - 130 });
-  doc.font('Helvetica-Bold').fontSize(15).fillColor(PDF_ROJO).text(formatoMoneda(cotizacion.gran_total), xTotales, doc.y - 4, { width: anchoTotales, align: 'right' });
-
-  doc.y += 12;
   doc.fillColor(PDF_TINTA);
 
   // ---------- Condiciones de compra ----------

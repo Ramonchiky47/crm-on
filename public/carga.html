@@ -39,6 +39,16 @@
           Archivo CSV
           <input type="file" id="archivo-csv" accept=".csv,text/csv" required />
         </label>
+        <span>
+          <input type="checkbox" id="es-netsuite" />
+          Es una exportación de NetSuite (columnas "Número de documento", "Estado", etc. e importes con "$" y comas)
+        </span>
+        <p class="pista">
+          Con esa casilla marcada se ajustan automáticamente las columnas, la codificación de acentos y los
+          importes. Como el export de NetSuite no trae Hotel/Local ni Contacto, una orden nueva se crea sin esos
+          datos (se pueden agregar luego a mano); una orden que ya existe solo actualiza estatus, importes y
+          seguimiento, igual que con la plantilla normal.
+        </p>
         <div class="acciones-form">
           <button type="submit" id="btn-cargar">Cargar archivo</button>
         </div>

@@ -38,8 +38,120 @@ async function leerArchivoComoTexto(archivo) {
   }
 }
 
+// ---------- Carga desde exportacion de NetSuite ("Vista predeterminada Transaccion") ----------
+// El archivo que exporta NetSuite suele llegar con los acentos codificados dos veces (UTF-8
+// leido como Latin-1 y vuelto a guardar como UTF-8: "Ã³" en vez de "ó"). Esto reinterpreta cada
+// caracter como el byte original y lo vuelve a decodificar como UTF-8; si el texto ya estaba
+// bien (no es mojibake), la decodificacion falla y se deja el texto tal cual.
+function arreglarMojibake(texto) {
+  try {
+    const bytes = Uint8Array.from(texto, (c) => c.charCodeAt(0));
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return texto;
+  }
+}
+
+// Parser de CSV con comillas (mismo criterio que el parsearCSV del servidor): separa por comas
+// fuera de comillas, respeta comillas dobles escapadas ("") y saltos de linea dentro de campos.
+function analizarCSV(texto) {
+  const filas = [];
+  let fila = [];
+  let campo = '';
+  let dentroComillas = false;
+
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+    if (dentroComillas) {
+      if (c === '"') {
+        if (texto[i + 1] === '"') { campo += '"'; i++; } else { dentroComillas = false; }
+      } else {
+        campo += c;
+      }
+    } else if (c === '"') {
+      dentroComillas = true;
+    } else if (c === ',') {
+      fila.push(campo);
+      campo = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && texto[i + 1] === '\n') i++;
+      fila.push(campo);
+      filas.push(fila);
+      fila = [];
+      campo = '';
+    } else {
+      campo += c;
+    }
+  }
+  if (campo !== '' || fila.length) { fila.push(campo); filas.push(fila); }
+  return filas.filter((f) => f.length > 1 || f[0] !== '');
+}
+
+function normalizarEncabezado(h) {
+  return h.trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // quita acentos para comparar
+}
+
+// Encabezado normalizado (sin acentos) de la exportacion de NetSuite -> columna que espera
+// /api/ordenes/importar-csv. Las columnas de NetSuite que no aparecen aqui (SAT, XML, bancos,
+// etc.) se ignoran: no tienen equivalente en Ordenes.
+const MAPA_ENCABEZADOS_NETSUITE = {
+  'fecha': 'fecha',
+  'imprimir': 'imprimir',
+  'numero de documento': 'id',
+  'nombre': 'nombre',
+  'numero de oc/cheque': 'numero_oc',
+  'estado': 'estatus_sistema',
+  'numeros de seguimiento': 'numero_seguimiento',
+  'nota': 'nota',
+  'moneda': 'moneda',
+  'importe (moneda extranjera)': 'importe_moneda_extranjera',
+  'importe': 'importe',
+};
+
+function limpiarImporte(valor) {
+  return valor.replace(/[^0-9.-]/g, '');
+}
+
+function serializarCampoCSV(valor) {
+  const texto = valor === null || valor === undefined ? '' : String(valor);
+  return /[",\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
+}
+
+// Convierte el texto (ya sin mojibake) de una exportacion de NetSuite al formato de CSV que
+// espera /api/ordenes/importar-csv (mismos encabezados que la plantilla de la app).
+function transformarNetSuiteAOrdenes(texto) {
+  const filas = analizarCSV(texto);
+  if (!filas.length) return '';
+  const encabezadosOrigen = filas[0].map(normalizarEncabezado);
+
+  const columnasDestino = ['id', 'fecha', 'imprimir', 'nombre', 'numero_oc', 'estatus_sistema', 'numero_seguimiento', 'nota', 'moneda', 'importe_moneda_extranjera', 'importe'];
+  const salida = [columnasDestino.join(',')];
+
+  for (const fila of filas.slice(1)) {
+    const registro = {};
+    encabezadosOrigen.forEach((h, idx) => {
+      const destino = MAPA_ENCABEZADOS_NETSUITE[h];
+      if (!destino) return;
+      registro[destino] = (fila[idx] || '').trim();
+    });
+    if (!registro.id) continue; // fila vacia o de otro tipo de transaccion sin numero de documento
+
+    if (registro.numero_seguimiento) {
+      registro.numero_seguimiento = registro.numero_seguimiento.replace(/<br\s*\/?>/gi, '; ');
+    }
+    if (registro.importe) registro.importe = limpiarImporte(registro.importe);
+    if (registro.importe_moneda_extranjera) registro.importe_moneda_extranjera = limpiarImporte(registro.importe_moneda_extranjera);
+
+    salida.push(columnasDestino.map((col) => serializarCampoCSV(registro[col] || '')).join(','));
+  }
+
+  return salida.join('\n');
+}
+
 const form = document.getElementById('form-carga');
 const inputArchivo = document.getElementById('archivo-csv');
+const checkEsNetsuite = document.getElementById('es-netsuite');
 const btnCargar = document.getElementById('btn-cargar');
 const reporte = document.getElementById('reporte');
 const listaErrores = document.getElementById('lista-errores');
@@ -53,7 +165,10 @@ form.addEventListener('submit', async (e) => {
   btnCargar.textContent = 'Cargando...';
 
   try {
-    const contenido = await leerArchivoComoTexto(archivo);
+    let contenido = await leerArchivoComoTexto(archivo);
+    if (checkEsNetsuite.checked) {
+      contenido = transformarNetSuiteAOrdenes(arreglarMojibake(contenido));
+    }
     const res = await fetch('/api/ordenes/importar-csv', {
       method: 'POST',
       headers: { 'Content-Type': 'text/csv' },

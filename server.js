@@ -2465,6 +2465,29 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
   res.json(await cotizacionConDetalle(req.params.id));
 }));
 
+// Marca una cotizacion como Ganada o Perdida sin pasar por el formulario completo de edicion
+// (no requiere reenviar partidas, negocio, moneda, etc.). Perdida acepta un motivo en texto
+// libre, igual que el de Negocios. Al confirmar, se revisa si el negocio completo debe avanzar
+// a "Cierre Ganado" (mismo criterio que al guardar la cotizacion desde el formulario).
+app.put('/api/cotizaciones/:id/etapa', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
+  if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
+
+  const etapa = req.body.etapa;
+  if (!['Ganada', 'Perdida'].includes(etapa)) {
+    return res.status(400).json({ errores: ['etapa debe ser Ganada o Perdida'] });
+  }
+  const motivoPerdida = etapa === 'Perdida' ? (req.body.motivo_perdida || '').trim() || null : null;
+
+  await transaction(async (db) => {
+    await db.prepare('UPDATE cotizaciones SET etapa = ?, motivo_perdida = ? WHERE id_cotizacion = ?')
+      .run(etapa, motivoPerdida, req.params.id);
+    await avanzarNegocioSiTodoGanado(db, cotizacion.negocio_id);
+  });
+
+  res.json(await cotizacionConDetalle(req.params.id));
+}));
+
 // Un negocio no puede quedarse sin cotizaciones: si esta es la unica del negocio, no se puede
 // borrar aqui (hay que borrar el negocio completo, que se lleva su ultima cotizacion consigo).
 app.delete('/api/cotizaciones/:id', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {

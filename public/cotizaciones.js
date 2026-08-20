@@ -1325,6 +1325,22 @@ async function abrirDetalleCotizacion(id) {
       ${permisosCatalogos.editar ? `<button type="button" class="btn-clonar-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Clonar</button>` : ''}
       ${permisosCatalogos.editar ? `<button type="button" class="btn-editar-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Editar</button>` : ''}
     </div>
+    ${permisosCatalogos.editar && c.etapa === 'Negociacion' ? `
+      <div class="acciones-form acciones-etapa-cotizacion">
+        <button type="button" class="btn-mini btn-marcar-ganada-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Marcar como ganada</button>
+        <button type="button" class="btn-mini btn-mostrar-marcar-perdida-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Marcar como perdida</button>
+      </div>
+      <form id="form-marcar-perdida-cotizacion" hidden>
+        <label>
+          Motivo (por qué no se ganó esta cotización)
+          <textarea id="motivo-perdida-cotizacion" rows="2" placeholder="Detalles de por qué se perdió, con quién se habló, qué hubiera cambiado el resultado..."></textarea>
+        </label>
+        <div class="acciones-form">
+          <button type="submit" class="btn-mini">Confirmar como perdida</button>
+          <button type="button" id="btn-cancelar-marcar-perdida-cotizacion" class="btn-mini">Cancelar</button>
+        </div>
+      </form>
+    ` : ''}
     <div class="ficha-detalle">
       ${campoFicha('ID', c.id_cotizacion)}
       ${campoFicha('Negocio', c.negocio_nombre)}
@@ -1339,6 +1355,7 @@ async function abrirDetalleCotizacion(id) {
       ${campoFicha('Lugar de entrega', c.lugar_entrega)}
       ${campoFicha('Tiempo de entrega', c.tiempo_entrega)}
       ${campoFicha('Fecha de seguimiento', c.fecha_seguimiento)}
+      ${c.etapa === 'Perdida' ? campoFicha('Motivo de pérdida', c.motivo_perdida) : ''}
     </div>
     ${c.observaciones ? `<p><strong>Observaciones:</strong></p><p class="observaciones-cotizacion">${observacionesConClausulaResaltada(c.observaciones)}</p>` : ''}
     <h3>Productos (${c.items.length})</h3>
@@ -1366,7 +1383,35 @@ async function abrirDetalleCotizacion(id) {
     </div>
   `;
 
+  const formPerdida = document.getElementById('form-marcar-perdida-cotizacion');
+  if (formPerdida) {
+    formPerdida.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const motivo = document.getElementById('motivo-perdida-cotizacion').value.trim();
+      await marcarEtapaCotizacion(c.id_cotizacion, 'Perdida', motivo);
+    });
+    document.getElementById('btn-cancelar-marcar-perdida-cotizacion').addEventListener('click', () => {
+      formPerdida.hidden = true;
+    });
+  }
+
   modalOverlay.hidden = false;
+}
+
+// Cambia la etapa de una cotizacion a Ganada o Perdida desde el detalle (sin pasar por el
+// formulario completo de edicion) y refresca el detalle para reflejar el nuevo estatus.
+async function marcarEtapaCotizacion(id, etapa, motivoPerdida) {
+  const res = await fetch(`/api/cotizaciones/${encodeURIComponent(id)}/etapa`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ etapa, motivo_perdida: motivoPerdida || '' }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  abrirDetalleCotizacion(id);
 }
 
 function cerrarModal() {
@@ -1395,6 +1440,16 @@ modalContenido.addEventListener('click', (e) => {
   if (e.target.classList.contains('btn-editar-cotizacion')) {
     cerrarModal();
     editarCotizacion(e.target.dataset.id);
+    return;
+  }
+  if (e.target.classList.contains('btn-marcar-ganada-cotizacion')) {
+    if (!confirm('¿Marcar esta cotización como ganada?')) return;
+    marcarEtapaCotizacion(e.target.dataset.id, 'Ganada');
+    return;
+  }
+  if (e.target.classList.contains('btn-mostrar-marcar-perdida-cotizacion')) {
+    document.getElementById('form-marcar-perdida-cotizacion').hidden = false;
+    document.getElementById('motivo-perdida-cotizacion').focus();
   }
 });
 

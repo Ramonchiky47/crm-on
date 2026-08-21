@@ -4355,7 +4355,7 @@ app.use((err, req, res, next) => {
 });
 
 if (require.main === module) {
-  const PORT = process.env.PORT || 3005;
+  const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
     console.log(`CRM-ON escuchando en http://localhost:${PORT}`);
   });

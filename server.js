@@ -2421,14 +2421,19 @@ app.post('/api/cotizaciones', requirePermiso('catalogos', 'editar'), ar(async (r
   const { subtotal, descuentoMonto, iva, granTotal } = calcularTotalesCotizacion(req.body.items, { tipo: descuentoTipo, valor: descuentoValor });
   const id = await generarIdCotizacion();
 
+  // fecha_cierre = cuando se gano/perdio (no cuando se creo), para que "Cotizaciones ganadas/
+  // perdidas" del panel cuenten por el periodo en que se cerro el trato, no por el de creacion
+  // (una cotizacion creada hace un mes y ganada hoy debe contar como ganada "esta semana").
+  const fechaCierreInicial = etapa !== 'Negociacion';
+
   await transaction(async (db) => {
     await db.prepare(`
       INSERT INTO cotizaciones (
         id_cotizacion, negocio_id, nombre, contacto_id, destino_id, moneda, etapa,
         descuento_tipo, descuento_porcentaje, subtotal, descuento_monto, iva, gran_total, fecha_creacion,
         fecha_vencimiento, fecha_seguimiento, metodo_pago, lugar_entrega, tiempo_entrega, observaciones,
-        usuario_id, representante_id, mostrar_totales
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (CURRENT_DATE)::text, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        usuario_id, representante_id, mostrar_totales, fecha_cierre
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (CURRENT_DATE)::text, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${fechaCierreInicial ? '(CURRENT_DATE)::text' : 'NULL'})
     `).run(
       id, req.body.negocio_id, nombre, req.body.contacto_id || null, req.body.destino_id || null, req.body.moneda, etapa,
       descuentoTipo, descuentoPorcentajeGuardado, subtotal, descuentoMonto, iva, granTotal,
@@ -2481,13 +2486,21 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
   const descuentoPorcentajeGuardado = descuentoTipo === 'porcentaje' ? descuentoValor : 0;
   const { subtotal, descuentoMonto, iva, granTotal } = calcularTotalesCotizacion(req.body.items, { tipo: descuentoTipo, valor: descuentoValor });
 
+  // fecha_cierre = cuando se gano/perdio, no cuando se creo (ver nota en el POST). Solo se toca
+  // si la etapa realmente cambia de/hacia Ganada o Perdida en esta edicion; si ya estaba en esa
+  // etapa y se guarda de nuevo sin cambiarla, se conserva la fecha_cierre original.
+  let fechaCierreSql = 'fecha_cierre';
+  if (etapa !== existente.etapa) {
+    fechaCierreSql = etapa === 'Negociacion' ? 'NULL' : '(CURRENT_DATE)::text';
+  }
+
   await transaction(async (db) => {
     await db.prepare(`
       UPDATE cotizaciones SET
         negocio_id = ?, nombre = ?, contacto_id = ?, destino_id = ?, moneda = ?, etapa = ?,
         descuento_tipo = ?, descuento_porcentaje = ?, subtotal = ?, descuento_monto = ?, iva = ?, gran_total = ?,
         fecha_vencimiento = ?, fecha_seguimiento = ?, metodo_pago = ?, lugar_entrega = ?,
-        tiempo_entrega = ?, observaciones = ?, representante_id = ?, mostrar_totales = ?
+        tiempo_entrega = ?, observaciones = ?, representante_id = ?, mostrar_totales = ?, fecha_cierre = ${fechaCierreSql}
       WHERE id_cotizacion = ?
     `).run(
       req.body.negocio_id, nombre, req.body.contacto_id || null, req.body.destino_id || null, req.body.moneda, etapa,
@@ -2525,7 +2538,10 @@ app.put('/api/cotizaciones/:id/etapa', requirePermiso('catalogos', 'editar'), ar
   const motivoPerdida = etapa === 'Perdida' ? (req.body.motivo_perdida || '').trim() || null : null;
 
   await transaction(async (db) => {
-    await db.prepare('UPDATE cotizaciones SET etapa = ?, motivo_perdida = ? WHERE id_cotizacion = ?')
+    // fecha_cierre siempre se refresca a hoy: este endpoint es en si mismo la accion de
+    // cerrar la cotizacion, asi que cada vez que se llama representa un cierre nuevo (incluye
+    // re-cerrar una que se habia reabierto a Negociacion).
+    await db.prepare("UPDATE cotizaciones SET etapa = ?, motivo_perdida = ?, fecha_cierre = (CURRENT_DATE)::text WHERE id_cotizacion = ?")
       .run(etapa, motivoPerdida, req.params.id);
     await avanzarNegocioSiTodoGanado(db, cotizacion.negocio_id);
     await avanzarNegocioSiTodoPerdido(db, cotizacion.negocio_id);
@@ -3011,12 +3027,14 @@ app.get('/api/cotizaciones/:id/pdf', requirePermiso('catalogos', 'ver'), ar(asyn
 const SELECT_ORDENES = `
   SELECT o.*, d.destino AS destino_nombre, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre,
     ec.estatus AS estatus_nombre, ee.estado_entrega AS estado_entrega_nombre,
+    q.nombre AS cotizacion_nombre,
     EXISTS(SELECT 1 FROM pendientes p WHERE p.orden_id = o.id) AS tiene_tarea_activa
   FROM ordenes o
   LEFT JOIN destinos d ON d.id_destino = o.destino_id
   LEFT JOIN contactos c ON c.id_contacto = o.contacto_id
   LEFT JOIN estatus_catalogo ec ON ec.id_estatus = o.estatus_id
   LEFT JOIN estados_entrega ee ON ee.id_estado_entrega = o.estado_entrega_id
+  LEFT JOIN cotizaciones q ON q.id_cotizacion = o.cotizacion_id
 `;
 
 function validarOrden(body, { parcial = false } = {}) {
@@ -4228,30 +4246,39 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
       WHERE fecha_compromiso < ? ORDER BY fecha_compromiso
     `).all(hoy);
 
-    // Resumen del periodo (filtro por Fecha de creacion, default el mes en curso): cuantas
-    // cotizaciones se crearon, cuantas de esas ya estan Ganada/Perdida, su importe por moneda
-    // (USD y MXN se suman aparte, no se mezclan), y la comparacion contra el periodo
-    // inmediato anterior de la misma duracion (igual que "vs. el mes pasado").
+    // Resumen del periodo, default el mes en curso: cuantas cotizaciones se crearon (por Fecha
+    // de creacion) y cuantas se ganaron/perdieron (por Fecha de cierre, NO de creacion: una
+    // cotizacion creada hace un mes y ganada hoy debe contar como ganada "esta semana", no
+    // quedar invisible por haberse creado fuera del rango). Su importe por moneda (USD y MXN se
+    // suman aparte, no se mezclan), y la comparacion contra el periodo inmediato anterior de la
+    // misma duracion (igual que "vs. el mes pasado").
     const sumaPorMoneda = (lista, moneda) => lista
       .filter((c) => c.moneda === moneda)
       .reduce((acc, c) => acc + Number(c.gran_total || 0), 0);
 
     const enRango = (fecha, ini, fin) => fecha >= ini && fecha <= fin;
+    // Cotizaciones cerradas antes de que existiera fecha_cierre no tienen valor ahi (se
+    // respaldaron con fecha_creacion en la migracion, pero una cotizacion Ganada/Perdida nueva
+    // sin fecha_cierre por algun motivo no deberia caer siempre en rango por accidente).
+    const fechaCierreDe = (c) => c.fecha_cierre || c.fecha_creacion;
 
     const cotizacionesPeriodo = cotizaciones.filter((c) => enRango(c.fecha_creacion, desde, hasta));
     const cotizacionesPeriodoPrevio = cotizaciones.filter((c) => enRango(c.fecha_creacion, desdePrevio, hastaPrevio));
-    const cotizacionesGanadasPeriodo = cotizacionesPeriodo.filter((c) => c.etapa === 'Ganada');
+    const cotizacionesGanadasPeriodo = cotizaciones.filter((c) => c.etapa === 'Ganada' && enRango(fechaCierreDe(c), desde, hasta));
+    const cotizacionesGanadasPeriodoPrevio = cotizaciones.filter((c) => c.etapa === 'Ganada' && enRango(fechaCierreDe(c), desdePrevio, hastaPrevio));
+    const cotizacionesPerdidasPeriodo = cotizaciones.filter((c) => c.etapa === 'Perdida' && enRango(fechaCierreDe(c), desde, hasta));
+    const cotizacionesPerdidasPeriodoPrevio = cotizaciones.filter((c) => c.etapa === 'Perdida' && enRango(fechaCierreDe(c), desdePrevio, hastaPrevio));
 
     resultado.resumenPeriodo = {
       desde, hasta, desdePrevio, hastaPrevio,
       creadas: cotizacionesPeriodo.length,
       creadasPrevio: cotizacionesPeriodoPrevio.length,
       ganadas: cotizacionesGanadasPeriodo.length,
-      ganadasPrevio: cotizacionesPeriodoPrevio.filter((c) => c.etapa === 'Ganada').length,
+      ganadasPrevio: cotizacionesGanadasPeriodoPrevio.length,
       ganadasImporteUsd: sumaPorMoneda(cotizacionesGanadasPeriodo, 'USD'),
       ganadasImporteMxn: sumaPorMoneda(cotizacionesGanadasPeriodo, 'MXN'),
-      perdidas: cotizacionesPeriodo.filter((c) => c.etapa === 'Perdida').length,
-      perdidasPrevio: cotizacionesPeriodoPrevio.filter((c) => c.etapa === 'Perdida').length,
+      perdidas: cotizacionesPerdidasPeriodo.length,
+      perdidasPrevio: cotizacionesPerdidasPeriodoPrevio.length,
     };
   }
 

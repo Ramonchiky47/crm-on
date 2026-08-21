@@ -51,11 +51,31 @@ function formatoImporte(valor) {
 // ---------- Modal de detalle (misma ficha que en Buscar) ----------
 
 const modalOverlay = document.getElementById('modal-overlay');
+const modalCaja = document.getElementById('modal-caja');
 const modalContenido = document.getElementById('modal-contenido');
 const modalCerrar = document.getElementById('modal-cerrar');
 
 function campoFicha(etiqueta, valor) {
   return `<div><span>${escaparHtml(etiqueta)}</span><p>${valor !== null && valor !== undefined && valor !== '' ? escaparHtml(String(valor)) : '-'}</p></div>`;
+}
+
+// Campo dentro de una tarjeta del detalle de orden (mismo patron que cotizaciones.js: campoCot).
+function campoOrden(etiqueta, valor, { vacioTexto = 'Sin capturar' } = {}) {
+  const tieneValor = valor !== null && valor !== undefined && valor !== '';
+  return `<div class="campo-cot">
+    <span class="etiqueta-cot">${escaparHtml(etiqueta)}</span>
+    <p class="valor-cot${tieneValor ? '' : ' valor-vacio-cot'}">${tieneValor ? escaparHtml(String(valor)) : vacioTexto}</p>
+  </div>`;
+}
+
+// Chip de estatus: verde para Facturada, rojo para Cancelado (mismo criterio que ya usan las
+// filas de la tabla), gris neutro para cualquier otro estatus capturado libremente.
+function pillEstatusOrden(nombre) {
+  if (!nombre) return '';
+  let clase = 'pill-neutro';
+  if (nombre === '2.-Facturada') clase = 'estatus-vigente';
+  else if (nombre === '1.-Cancelado') clase = 'estatus-vencido';
+  return `<span class="pill-estatus ${clase}">${escaparHtml(nombre)}</span>`;
 }
 
 async function abrirDetalle(id) {
@@ -65,53 +85,104 @@ async function abrirDetalle(id) {
   ]);
 
   modalContenido.innerHTML = `
+    <div class="detalle-orden">
+    <p class="eyebrow-cot">Orden de venta</p>
     <h2>${escaparHtml(orden.id)}</h2>
-    ${permisosOrdenes.editar ? `<button type="button" class="btn-editar-orden-modal" data-id="${escaparHtml(orden.id)}">Editar</button>` : ''}
-    <div class="ficha-detalle">
-      ${campoFicha('Fecha', orden.fecha)}
-      ${campoFicha('Nombre', orden.nombre)}
-      ${campoFicha('Número de OC/cheque', orden.numero_oc)}
-      ${campoFicha('Estatus', orden.estatus_nombre)}
-      ${campoFicha('Estatus del sistema', orden.estatus_sistema)}
-      ${campoFicha('Número de seguimiento', orden.numero_seguimiento)}
-      ${campoFicha('Moneda', orden.moneda)}
-      ${campoFicha('Importe (moneda extranjera)', orden.importe_moneda_extranjera !== null ? formatoImporte(orden.importe_moneda_extranjera) : null)}
-      ${campoFicha('Importe', orden.importe !== null ? formatoImporte(orden.importe) : null)}
-      ${campoFicha('Hotel / Local', orden.destino_nombre)}
-      ${campoFicha('Contacto', orden.contacto_nombre)}
-      ${campoFicha('Estado de la República', orden.estado_entrega_nombre)}
-      ${campoFicha('Imprimir', orden.imprimir)}
-    </div>
-    ${orden.nota ? `<p><strong>Nota:</strong> ${escaparHtml(orden.nota)}</p>` : ''}
-    ${orden.observaciones ? `<p><strong>Observaciones:</strong> ${escaparHtml(orden.observaciones)}</p>` : ''}
-    <h3>Artículos (${articulos.length})</h3>
-    ${articulos.length ? `
-      <div class="tabla-scroll">
-        <table>
-          <thead><tr><th>Artículo</th><th>Tipo</th><th>Fecha</th><th>Serie</th><th>Cantidad</th><th>Importe</th></tr></thead>
-          <tbody>
-            ${articulos.map((a) => `
-              <tr>
-                <td>${escaparHtml(a.articulo || '')}</td>
-                <td>${escaparHtml(a.tipo || '')}</td>
-                <td>${escaparHtml(a.fecha || '')}</td>
-                <td>${escaparHtml(a.numero_serie || '')}</td>
-                <td>${a.cantidad_vendida ?? ''}</td>
-                <td>${formatoImporte(a.importe)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+    ${pillEstatusOrden(orden.estatus_nombre)}
+
+    <div class="barra-acciones-cot">
+      <div class="grupo-acciones-cot">
+        ${permisosOrdenes.editar ? `<button type="button" class="btn-marca btn-editar-orden-modal" data-id="${escaparHtml(orden.id)}">Editar</button>` : ''}
       </div>
-    ` : '<p class="pista">Esta orden no tiene artículos capturados en Detalle de compra.</p>'}
+    </div>
+
+    <div class="detalle-cotizacion-grid">
+      <div class="detalle-cotizacion-info">
+        <div class="tarjeta">
+          <h3>Resumen</h3>
+          ${campoOrden('Fecha', orden.fecha)}
+          ${campoOrden('Número de OC / cheque', orden.numero_oc)}
+          ${campoOrden('Número de seguimiento', orden.numero_seguimiento)}
+          ${campoOrden('Estatus del sistema', orden.estatus_sistema)}
+          ${campoOrden('Imprimir', orden.imprimir)}
+        </div>
+        <div class="tarjeta">
+          <h3>Cliente y destino</h3>
+          ${campoOrden('Nombre', orden.nombre)}
+          ${campoOrden('Hotel / Local', orden.destino_nombre, { vacioTexto: 'Sin asignar' })}
+          ${campoOrden('Contacto', orden.contacto_nombre, { vacioTexto: 'Sin asignar' })}
+          ${campoOrden('Estado de la República', orden.estado_entrega_nombre, { vacioTexto: 'Sin asignar' })}
+        </div>
+        <div class="tarjeta">
+          <h3>Importes</h3>
+          ${campoOrden('Moneda', orden.moneda)}
+          ${campoOrden('Importe (moneda extranjera)', orden.importe_moneda_extranjera !== null ? formatoImporte(orden.importe_moneda_extranjera) : null)}
+          ${campoOrden('Importe', orden.importe !== null ? formatoImporte(orden.importe) : null)}
+        </div>
+        ${orden.cotizacion_id ? `
+        <div class="tarjeta">
+          <h3>Cotización</h3>
+          <div class="campo-cot">
+            <span class="etiqueta-cot">Generada a partir de</span>
+            <p class="valor-cot"><a href="cotizaciones.html?cotizacion=${encodeURIComponent(orden.cotizacion_id)}">${escaparHtml(orden.cotizacion_id)}</a>${orden.cotizacion_nombre ? ` — ${escaparHtml(orden.cotizacion_nombre)}` : ''}</p>
+          </div>
+        </div>
+        ` : ''}
+        ${orden.nota ? `
+        <div class="tarjeta">
+          <h3>Nota</h3>
+          <p class="observaciones-cotizacion">${escaparHtml(orden.nota)}</p>
+        </div>
+        ` : ''}
+        ${orden.observaciones ? `
+        <div class="tarjeta">
+          <h3>Observaciones</h3>
+          <p class="observaciones-cotizacion">${escaparHtml(orden.observaciones)}</p>
+        </div>
+        ` : ''}
+      </div>
+      <div class="detalle-cotizacion-productos">
+        <div class="tarjeta-productos-cot">
+          <div class="tarjeta-articulos-encabezado">
+            <h3>Artículos</h3>
+            <span>${articulos.length} artículo${articulos.length === 1 ? '' : 's'}</span>
+          </div>
+          ${articulos.length ? `
+            <div class="tabla-scroll">
+              <table>
+                <thead><tr>
+                  <th>Artículo</th><th>Tipo</th><th>Fecha</th><th>Serie</th>
+                  <th class="num">Cantidad</th><th class="num">Importe</th>
+                </tr></thead>
+                <tbody>
+                  ${articulos.map((a) => `
+                    <tr>
+                      <td>${escaparHtml(a.articulo || '')}</td>
+                      <td>${escaparHtml(a.tipo || '')}</td>
+                      <td>${escaparHtml(a.fecha || '')}</td>
+                      <td>${escaparHtml(a.numero_serie || '')}</td>
+                      <td class="num">${a.cantidad_vendida ?? ''}</td>
+                      <td class="num">${formatoImporte(a.importe)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : '<p class="vacio-articulos-orden">Esta orden no tiene artículos capturados en Detalle de compra.</p>'}
+        </div>
+      </div>
+    </div>
+    </div>
   `;
 
+  modalCaja.classList.add('modal-caja-ancha');
   modalOverlay.hidden = false;
 }
 
 function cerrarModal() {
   modalOverlay.hidden = true;
   modalContenido.innerHTML = '';
+  modalCaja.classList.remove('modal-caja-ancha');
 }
 
 modalCerrar.addEventListener('click', cerrarModal);

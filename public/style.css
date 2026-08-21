@@ -1828,13 +1828,14 @@ td.celda-check {
    escopea a estos contenedores especificos para no afectar el resto de la app. */
 .detalle-cotizacion-grid,
 .detalle-cotizacion,
+.detalle-orden,
 #cotizacion-acciones-edicion,
 #cotizacion-panel-etapa,
 #cotizacion-form-marcar-perdida {
   font-family: 'IBM Plex Sans', system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-.detalle-cotizacion h2 {
+.detalle-cotizacion h2, .detalle-orden h2 {
   margin: 0 0 0.5rem;
   font-size: 1.3rem;
   font-weight: 700;
@@ -1870,6 +1871,32 @@ td.celda-check {
 }
 .pill-estatus.estatus-vigente { background: #eaf3ea; }
 .pill-estatus.estatus-vencido { background: #fbebe8; }
+.pill-estatus.pill-neutro { background: var(--fondo-suave); color: #757575; }
+
+.valor-vacio-cot { color: #9b9b9b; font-weight: 400; }
+
+.tarjeta-articulos-encabezado {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 1rem 1.1rem 0.1rem;
+}
+.tarjeta-articulos-encabezado h3 {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9b9b9b;
+}
+.tarjeta-articulos-encabezado span { font-size: 0.78rem; color: #9b9b9b; }
+
+.vacio-articulos-orden {
+  padding: 2.5rem 1.1rem;
+  text-align: center;
+  color: #9b9b9b;
+  font-size: 0.86rem;
+}
 
 .btn-marca {
   background: var(--peligro);

@@ -4191,13 +4191,29 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
     }
     const etapasCierre = ['Cierre Ganado', 'Cierre Perdido'];
     resultado.negociosActivos = negocios.filter((n) => !etapasCierre.includes(n.etapa_nombre)).length;
-    resultado.negociosCerradosMes = negocios.filter((n) => etapasCierre.includes(n.etapa_nombre) && (n.creado_en || '') >= inicioMes).length;
     resultado.pipeline = etapasCatalogo.map((e) => ({ etapa: e.etapa, cantidad: conteoPorEtapa.get(e.etapa) || 0 }));
 
     const cotizaciones = (soloPropios
       ? await db.prepare(`${SELECT_COTIZACIONES} WHERE q.usuario_id = ?`).all(usuarioId)
       : await db.prepare(SELECT_COTIZACIONES).all()
     ).map(conEstatus);
+
+    // Fecha real de cierre de un negocio = la fecha de cierre mas reciente entre sus
+    // cotizaciones (el negocio avanza a Cierre Ganado/Perdido automaticamente cuando la ultima
+    // cotizacion se cierra), no su fecha de creacion: un negocio creado hace meses y cerrado hoy
+    // debe contar como cerrado "este mes".
+    const cierreMaxPorNegocio = new Map();
+    for (const c of cotizaciones) {
+      if (!c.negocio_id || !c.fecha_cierre) continue;
+      const actual = cierreMaxPorNegocio.get(c.negocio_id);
+      if (!actual || c.fecha_cierre > actual) cierreMaxPorNegocio.set(c.negocio_id, c.fecha_cierre);
+    }
+    resultado.negociosCerradosMes = negocios.filter((n) => {
+      if (!etapasCierre.includes(n.etapa_nombre)) return false;
+      const fechaCierre = cierreMaxPorNegocio.get(n.id_negocio) || n.creado_en;
+      return (fechaCierre || '') >= inicioMes;
+    }).length;
+
     resultado.cotizacionesVigentes = cotizaciones.filter((c) => c.estatus === 'Vigente').length;
     // "Por vencer" = vigente y su vencimiento cae dentro de los proximos 14 dias (no solo las
     // 6 mas cercanas sin importar que tan lejos esten).

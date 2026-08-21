@@ -769,6 +769,32 @@ button:disabled {
   gap: 0.5rem;
 }
 
+.acciones-form-centrado { align-items: center; }
+
+.chip-select {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+}
+.chip-select-etiqueta {
+  font-size: 0.78rem;
+  color: #757575;
+  white-space: nowrap;
+}
+.chip-select select {
+  border: none;
+  padding: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: transparent;
+  cursor: pointer;
+}
+.chip-select select:focus { outline: none; }
+
 .acciones-etapa-cotizacion {
   margin-top: 0.6rem;
   padding-top: 0.6rem;
@@ -2041,6 +2067,8 @@ td.celda-check {
     color: #eee;
   }
   .chip-tipo-seguimiento { background: #1c2c40; color: #86b6ef; }
+  .chip-select { background: #2a2a2a; }
+  .chip-select-etiqueta { color: #aaa; }
   .chip-tipo-tarea { background: #333; color: #bbb; }
   .multi-select-btn {
     background: #2a2a2a;

@@ -1,10 +1,10 @@
 const ENCABEZADOS_PLANTILLA = [
-  'id', 'fecha', 'imprimir', 'nombre', 'numero_oc', 'estatus_sistema', 'numero_seguimiento', 'nota',
+  'fecha', 'imprimir', 'id', 'nombre', 'numero_oc', 'estatus_sistema', 'numero_seguimiento', 'nota',
   'moneda', 'importe_moneda_extranjera', 'importe', 'estatus', 'observaciones',
   'destino', 'contacto', 'empresa', 'estado_entrega',
 ];
 const FILA_EJEMPLO = [
-  'ORD-001', '2026-07-01', '', 'Pedido ejemplo', 'OC-100', 'Activo', 'GUIA-123', '',
+  '2026-07-01', '', 'ORD-001', 'Pedido ejemplo', 'OC-100', 'Activo', 'GUIA-123', '',
   'USD', '1500.50', '1500.50', 'Abierto', '',
   'CDMX', 'Juan Perez', 'Acme SA', 'Pendiente',
 ];
@@ -125,7 +125,7 @@ function transformarNetSuiteAOrdenes(texto) {
   if (!filas.length) return '';
   const encabezadosOrigen = filas[0].map(normalizarEncabezado);
 
-  const columnasDestino = ['id', 'fecha', 'imprimir', 'nombre', 'numero_oc', 'estatus_sistema', 'numero_seguimiento', 'nota', 'moneda', 'importe_moneda_extranjera', 'importe'];
+  const columnasDestino = ['fecha', 'imprimir', 'id', 'nombre', 'numero_oc', 'estatus_sistema', 'numero_seguimiento', 'nota', 'moneda', 'importe_moneda_extranjera', 'importe'];
   const salida = [columnasDestino.join(',')];
 
   for (const fila of filas.slice(1)) {

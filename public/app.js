@@ -77,7 +77,7 @@ function pillEstatusOrden(nombre) {
   if (!nombre) return '';
   let clase = 'pill-neutro';
   if (nombre === '2.-Facturada') clase = 'estatus-vigente';
-  else if (nombre === '1.-Cancelado') clase = 'estatus-vencido';
+  else if (nombre === 'Cancelado') clase = 'estatus-vencido';
   return `<span class="pill-estatus ${clase}">${escaparHtml(nombre)}</span>`;
 }
 
@@ -494,7 +494,7 @@ function renderizar(ordenes) {
     const tr = document.createElement('tr');
     tr.dataset.id = o.id;
     if (o.estatus_nombre === '2.-Facturada') tr.classList.add('fila-facturada');
-    else if (o.estatus_nombre === '1.-Cancelado') tr.classList.add('fila-cancelado');
+    else if (o.estatus_nombre === 'Cancelado') tr.classList.add('fila-cancelado');
     if (o.tiene_tarea_activa) tr.classList.add('fila-en-tareas');
     tr.innerHTML = `
       <td><input type="checkbox" class="check-orden" value="${escaparHtml(o.id)}" ${ordenesSeleccionadas.has(o.id) ? 'checked' : ''} /></td>

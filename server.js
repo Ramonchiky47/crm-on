@@ -2586,7 +2586,7 @@ app.get('/api/cotizaciones/:id/ordenes-candidatas', requirePermiso('catalogos', 
   const ordenes = await db.prepare(`
     ${SELECT_ORDENES}
     WHERE o.destino_id = ? AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
-      AND (ec.estatus IS NULL OR ec.estatus != '1.-Cancelado')
+      AND (ec.estatus IS NULL OR ec.estatus != 'Cancelado')
     ORDER BY o.fecha
   `).all(cotizacion.destino_id, cotizacion.fecha_creacion, req.params.id);
 
@@ -2609,7 +2609,7 @@ app.put('/api/cotizaciones/:id/ordenes', requirePermiso('catalogos', 'editar'), 
       SELECT o.id FROM ordenes o
       LEFT JOIN estatus_catalogo ec ON ec.id_estatus = o.estatus_id
       WHERE o.destino_id = ? AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
-        AND (ec.estatus IS NULL OR ec.estatus != '1.-Cancelado')
+        AND (ec.estatus IS NULL OR ec.estatus != 'Cancelado')
     `).all(cotizacion.destino_id, cotizacion.fecha_creacion, req.params.id);
     const idsValidos = new Set(candidatas.map((o) => o.id));
 

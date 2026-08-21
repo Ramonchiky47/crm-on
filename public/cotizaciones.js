@@ -597,8 +597,12 @@ const btnFormDescargarPdfCotizacion = document.getElementById('btn-form-descarga
 const btnFormClonarCotizacion = document.getElementById('btn-form-clonar-cotizacion');
 const cotizacionFormEstatus = document.getElementById('cotizacion-form-estatus');
 const cotizacionPanelEtapa = document.getElementById('cotizacion-panel-etapa');
-const btnFormMarcarGanada = document.getElementById('btn-form-marcar-ganada');
+const btnFormMostrarMarcarGanada = document.getElementById('btn-form-mostrar-marcar-ganada');
 const btnFormMostrarMarcarPerdida = document.getElementById('btn-form-mostrar-marcar-perdida');
+const cotizacionPanelMarcarGanada = document.getElementById('cotizacion-panel-marcar-ganada');
+const cotizacionMarcarGanadaPista = document.getElementById('cotizacion-marcar-ganada-pista');
+const btnFormConfirmarMarcarGanada = document.getElementById('btn-form-confirmar-marcar-ganada');
+const btnFormCancelarMarcarGanada = document.getElementById('btn-form-cancelar-marcar-ganada');
 const cotizacionFormMarcarPerdida = document.getElementById('cotizacion-form-marcar-perdida');
 const cotizacionMotivoPerdidaSelect = document.getElementById('cotizacion-motivo-perdida-select');
 const cotizacionMotivoPerdidaComentarios = document.getElementById('cotizacion-motivo-perdida-comentarios');
@@ -620,12 +624,28 @@ function ocultarMarcarPerdidaForm() {
   cotizacionMotivoPerdidaComentarios.value = '';
 }
 
+function ocultarMarcarGanadaPanel() {
+  cotizacionPanelMarcarGanada.hidden = true;
+}
+
 btnFormVerCotizacion.addEventListener('click', () => generarPDFCotizacion(cotizacionId.value));
 btnFormDescargarPdfCotizacion.addEventListener('click', () => descargarPDFCotizacion(cotizacionId.value));
 btnFormClonarCotizacion.addEventListener('click', () => clonarCotizacion(cotizacionId.value));
 
-btnFormMarcarGanada.addEventListener('click', () => {
-  if (!confirm('¿Marcar esta cotización como ganada?')) return;
+btnFormMostrarMarcarGanada.addEventListener('click', async () => {
+  const nombreContacto = cotizacionContacto.options[cotizacionContacto.selectedIndex]?.textContent || 'este contacto';
+  cotizacionMarcarGanadaPista.textContent =
+    `Órdenes de ${nombreContacto} con fecha igual o posterior a la cotización (${cotizacionFechaCreacion.value}). Selecciona las que correspondan (opcional):`;
+  cotizacionPanelMarcarGanada.hidden = false;
+  await cargarListaOrdenesCandidatas(cotizacionId.value, 'lista-ordenes-candidatas-ganada-form');
+});
+
+btnFormCancelarMarcarGanada.addEventListener('click', ocultarMarcarGanadaPanel);
+
+btnFormConfirmarMarcarGanada.addEventListener('click', async () => {
+  const ordenIds = ordenesSeleccionadas('lista-ordenes-candidatas-ganada-form');
+  const ok = await guardarOrdenesAsociadas(cotizacionId.value, ordenIds);
+  if (!ok) return;
   marcarEtapaCotizacion(cotizacionId.value, 'Ganada', '', () => editarCotizacion(cotizacionId.value));
 });
 
@@ -1080,6 +1100,7 @@ function limpiarFormCotizacion() {
   cotizacionAccionesEdicion.hidden = true;
   cotizacionPanelEtapa.hidden = true;
   ocultarMarcarPerdidaForm();
+  ocultarMarcarGanadaPanel();
   if (filtroNegocioId) {
     cotizacionNegocio.value = filtroNegocioId;
     replicarContactoYDestinoDeNegocio(filtroNegocioId);
@@ -1278,6 +1299,7 @@ function cargarCotizacionEnFormulario(c) {
   cotizacionFormEstatus.innerHTML = pillEstatus(c.estatus);
   cotizacionPanelEtapa.hidden = !(permisosCatalogos.editar && c.etapa === 'Negociacion');
   ocultarMarcarPerdidaForm();
+  ocultarMarcarGanadaPanel();
 
   mostrarDetallesGeneralesCotizacion(false);
   actualizarCamposVaciosCotizacion();
@@ -1451,7 +1473,7 @@ async function abrirDetalleCotizacion(id) {
         <div class="separador-vertical-cot"></div>
         <div class="grupo-etapa-cot">
           <span class="etiqueta-etapa-cot">Etapa</span>
-          <button type="button" class="btn-texto es-bueno btn-marcar-ganada-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Marcar como ganada</button>
+          <button type="button" class="btn-texto es-bueno btn-mostrar-marcar-ganada-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Marcar como ganada</button>
           <button type="button" class="btn-texto es-malo btn-mostrar-marcar-perdida-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Marcar como perdida</button>
         </div>
       ` : ''}
@@ -1462,6 +1484,16 @@ async function abrirDetalleCotizacion(id) {
         </div>
       ` : ''}
     </div>
+    ${permisosCatalogos.editar && c.etapa === 'Negociacion' ? `
+      <div id="panel-marcar-ganada" class="panel-form" hidden>
+        <p class="pista">Órdenes de ${escaparHtml(c.contacto_nombre || 'este contacto')} con fecha igual o posterior a la cotización (${escaparHtml(c.fecha_creacion)}). Selecciona las que correspondan (opcional):</p>
+        <div id="lista-ordenes-candidatas-ganada"></div>
+        <div class="acciones-form">
+          <button type="button" id="btn-confirmar-marcar-ganada" class="btn-mini">Confirmar como ganada</button>
+          <button type="button" id="btn-cancelar-marcar-ganada" class="btn-mini">Cancelar</button>
+        </div>
+      </div>
+    ` : ''}
     ${permisosCatalogos.editar && c.etapa === 'Negociacion' ? `
       <form id="form-marcar-perdida-cotizacion" class="panel-form" hidden>
         <label>
@@ -1588,30 +1620,56 @@ async function abrirDetalleCotizacion(id) {
       panelOrdenes.hidden = true;
     });
     document.getElementById('btn-guardar-asociar-ordenes').addEventListener('click', async () => {
-      const ordenIds = [...document.querySelectorAll('#lista-ordenes-candidatas input[type="checkbox"]:checked')]
-        .map((el) => el.value);
-      const res2 = await fetch(`/api/cotizaciones/${encodeURIComponent(c.id_cotizacion)}/ordenes`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orden_ids: ordenIds }),
-      });
-      if (!res2.ok) {
-        const error = await res2.json().catch(() => ({}));
-        alert('Error: ' + (error.errores ? error.errores.join(', ') : res2.statusText));
-        return;
-      }
-      abrirDetalleCotizacion(c.id_cotizacion);
+      const ordenIds = ordenesSeleccionadas('lista-ordenes-candidatas');
+      const ok = await guardarOrdenesAsociadas(c.id_cotizacion, ordenIds);
+      if (ok) abrirDetalleCotizacion(c.id_cotizacion);
+    });
+  }
+
+  const panelMarcarGanada = document.getElementById('panel-marcar-ganada');
+  if (panelMarcarGanada) {
+    document.getElementById('btn-cancelar-marcar-ganada').addEventListener('click', () => {
+      panelMarcarGanada.hidden = true;
+    });
+    document.getElementById('btn-confirmar-marcar-ganada').addEventListener('click', async () => {
+      const ordenIds = ordenesSeleccionadas('lista-ordenes-candidatas-ganada');
+      const ok = await guardarOrdenesAsociadas(c.id_cotizacion, ordenIds);
+      if (!ok) return;
+      marcarEtapaCotizacion(c.id_cotizacion, 'Ganada');
     });
   }
 
   modalOverlay.hidden = false;
 }
 
-// Carga y muestra las ordenes candidatas (mismo contacto, fecha posterior a la cotizacion) con
-// un checkbox por orden, pre-marcadas las que ya estan asociadas a esta cotizacion.
-async function abrirPanelAsociarOrdenes(id) {
-  document.getElementById('panel-asociar-ordenes').hidden = false;
-  const lista = document.getElementById('lista-ordenes-candidatas');
+// IDs de las ordenes marcadas en el checklist de un panel de asociacion (Marcar como ganada o
+// Asociar ordenes: mismo formato de lista, distinto contenedor).
+function ordenesSeleccionadas(contenedorId) {
+  return [...document.querySelectorAll(`#${contenedorId} input[type="checkbox"]:checked`)].map((el) => el.value);
+}
+
+// Guarda la asociacion de ordenes de una cotizacion; muestra el error y regresa false si falla,
+// para que quien llama decida si continua (ej. no marcar como ganada si esto fallo).
+async function guardarOrdenesAsociadas(id, ordenIds) {
+  const res = await fetch(`/api/cotizaciones/${encodeURIComponent(id)}/ordenes`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orden_ids: ordenIds }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return false;
+  }
+  return true;
+}
+
+// Carga y muestra las ordenes candidatas (mismo contacto, fecha igual o posterior a la
+// cotizacion) con un checkbox por orden, pre-marcadas las que ya estan asociadas a esta
+// cotizacion. Un mismo checklist sirve tanto para "Asociar ordenes" (ya Ganada) como para
+// "Marcar como ganada" (todavia en Negociacion, se asocia y se cierra en un solo paso).
+async function cargarListaOrdenesCandidatas(id, contenedorId) {
+  const lista = document.getElementById(contenedorId);
   lista.innerHTML = '<p class="pista">Cargando…</p>';
   const res = await fetch(`/api/cotizaciones/${encodeURIComponent(id)}/ordenes-candidatas`);
   const ordenes = res.ok ? await res.json() : [];
@@ -1622,7 +1680,17 @@ async function abrirPanelAsociarOrdenes(id) {
           ${escaparHtml(o.fecha)} · ${escaparHtml(o.id)} — ${escaparHtml(o.moneda || '')} ${formatoImporte(o.importe)}
         </label>
       `).join('')
-    : '<p class="pista">No hay órdenes de este contacto con fecha posterior a la cotización.</p>';
+    : '<p class="pista">No hay órdenes de este contacto con fecha igual o posterior a la cotización.</p>';
+}
+
+async function abrirPanelAsociarOrdenes(id) {
+  document.getElementById('panel-asociar-ordenes').hidden = false;
+  await cargarListaOrdenesCandidatas(id, 'lista-ordenes-candidatas');
+}
+
+async function abrirPanelMarcarGanada(id) {
+  document.getElementById('panel-marcar-ganada').hidden = false;
+  await cargarListaOrdenesCandidatas(id, 'lista-ordenes-candidatas-ganada');
 }
 
 // Cambia la etapa de una cotizacion a Ganada o Perdida (desde el modal de detalle o desde el
@@ -1672,9 +1740,8 @@ modalContenido.addEventListener('click', (e) => {
     editarCotizacion(e.target.dataset.id);
     return;
   }
-  if (e.target.classList.contains('btn-marcar-ganada-cotizacion')) {
-    if (!confirm('¿Marcar esta cotización como ganada?')) return;
-    marcarEtapaCotizacion(e.target.dataset.id, 'Ganada');
+  if (e.target.classList.contains('btn-mostrar-marcar-ganada-cotizacion')) {
+    abrirPanelMarcarGanada(e.target.dataset.id);
     return;
   }
   if (e.target.classList.contains('btn-mostrar-marcar-perdida-cotizacion')) {

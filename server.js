@@ -2555,10 +2555,11 @@ app.delete('/api/cotizaciones/:id', requirePermiso('catalogos', 'borrar'), ar(as
   res.status(204).end();
 }));
 
-// Ordenes candidatas para asociar a una cotizacion ganada: del mismo contacto (el "cliente"
-// de la cotizacion) y con fecha posterior a la de creacion de la cotizacion (la orden real se
-// levanta despues de cotizar, no antes). Incluye las que ya estan asociadas A ESTA cotizacion
-// (para mostrarlas pre-marcadas), pero no las que ya pertenecen a otra.
+// Ordenes candidatas para asociar a una cotizacion (tipicamente al marcarla como ganada): del
+// mismo contacto (el "cliente" de la cotizacion) y con fecha igual o posterior a la de creacion
+// de la cotizacion (la orden real se levanta el mismo dia que se gana o despues, no antes).
+// Incluye las que ya estan asociadas A ESTA cotizacion (para mostrarlas pre-marcadas), pero no
+// las que ya pertenecen a otra.
 app.get('/api/cotizaciones/:id/ordenes-candidatas', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
   if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
@@ -2566,7 +2567,7 @@ app.get('/api/cotizaciones/:id/ordenes-candidatas', requirePermiso('catalogos', 
 
   const ordenes = await db.prepare(`
     ${SELECT_ORDENES}
-    WHERE o.contacto_id = ? AND o.fecha > ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
+    WHERE o.contacto_id = ? AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
     ORDER BY o.fecha
   `).all(cotizacion.contacto_id, cotizacion.fecha_creacion, req.params.id);
 
@@ -2576,7 +2577,8 @@ app.get('/api/cotizaciones/:id/ordenes-candidatas', requirePermiso('catalogos', 
 // Guarda que ordenes quedan asociadas a esta cotizacion (el pedido real generado a partir de
 // ella): las que vienen en orden_ids se marcan, y las que ya estaban asociadas pero ya no
 // vienen en la lista se desasocian. Solo toca ordenes que son candidatas validas (mismo
-// contacto, fecha posterior, libres o ya de esta cotizacion) para no "robar" ordenes de otra.
+// contacto, fecha igual o posterior, libres o ya de esta cotizacion) para no "robar" una orden
+// que ya pertenece a otra.
 app.put('/api/cotizaciones/:id/ordenes', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
   const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
   if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
@@ -2586,7 +2588,7 @@ app.put('/api/cotizaciones/:id/ordenes', requirePermiso('catalogos', 'editar'), 
   await transaction(async (db) => {
     const candidatas = await db.prepare(`
       SELECT o.id FROM ordenes o
-      WHERE o.contacto_id = ? AND o.fecha > ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
+      WHERE o.contacto_id = ? AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
     `).all(cotizacion.contacto_id, cotizacion.fecha_creacion, req.params.id);
     const idsValidos = new Set(candidatas.map((o) => o.id));
 

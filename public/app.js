@@ -27,6 +27,7 @@ const buscar = document.getElementById('buscar');
 const filtroEstatusBtn = document.getElementById('filtro-estatus-btn');
 const filtroEstatusPanel = document.getElementById('filtro-estatus-panel');
 const estatusSeleccionados = new Set();
+const filtroAnio = document.getElementById('filtro-anio');
 const checkTodosOrdenes = document.getElementById('check-todos-ordenes');
 const btnEnviarTareasOrdenes = document.getElementById('btn-enviar-tareas-ordenes');
 const ordenesSeleccionadas = new Set();
@@ -283,6 +284,21 @@ async function cargarFiltroEstatus() {
   `).join('');
 }
 
+// Filtro de Año: por default solo se ve el año en curso (la mayoria de las consultas del dia a
+// dia son sobre ordenes recientes); los años anteriores con datos quedan disponibles en el
+// desplegable para quien los necesite.
+async function cargarFiltroAnio() {
+  const res = await fetch('/api/ordenes/anios');
+  const anios = await res.json();
+  const anioActual = String(new Date().getFullYear());
+  if (!anios.includes(anioActual)) anios.unshift(anioActual);
+
+  filtroAnio.innerHTML = anios.map((a) => `<option value="${a}">${a}</option>`).join('');
+  filtroAnio.value = anioActual;
+}
+
+filtroAnio.addEventListener('change', cargarOrdenes);
+
 function actualizarBotonFiltroEstatus() {
   filtroEstatusBtn.textContent = estatusSeleccionados.size
     ? `${estatusSeleccionados.size} estatus seleccionado(s)`
@@ -323,6 +339,7 @@ async function cargarOrdenes() {
   const q = buscar.value.trim();
   if (q) parametros.set('q', q);
   if (estatusSeleccionados.size) parametros.set('estatus', [...estatusSeleccionados].join(','));
+  if (filtroAnio.value) parametros.set('anio', filtroAnio.value);
 
   const url = parametros.toString() ? `/api/ordenes?${parametros}` : '/api/ordenes';
   const res = await fetch(url);
@@ -352,7 +369,6 @@ function renderizar(ordenes) {
       <td>${escaparHtml(o.contacto_nombre || '')}</td>
       <td>${escaparHtml(o.estado_entrega_nombre || '')}</td>
       <td class="acciones">
-        ${permisosOrdenes.editar ? `<button class="btn-editar" data-id="${escaparHtml(o.id)}">Editar</button>` : ''}
         ${permisosOrdenes.borrar ? `<button class="btn-borrar" data-id="${escaparHtml(o.id)}">Borrar</button>` : ''}
       </td>
     `;
@@ -431,12 +447,6 @@ tabla.addEventListener('click', async (e) => {
     if (!confirmarDoble('¿Seguro que quieres borrar esta orden?')) return;
     await fetch(`/api/ordenes/${encodeURIComponent(id)}`, { method: 'DELETE' });
     cargarOrdenes();
-  }
-
-  if (e.target.classList.contains('btn-editar')) {
-    const res = await fetch(`/api/ordenes/${encodeURIComponent(id)}`);
-    const o = await res.json();
-    cargarOrdenEnFormulario(o);
   }
 });
 
@@ -546,7 +556,7 @@ promesaAuth.then((sesion) => {
   permisosOrdenes = sesion.permisos.ordenes;
   if (!permisosOrdenes.editar) btnMostrarForm.hidden = true;
 
-  cargarCatalogos().then(cargarOrdenes).then(() => {
+  Promise.all([cargarCatalogos(), cargarFiltroAnio()]).then(cargarOrdenes).then(() => {
     // Se llego desde el detalle de un Contacto/Hotel-Local: abre directo esa orden.
     const ordenId = new URLSearchParams(window.location.search).get('orden');
     if (ordenId) abrirDetalle(ordenId);

@@ -3055,7 +3055,7 @@ function validarOrden(body, { parcial = false } = {}) {
 }
 
 app.get('/api/ordenes', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
-  const { q, estatus } = req.query;
+  const { q, estatus, anio } = req.query;
   const condiciones = [];
   const parametros = [];
 
@@ -3073,10 +3073,23 @@ app.get('/api/ordenes', requirePermiso('ordenes', 'ver'), ar(async (req, res) =>
       parametros.push(...ids);
     }
   }
+  if (anio) {
+    condiciones.push('o.fecha LIKE ?');
+    parametros.push(`${anio}-%`);
+  }
 
   const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
   const rows = await db.prepare(`${SELECT_ORDENES} ${where} ORDER BY o.fecha DESC`).all(...parametros);
   res.json(rows);
+}));
+
+// Anios con al menos una orden (para el filtro de anio: por default solo se ve el actual, pero
+// se ofrecen los anteriores que si tengan datos, no un rango arbitrario).
+app.get('/api/ordenes/anios', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const filas = await db.prepare(`
+    SELECT DISTINCT SUBSTRING(fecha, 1, 4) AS anio FROM ordenes WHERE fecha IS NOT NULL ORDER BY anio DESC
+  `).all();
+  res.json(filas.map((f) => f.anio));
 }));
 
 app.get('/api/ordenes/:id', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
@@ -3234,15 +3247,13 @@ app.post('/api/ordenes/importar-csv', requirePermiso('ordenes', 'editar'), ar(as
         if (importe === undefined) throw new Error('importe debe ser numerico');
 
         const yaExiste = Boolean(await db.prepare('SELECT id FROM ordenes WHERE id = ?').get(registro.id));
-        const estatusId = registro.estatus ? await obtenerOCrearEstatus(registro.estatus) : null;
 
         if (yaExiste) {
           await db.prepare(`
             UPDATE ordenes SET
               fecha = @fecha, imprimir = @imprimir, nombre = @nombre, numero_oc = @numero_oc,
               estatus_sistema = @estatus_sistema, numero_seguimiento = @numero_seguimiento, nota = @nota,
-              moneda = @moneda, importe_moneda_extranjera = @importe_moneda_extranjera, importe = @importe,
-              estatus_id = @estatus_id
+              moneda = @moneda, importe_moneda_extranjera = @importe_moneda_extranjera, importe = @importe
             WHERE id = @id
           `).run({
             id: registro.id,
@@ -3256,10 +3267,10 @@ app.post('/api/ordenes/importar-csv', requirePermiso('ordenes', 'editar'), ar(as
             moneda,
             importe_moneda_extranjera: importeMonedaExtranjera,
             importe,
-            estatus_id: estatusId,
           });
           actualizadas++;
         } else {
+          const estatusId = registro.estatus ? await obtenerOCrearEstatus(registro.estatus) : null;
           const destinoId = registro.destino ? await obtenerOCrearDestino(registro.destino) : null;
           const contactoId = registro.contacto ? await obtenerOCrearContacto(registro.contacto) : null;
           const estadoEntregaId = registro.estado_entrega ? await obtenerOCrearEstadoEntrega(registro.estado_entrega) : null;

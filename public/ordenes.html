@@ -15,7 +15,13 @@
       <a href="catalogos.html?tab=destinos">Hotel / Local</a>
     </nav>
 
-    <button type="button" id="btn-mostrar-form" class="btn-agregar">+ Agregar orden</button>
+    <div class="acciones-form">
+      <button type="button" id="btn-mostrar-form" class="btn-agregar">+ Agregar orden</button>
+      <label class="campo-angosto">
+        Año
+        <select id="filtro-anio"></select>
+      </label>
+    </div>
 
     <form id="form-orden" hidden>
       <input type="hidden" id="orden-id-original" />

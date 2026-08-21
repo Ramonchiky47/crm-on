@@ -19,8 +19,8 @@
         hotel/local (sin duplicar).
       </p>
       <p class="pista">
-        <strong>Observaciones, Hotel / Local, Contacto, Empresa y Estado de la República</strong> solo se cargan la primera
-        vez que se crea una orden. Si vuelves a subir el archivo para una orden que ya existe, esos campos no se
+        <strong>Estatus, Observaciones, Hotel / Local, Contacto, Empresa y Estado de la República</strong> solo se cargan la
+        primera vez que se crea una orden. Si vuelves a subir el archivo para una orden que ya existe, esos campos no se
         modifican (se protegen los cambios hechos a mano en la app); el resto de las columnas sí se actualiza.
       </p>
 
@@ -46,8 +46,8 @@
         <p class="pista">
           Con esa casilla marcada se ajustan automáticamente las columnas, la codificación de acentos y los
           importes. Como el export de NetSuite no trae Hotel/Local ni Contacto, una orden nueva se crea sin esos
-          datos (se pueden agregar luego a mano); una orden que ya existe solo actualiza estatus, importes y
-          seguimiento, igual que con la plantilla normal.
+          datos (se pueden agregar luego a mano); una orden que ya existe solo actualiza estatus del sistema,
+          importes y seguimiento (no el Estatus del catálogo), igual que con la plantilla normal.
         </p>
         <div class="acciones-form">
           <button type="submit" id="btn-cargar">Cargar archivo</button>

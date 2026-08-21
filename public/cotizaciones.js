@@ -236,6 +236,24 @@ function celdaEstatus(estatus) {
   return `<span class="${clase}">${escaparHtml(estatus)}</span>`;
 }
 
+// Catalogo fijo de motivos al marcar una cotizacion como perdida: coincide con las <option> del
+// select estatico del formulario de edicion (cotizaciones.html), para que ambos lugares (modal
+// de detalle y formulario) ofrezcan exactamente las mismas opciones.
+const MOTIVOS_PERDIDA_COTIZACION = [
+  'Precio',
+  'Tiempo de entrega',
+  'Se fue con otro proveedor',
+  'Proyecto cancelado o pospuesto',
+  'Cambio de especificaciones del cliente',
+  'Sin respuesta del cliente',
+  'Otro',
+];
+
+function htmlOpcionesMotivoPerdida() {
+  return `<option value="">-- Selecciona un motivo --</option>`
+    + MOTIVOS_PERDIDA_COTIZACION.map((m) => `<option value="${escaparHtml(m)}">${escaparHtml(m)}</option>`).join('');
+}
+
 function fechaDe(creadoEn) {
   return (creadoEn || '').split(' ')[0];
 }
@@ -569,6 +587,59 @@ const btnGuardarCotizacion = document.getElementById('btn-guardar-cotizacion');
 const btnCancelarCotizacion = document.getElementById('btn-cancelar-cotizacion');
 const btnEnviarTareasSeguimiento = document.getElementById('btn-enviar-tareas-seguimiento');
 const tablaCotizaciones = document.getElementById('tabla-cotizaciones');
+
+// ---------- Barra de acciones y etapa (Ganada/Perdida) dentro del formulario de edicion ----------
+// Solo aplica al editar una cotizacion existente (con id); al capturar una nueva no hay nada
+// que visualizar/clonar/descargar todavia, ni una etapa que cambiar.
+const cotizacionAccionesEdicion = document.getElementById('cotizacion-acciones-edicion');
+const btnFormVerCotizacion = document.getElementById('btn-form-ver-cotizacion');
+const btnFormDescargarPdfCotizacion = document.getElementById('btn-form-descargar-pdf-cotizacion');
+const btnFormClonarCotizacion = document.getElementById('btn-form-clonar-cotizacion');
+const cotizacionFormEstatus = document.getElementById('cotizacion-form-estatus');
+const cotizacionPanelEtapa = document.getElementById('cotizacion-panel-etapa');
+const btnFormMarcarGanada = document.getElementById('btn-form-marcar-ganada');
+const btnFormMostrarMarcarPerdida = document.getElementById('btn-form-mostrar-marcar-perdida');
+const cotizacionFormMarcarPerdida = document.getElementById('cotizacion-form-marcar-perdida');
+const cotizacionMotivoPerdidaSelect = document.getElementById('cotizacion-motivo-perdida-select');
+const cotizacionMotivoPerdidaComentarios = document.getElementById('cotizacion-motivo-perdida-comentarios');
+const btnFormConfirmarMarcarPerdida = document.getElementById('btn-form-confirmar-marcar-perdida');
+const btnFormCancelarMarcarPerdida = document.getElementById('btn-form-cancelar-marcar-perdida');
+
+// Combina el motivo elegido en el catalogo con el comentario libre en un solo texto (es como se
+// guarda motivo_perdida, sin agregar una columna nueva): "Motivo: comentario", o solo uno de los
+// dos si el otro viene vacio.
+function combinarMotivoPerdida(motivo, comentarios) {
+  const c = (comentarios || '').trim();
+  if (!motivo) return c;
+  return c ? `${motivo}: ${c}` : motivo;
+}
+
+function ocultarMarcarPerdidaForm() {
+  cotizacionFormMarcarPerdida.hidden = true;
+  cotizacionMotivoPerdidaSelect.value = '';
+  cotizacionMotivoPerdidaComentarios.value = '';
+}
+
+btnFormVerCotizacion.addEventListener('click', () => generarPDFCotizacion(cotizacionId.value));
+btnFormDescargarPdfCotizacion.addEventListener('click', () => descargarPDFCotizacion(cotizacionId.value));
+btnFormClonarCotizacion.addEventListener('click', () => clonarCotizacion(cotizacionId.value));
+
+btnFormMarcarGanada.addEventListener('click', () => {
+  if (!confirm('¿Marcar esta cotización como ganada?')) return;
+  marcarEtapaCotizacion(cotizacionId.value, 'Ganada', '', () => editarCotizacion(cotizacionId.value));
+});
+
+btnFormMostrarMarcarPerdida.addEventListener('click', () => {
+  cotizacionFormMarcarPerdida.hidden = false;
+  cotizacionMotivoPerdidaSelect.focus();
+});
+
+btnFormCancelarMarcarPerdida.addEventListener('click', ocultarMarcarPerdidaForm);
+
+btnFormConfirmarMarcarPerdida.addEventListener('click', () => {
+  const motivo = combinarMotivoPerdida(cotizacionMotivoPerdidaSelect.value, cotizacionMotivoPerdidaComentarios.value);
+  marcarEtapaCotizacion(cotizacionId.value, 'Perdida', motivo, () => editarCotizacion(cotizacionId.value));
+});
 
 const cotizacionMostrarTotales = document.getElementById('cotizacion-mostrar-totales');
 const resumenSubtotal = document.getElementById('resumen-subtotal');
@@ -1006,6 +1077,9 @@ function limpiarFormCotizacion() {
   actualizarResumen();
   btnGuardarCotizacion.textContent = 'Guardar cotización';
   btnEnviarTareasSeguimiento.hidden = true;
+  cotizacionAccionesEdicion.hidden = true;
+  cotizacionPanelEtapa.hidden = true;
+  ocultarMarcarPerdidaForm();
   if (filtroNegocioId) {
     cotizacionNegocio.value = filtroNegocioId;
     replicarContactoYDestinoDeNegocio(filtroNegocioId);
@@ -1199,6 +1273,12 @@ function cargarCotizacionEnFormulario(c) {
 
   btnGuardarCotizacion.textContent = 'Guardar cambios';
   btnEnviarTareasSeguimiento.hidden = false;
+
+  cotizacionAccionesEdicion.hidden = false;
+  cotizacionFormEstatus.innerHTML = celdaEstatus(c.estatus);
+  cotizacionPanelEtapa.hidden = !(permisosCatalogos.editar && c.etapa === 'Negociacion');
+  ocultarMarcarPerdidaForm();
+
   mostrarDetallesGeneralesCotizacion(false);
   actualizarCamposVaciosCotizacion();
   activarSubtab('captura');
@@ -1357,6 +1437,10 @@ async function abrirDetalleCotizacion(id) {
       <form id="form-marcar-perdida-cotizacion" hidden>
         <label>
           Motivo (por qué no se ganó esta cotización)
+          <select id="motivo-perdida-cotizacion-select">${htmlOpcionesMotivoPerdida()}</select>
+        </label>
+        <label>
+          Comentarios (opcional)
           <textarea id="motivo-perdida-cotizacion" rows="2" placeholder="Detalles de por qué se perdió, con quién se habló, qué hubiera cambiado el resultado..."></textarea>
         </label>
         <div class="acciones-form">
@@ -1425,8 +1509,9 @@ async function abrirDetalleCotizacion(id) {
   if (formPerdida) {
     formPerdida.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const motivo = document.getElementById('motivo-perdida-cotizacion').value.trim();
-      await marcarEtapaCotizacion(c.id_cotizacion, 'Perdida', motivo);
+      const motivoSelect = document.getElementById('motivo-perdida-cotizacion-select').value;
+      const comentarios = document.getElementById('motivo-perdida-cotizacion').value;
+      await marcarEtapaCotizacion(c.id_cotizacion, 'Perdida', combinarMotivoPerdida(motivoSelect, comentarios));
     });
     document.getElementById('btn-cancelar-marcar-perdida-cotizacion').addEventListener('click', () => {
       formPerdida.hidden = true;
@@ -1436,9 +1521,10 @@ async function abrirDetalleCotizacion(id) {
   modalOverlay.hidden = false;
 }
 
-// Cambia la etapa de una cotizacion a Ganada o Perdida desde el detalle (sin pasar por el
-// formulario completo de edicion) y refresca el detalle para reflejar el nuevo estatus.
-async function marcarEtapaCotizacion(id, etapa, motivoPerdida) {
+// Cambia la etapa de una cotizacion a Ganada o Perdida (desde el modal de detalle o desde el
+// formulario de edicion) y refresca la vista que la llamo para reflejar el nuevo estatus; por
+// default refresca el modal de detalle, pero el formulario de edicion pasa su propio refresco.
+async function marcarEtapaCotizacion(id, etapa, motivoPerdida, alExito = () => abrirDetalleCotizacion(id)) {
   const res = await fetch(`/api/cotizaciones/${encodeURIComponent(id)}/etapa`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -1449,7 +1535,8 @@ async function marcarEtapaCotizacion(id, etapa, motivoPerdida) {
     alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
     return;
   }
-  abrirDetalleCotizacion(id);
+  alExito();
+  cargarCotizaciones();
 }
 
 function cerrarModal() {
@@ -1488,7 +1575,7 @@ modalContenido.addEventListener('click', (e) => {
   }
   if (e.target.classList.contains('btn-mostrar-marcar-perdida-cotizacion')) {
     document.getElementById('form-marcar-perdida-cotizacion').hidden = false;
-    document.getElementById('motivo-perdida-cotizacion').focus();
+    document.getElementById('motivo-perdida-cotizacion-select').focus();
   }
 });
 

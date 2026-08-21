@@ -110,6 +110,44 @@
 
       <form id="form-cotizacion" hidden>
         <input type="hidden" id="cotizacion-id" />
+
+        <div class="acciones-form" id="cotizacion-acciones-edicion" hidden>
+          <button type="button" id="btn-form-ver-cotizacion" class="btn-mini">Visualizar</button>
+          <button type="button" id="btn-form-descargar-pdf-cotizacion" class="btn-mini">Descargar PDF</button>
+          <button type="button" id="btn-form-clonar-cotizacion" class="btn-mini">Clonar</button>
+          <span id="cotizacion-form-estatus"></span>
+        </div>
+
+        <div class="acciones-form acciones-etapa-cotizacion" id="cotizacion-panel-etapa" hidden>
+          <button type="button" id="btn-form-marcar-ganada" class="btn-mini">Marcar como ganada</button>
+          <button type="button" id="btn-form-mostrar-marcar-perdida" class="btn-mini">Marcar como perdida</button>
+        </div>
+        <div id="cotizacion-form-marcar-perdida" hidden>
+          <label>
+            Motivo (por qué no se ganó esta cotización)
+            <select id="cotizacion-motivo-perdida-select">
+              <option value="">-- Selecciona un motivo --</option>
+              <option value="Precio">Precio</option>
+              <option value="Tiempo de entrega">Tiempo de entrega</option>
+              <option value="Se fue con otro proveedor">Se fue con otro proveedor</option>
+              <option value="Proyecto cancelado o pospuesto">Proyecto cancelado o pospuesto</option>
+              <option value="Cambio de especificaciones del cliente">Cambio de especificaciones del cliente</option>
+              <option value="Sin respuesta del cliente">Sin respuesta del cliente</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </label>
+          <label>
+            Comentarios (opcional)
+            <textarea id="cotizacion-motivo-perdida-comentarios" rows="2" placeholder="Detalles de por qué se perdió, con quién se habló, qué hubiera cambiado el resultado..."></textarea>
+          </label>
+          <div class="acciones-form">
+            <button type="button" id="btn-form-confirmar-marcar-perdida" class="btn-mini">Confirmar como perdida</button>
+            <button type="button" id="btn-form-cancelar-marcar-perdida" class="btn-mini">Cancelar</button>
+          </div>
+        </div>
+
+        <div class="detalle-cotizacion-grid">
+        <div class="detalle-cotizacion-info">
         <div class="fila">
           <label>
             Nombre de cotización
@@ -218,7 +256,9 @@
         <div class="acciones-form">
           <button type="button" id="btn-toggle-detalles-cotizacion" class="btn-mini">▲ Ver menos campos</button>
         </div>
+        </div>
 
+        <div class="detalle-cotizacion-productos">
         <datalist id="lista-productos"></datalist>
 
         <div class="tabla-scroll">
@@ -247,6 +287,8 @@
           <div><span>Descuento</span><p id="resumen-descuento">0.00</p></div>
           <div><span>IVA (16%)</span><p id="resumen-iva">0.00</p></div>
           <div><span>Gran Total</span><p id="resumen-gran-total">0.00</p></div>
+        </div>
+        </div>
         </div>
 
         <div class="acciones-form">

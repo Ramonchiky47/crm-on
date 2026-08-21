@@ -159,39 +159,43 @@
           </div>
         </div>
 
-        <div class="detalle-cotizacion-grid">
+        <div class="detalle-cotizacion-grid detalle-cotizacion-grid-formulario">
         <div class="detalle-cotizacion-info">
-        <div class="fila">
+        <div class="tarjeta">
+          <h3>General</h3>
           <label>
             Nombre de cotización
             <input type="text" id="cotizacion-nombre" required />
           </label>
-          <label>
-            Negocio
-            <span class="campo-con-boton">
-              <select id="cotizacion-negocio" required><option value="">-- Selecciona --</option></select>
-              <button type="button" id="btn-nuevo-negocio" class="btn-mini" title="Agregar negocio nuevo">+</button>
-            </span>
-          </label>
-          <label class="campo-angosto">
-            Moneda
-            <select id="cotizacion-moneda" required>
-              <option value="">-- Selecciona --</option>
-              <option value="USD">USD</option>
-              <option value="MXN">MXN</option>
-            </select>
-          </label>
-          <label class="campo-angosto">
-            Etapa
-            <select id="cotizacion-etapa" required>
-              <option value="Negociacion">Negociación</option>
-              <option value="Ganada">Ganada</option>
-              <option value="Perdida">Perdida</option>
-            </select>
-          </label>
+          <div class="fila">
+            <label>
+              Negocio
+              <span class="campo-con-boton">
+                <select id="cotizacion-negocio" required><option value="">-- Selecciona --</option></select>
+                <button type="button" id="btn-nuevo-negocio" class="btn-mini" title="Agregar negocio nuevo">+</button>
+              </span>
+            </label>
+            <label class="campo-angosto">
+              Moneda
+              <select id="cotizacion-moneda" required>
+                <option value="">-- Selecciona --</option>
+                <option value="USD">USD</option>
+                <option value="MXN">MXN</option>
+              </select>
+            </label>
+            <label class="campo-angosto">
+              Etapa
+              <select id="cotizacion-etapa" required>
+                <option value="Negociacion">Negociación</option>
+                <option value="Ganada">Ganada</option>
+                <option value="Perdida">Perdida</option>
+              </select>
+            </label>
+          </div>
         </div>
         <div id="cotizacion-detalles-generales">
-        <div class="fila">
+        <div class="tarjeta">
+          <h3>Cliente y destino</h3>
           <label>
             Contacto
             <span class="campo-con-boton">
@@ -199,18 +203,20 @@
               <button type="button" id="btn-nuevo-contacto-cotizacion" class="btn-mini" title="Agregar contacto nuevo">+</button>
             </span>
           </label>
-          <label>
-            Hotel / Local
-            <span class="campo-con-boton">
-              <select id="cotizacion-destino"><option value="">-- Selecciona --</option></select>
-              <button type="button" id="btn-nuevo-destino-cotizacion" class="btn-mini" title="Agregar hotel/local nuevo">+</button>
-            </span>
-          </label>
-          <label>
-            Representante de ventas
-            <select id="cotizacion-representante"><option value="">-- Selecciona --</option></select>
-          </label>
-          <label>
+          <div class="fila">
+            <label>
+              Hotel / Local
+              <span class="campo-con-boton">
+                <select id="cotizacion-destino"><option value="">-- Selecciona --</option></select>
+                <button type="button" id="btn-nuevo-destino-cotizacion" class="btn-mini" title="Agregar hotel/local nuevo">+</button>
+              </span>
+            </label>
+            <label>
+              Representante de ventas
+              <select id="cotizacion-representante"><option value="">-- Selecciona --</option></select>
+            </label>
+          </div>
+          <label class="campo-angosto">
             Descuento
             <span class="campo-con-boton">
               <input type="number" id="cotizacion-descuento" step="0.01" min="0" max="100" value="0" />
@@ -221,49 +227,50 @@
             </span>
           </label>
         </div>
-        <div class="fila">
-          <label>
-            Fecha de creación
-            <input type="date" id="cotizacion-fecha-creacion" readonly />
-          </label>
-          <label>
-            Vencimiento
-            <select id="cotizacion-vencimiento-opcion">
-              <option value="30">30 días</option>
-              <option value="60">60 días</option>
-              <option value="90">90 días</option>
-              <option value="personalizada">Personalizada</option>
-            </select>
-          </label>
-          <label>
-            Fecha de vencimiento
-            <input type="date" id="cotizacion-vencimiento-fecha" />
-          </label>
-        </div>
-        <div class="fila">
-          <label>
-            Método de pago
-            <input type="text" id="cotizacion-metodo-pago" maxlength="50" placeholder="Ej. Contado" />
-          </label>
-          <label>
-            Lugar de entrega
-            <input type="text" id="cotizacion-lugar-entrega" maxlength="50" />
-          </label>
-          <label>
-            Tiempo de entrega
-            <input type="text" id="cotizacion-tiempo-entrega" maxlength="50" />
-          </label>
-        </div>
-        <div class="fila">
-          <label>
+        <div class="tarjeta">
+          <h3>Condiciones y seguimiento</h3>
+          <div class="fila">
+            <label>
+              Fecha de creación
+              <input type="date" id="cotizacion-fecha-creacion" readonly />
+            </label>
+            <label>
+              Vencimiento
+              <select id="cotizacion-vencimiento-opcion">
+                <option value="30">30 días</option>
+                <option value="60">60 días</option>
+                <option value="90">90 días</option>
+                <option value="personalizada">Personalizada</option>
+              </select>
+            </label>
+            <label>
+              Fecha de vencimiento
+              <input type="date" id="cotizacion-vencimiento-fecha" />
+            </label>
+          </div>
+          <div class="fila">
+            <label>
+              Método de pago
+              <input type="text" id="cotizacion-metodo-pago" maxlength="50" placeholder="Ej. Contado" />
+            </label>
+            <label>
+              Lugar de entrega
+              <input type="text" id="cotizacion-lugar-entrega" maxlength="50" />
+            </label>
+            <label>
+              Tiempo de entrega
+              <input type="text" id="cotizacion-tiempo-entrega" maxlength="50" />
+            </label>
+          </div>
+          <label class="campo-angosto">
             Fecha de seguimiento
             <input type="date" id="cotizacion-fecha-seguimiento" />
           </label>
         </div>
-        <label>
-          Observaciones
-          <textarea id="cotizacion-observaciones" rows="2"></textarea>
-        </label>
+        <div class="tarjeta">
+          <h3>Observaciones</h3>
+          <textarea id="cotizacion-observaciones" rows="3" aria-label="Observaciones" placeholder="Notas para esta cotización..."></textarea>
+        </div>
         </div>
 
         <div class="acciones-form">

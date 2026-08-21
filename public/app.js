@@ -21,6 +21,9 @@ const campos = {
 const btnGuardar = document.getElementById('btn-guardar');
 const btnCancelar = document.getElementById('btn-cancelar');
 const btnMostrarForm = document.getElementById('btn-mostrar-form');
+const modalOrdenOverlay = document.getElementById('modal-orden-overlay');
+const modalOrdenCerrar = document.getElementById('modal-orden-cerrar');
+const tituloFormOrden = document.getElementById('titulo-form-orden');
 const tabla = document.getElementById('tabla-ordenes');
 const estadoVacio = document.getElementById('estado-vacio');
 const buscar = document.getElementById('buscar');
@@ -453,17 +456,17 @@ function limpiarFormulario() {
   form.reset();
   campos.id.disabled = false;
   btnGuardar.textContent = 'Agregar orden';
+  tituloFormOrden.textContent = 'Nueva orden';
 }
 
 function abrirFormulario() {
-  form.hidden = false;
-  btnMostrarForm.hidden = true;
+  modalOrdenOverlay.hidden = false;
+  campos.id.focus();
 }
 
 function cerrarFormulario() {
   limpiarFormulario();
-  form.hidden = true;
-  btnMostrarForm.hidden = false;
+  modalOrdenOverlay.hidden = true;
 }
 
 form.addEventListener('submit', async (e) => {
@@ -509,6 +512,10 @@ form.addEventListener('submit', async (e) => {
 
 btnCancelar.addEventListener('click', cerrarFormulario);
 btnMostrarForm.addEventListener('click', abrirFormulario);
+modalOrdenCerrar.addEventListener('click', cerrarFormulario);
+modalOrdenOverlay.addEventListener('click', (e) => {
+  if (e.target === modalOrdenOverlay) cerrarFormulario();
+});
 
 tabla.addEventListener('click', async (e) => {
   const id = e.target.dataset.id;
@@ -542,6 +549,7 @@ function cargarOrdenEnFormulario(o) {
   campos.observaciones.value = o.observaciones || '';
 
   btnGuardar.textContent = 'Guardar cambios';
+  tituloFormOrden.textContent = `Editar orden ${o.id}`;
   abrirFormulario();
   campos.fecha.focus();
 }

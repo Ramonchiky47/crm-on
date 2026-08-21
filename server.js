@@ -2310,6 +2310,21 @@ async function avanzarNegocioSiTodoGanado(db, negocioId) {
     .run(etapaGanada.id_etapa, negocioId, etapaGanada.id_etapa);
 }
 
+// Espejo de avanzarNegocioSiTodoGanado: si TODAS las cotizaciones de un negocio quedan en
+// "Perdida" (y tiene al menos una), el negocio avanza a "Cierre Perdido". Igual de un solo
+// sentido: no revierte si despues se agrega una cotizacion nueva en Negociacion.
+async function avanzarNegocioSiTodoPerdido(db, negocioId) {
+  if (!negocioId) return;
+  const cotizaciones = await db.prepare('SELECT etapa FROM cotizaciones WHERE negocio_id = ?').all(negocioId);
+  if (!cotizaciones.length || !cotizaciones.every((c) => c.etapa === 'Perdida')) return;
+
+  const etapaPerdida = await db.prepare("SELECT id_etapa FROM etapas_negocio WHERE etapa ILIKE '%perdido%' ORDER BY id_etapa LIMIT 1").get();
+  if (!etapaPerdida) return;
+
+  await db.prepare('UPDATE negocios SET etapa_id = ? WHERE id_negocio = ? AND etapa_id IS DISTINCT FROM ?')
+    .run(etapaPerdida.id_etapa, negocioId, etapaPerdida.id_etapa);
+}
+
 async function guardarItems(db, cotizacionId, items) {
   await db.prepare('DELETE FROM cotizacion_items WHERE cotizacion_id = ?').run(cotizacionId);
   for (const it of items) {
@@ -2423,6 +2438,7 @@ app.post('/api/cotizaciones', requirePermiso('catalogos', 'editar'), ar(async (r
     );
     await guardarItems(db, id, req.body.items);
     await avanzarNegocioSiTodoGanado(db, req.body.negocio_id);
+    await avanzarNegocioSiTodoPerdido(db, req.body.negocio_id);
   });
 
   res.status(201).json(await cotizacionConDetalle(id));
@@ -2482,6 +2498,7 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
     );
     await guardarItems(db, req.params.id, req.body.items);
     await avanzarNegocioSiTodoGanado(db, req.body.negocio_id);
+    await avanzarNegocioSiTodoPerdido(db, req.body.negocio_id);
   });
 
   res.json(await cotizacionConDetalle(req.params.id));
@@ -2505,6 +2522,7 @@ app.put('/api/cotizaciones/:id/etapa', requirePermiso('catalogos', 'editar'), ar
     await db.prepare('UPDATE cotizaciones SET etapa = ?, motivo_perdida = ? WHERE id_cotizacion = ?')
       .run(etapa, motivoPerdida, req.params.id);
     await avanzarNegocioSiTodoGanado(db, cotizacion.negocio_id);
+    await avanzarNegocioSiTodoPerdido(db, cotizacion.negocio_id);
   });
 
   res.json(await cotizacionConDetalle(req.params.id));
@@ -2526,6 +2544,7 @@ app.delete('/api/cotizaciones/:id', requirePermiso('catalogos', 'borrar'), ar(as
   await transaction(async (db) => {
     await db.prepare('DELETE FROM cotizaciones WHERE id_cotizacion = ?').run(req.params.id);
     await avanzarNegocioSiTodoGanado(db, cotizacion.negocio_id);
+    await avanzarNegocioSiTodoPerdido(db, cotizacion.negocio_id);
   });
   res.status(204).end();
 }));
@@ -4124,6 +4143,24 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
     resultado.tareasHoy = await db.prepare(`
       SELECT id_pendiente, nombre, fecha_compromiso FROM pendientes
       WHERE fecha_compromiso = ? ORDER BY nombre
+    `).all(hoy);
+
+    // "Que hacer hoy": cotizaciones cuya Fecha de seguimiento ya paso sin que se haya cerrado
+    // la etapa (el vendedor prometio llamar y no quedo registro de que lo hizo), y tareas cuyo
+    // compromiso ya paso. A diferencia de "Cotizaciones vencidas" (la cotizacion en si caduco),
+    // esto es sobre el seguimiento del vendedor, no sobre la validez de la cotizacion.
+    resultado.seguimientosAtrasados = cotizaciones
+      .filter((c) => c.etapa === 'Negociacion' && c.fecha_seguimiento && c.fecha_seguimiento < hoy)
+      .sort((a, b) => a.fecha_seguimiento.localeCompare(b.fecha_seguimiento))
+      .map((c) => ({
+        id_cotizacion: c.id_cotizacion, nombre: c.nombre, destino_nombre: c.destino_nombre,
+        contacto_nombre: c.contacto_nombre, gran_total: c.gran_total, moneda: c.moneda,
+        fecha_seguimiento: c.fecha_seguimiento,
+      }));
+
+    resultado.tareasAtrasadas = await db.prepare(`
+      SELECT id_pendiente, nombre, fecha_compromiso FROM pendientes
+      WHERE fecha_compromiso < ? ORDER BY fecha_compromiso
     `).all(hoy);
 
     // Resumen del periodo (filtro por Fecha de creacion, default el mes en curso): cuantas

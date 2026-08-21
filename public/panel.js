@@ -108,6 +108,53 @@ function renderizarTareasHoy(lista) {
     : '<p class="tarjeta-vacio">Sin tareas para hoy.</p>';
 }
 
+// "Que hacer hoy" combina dos señales que antes no se veian en ningun lado: cotizaciones en
+// Negociacion cuya Fecha de seguimiento ya paso (el vendedor prometio dar seguimiento y no hay
+// registro de que lo hizo) y tareas cuyo compromiso ya paso. Se ordenan juntas por dias de
+// atraso (lo mas atrasado primero), sin importar si es una cosa u otra: es una sola cola de
+// pendientes, no dos listas que revisar por separado.
+function chipAtraso(dias) {
+  const d = Math.abs(dias);
+  return `<span class="chip es-critico">${d} día${d === 1 ? '' : 's'} de retraso</span>`;
+}
+
+function renderizarQueHacerHoy(seguimientos, tareas) {
+  const items = [
+    ...seguimientos.map((c) => ({
+      tipo: 'Seguimiento',
+      dias: diasHasta(c.fecha_seguimiento),
+      href: `cotizaciones.html?cotizacion=${encodeURIComponent(c.id_cotizacion)}`,
+      principal: `${escaparHtml(c.id_cotizacion)} · ${escaparHtml(c.destino_nombre || c.nombre)}`,
+      secundario: `${escaparHtml(c.contacto_nombre || '')} · ${escaparHtml(c.moneda)} ${formatoImporte(c.gran_total)}`,
+    })),
+    ...tareas.map((t) => ({
+      tipo: 'Tarea',
+      dias: diasHasta(t.fecha_compromiso),
+      href: 'index.html',
+      principal: escaparHtml(t.nombre),
+      secundario: '',
+    })),
+  ].sort((a, b) => a.dias - b.dias);
+
+  document.getElementById('que-hacer-hoy-subtitulo').textContent =
+    items.length ? `${items.length} atrasado${items.length === 1 ? '' : 's'}` : 'Al día';
+
+  document.getElementById('lista-que-hacer-hoy').innerHTML = items.length
+    ? items.map((it) => `
+        <div class="fila-lista" tabindex="0" data-href="${it.href}" title="Abrir">
+          <div class="fila-lista__texto">
+            <div class="fila-lista__principal">
+              <span class="chip-tipo chip-tipo-${it.tipo === 'Tarea' ? 'tarea' : 'seguimiento'}">${it.tipo}</span>
+              ${it.principal}
+            </div>
+            ${it.secundario ? `<div class="fila-lista__secundario">${it.secundario}</div>` : ''}
+          </div>
+          ${chipAtraso(it.dias)}
+        </div>
+      `).join('')
+    : '<p class="tarjeta-vacio">Sin pendientes atrasados.</p>';
+}
+
 function tarjetaKpi(etiqueta, valor, delta, clase) {
   return `
     <article class="kpi">
@@ -299,6 +346,10 @@ async function cargarPanel() {
     document.getElementById('pipeline-subtitulo').textContent = `${d.negociosActivos} negocios activos`;
     renderizarPipeline(d.pipeline);
   }
+  if (d.seguimientosAtrasados) {
+    document.getElementById('tarjeta-que-hacer-hoy').hidden = false;
+    renderizarQueHacerHoy(d.seguimientosAtrasados, d.tareasAtrasadas || []);
+  }
   if (d.cotizacionesPorVencer) {
     document.getElementById('tarjeta-vencer').hidden = false;
     renderizarCotizacionesPorVencer(d.cotizacionesPorVencer);
@@ -333,7 +384,7 @@ function activarNavegacionLista(contenedorId) {
   });
 }
 
-['pipeline-lista', 'lista-vencer', 'lista-vencidas', 'lista-tareas'].forEach(activarNavegacionLista);
+['pipeline-lista', 'lista-vencer', 'lista-vencidas', 'lista-tareas', 'lista-que-hacer-hoy'].forEach(activarNavegacionLista);
 
 promesaAuth.then((sesion) => {
   if (!sesion) return;

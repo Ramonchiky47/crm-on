@@ -560,6 +560,25 @@ body.con-barra-lateral {
 .chip.es-alerta { color: var(--alerta); background: #fbf1e0; }
 .chip.es-bueno { color: var(--exito); background: #eaf3ea; }
 
+/* "Que hacer hoy": tarjeta con acento para que sea lo primero que se note al entrar, y
+   etiquetas de tipo (Seguimiento/Tarea) para distinguir el origen de cada pendiente atrasado
+   sin competir con el chip rojo de "N dias de retraso" a la derecha de cada fila. */
+.tarjeta-hoy { border-left: 3px solid var(--peligro); }
+
+.chip-tipo {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+.chip-tipo-seguimiento { background: #e8f0fc; color: var(--dato-500); }
+.chip-tipo-tarea { background: #ececec; color: #666; }
+
 @media (max-width: 880px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .cuadricula { grid-template-columns: 1fr; }
@@ -1978,6 +1997,8 @@ td.celda-check {
     background: #2a2a2a;
     color: #eee;
   }
+  .chip-tipo-seguimiento { background: #1c2c40; color: #86b6ef; }
+  .chip-tipo-tarea { background: #333; color: #bbb; }
   .multi-select-btn {
     background: #2a2a2a;
     color: #eee;

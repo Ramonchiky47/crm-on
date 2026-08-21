@@ -236,15 +236,23 @@ const destinoId = document.getElementById('destino-id');
 const destinoNombre = document.getElementById('destino-nombre');
 const destinoUbicacion = document.getElementById('destino-ubicacion');
 const btnCancelarDestino = document.getElementById('btn-cancelar-destino');
+const btnMostrarFormDestino = document.getElementById('btn-mostrar-form-destino');
 const tablaDestinos = document.getElementById('tabla-destinos');
 
 function abrirFormDestino() {
   formDestino.hidden = false;
+  btnMostrarFormDestino.hidden = true;
 }
 
 function cerrarFormDestino() {
   formDestino.hidden = true;
+  btnMostrarFormDestino.hidden = false;
 }
+
+btnMostrarFormDestino.addEventListener('click', () => {
+  abrirFormDestino();
+  destinoNombre.focus();
+});
 
 let permisosCatalogos = { ver: true, editar: true, borrar: true };
 let esAdminActual = false;
@@ -2454,6 +2462,7 @@ promesaAuth.then((sesion) => {
   esAdminActual = sesion.esAdmin;
 
   formDestino.hidden = true;
+  btnMostrarFormDestino.hidden = !permisosCatalogos.editar;
   formPlaza.hidden = !permisosCatalogos.editar;
   formGrupo.hidden = !permisosCatalogos.editar;
   formCadena.hidden = !permisosCatalogos.editar;

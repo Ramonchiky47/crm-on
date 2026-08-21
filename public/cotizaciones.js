@@ -633,9 +633,9 @@ btnFormDescargarPdfCotizacion.addEventListener('click', () => descargarPDFCotiza
 btnFormClonarCotizacion.addEventListener('click', () => clonarCotizacion(cotizacionId.value));
 
 btnFormMostrarMarcarGanada.addEventListener('click', async () => {
-  const nombreContacto = cotizacionContacto.options[cotizacionContacto.selectedIndex]?.textContent || 'este contacto';
+  const nombreDestino = cotizacionDestino.options[cotizacionDestino.selectedIndex]?.textContent || 'este Hotel/Local';
   cotizacionMarcarGanadaPista.textContent =
-    `Órdenes de ${nombreContacto} con fecha igual o posterior a la cotización (${cotizacionFechaCreacion.value}). Selecciona las que correspondan (opcional):`;
+    `Órdenes de ${nombreDestino} con fecha igual o posterior a la cotización (${cotizacionFechaCreacion.value}). Selecciona las que correspondan (opcional):`;
   cotizacionPanelMarcarGanada.hidden = false;
   await cargarListaOrdenesCandidatas(cotizacionId.value, 'lista-ordenes-candidatas-ganada-form');
 });
@@ -1486,7 +1486,7 @@ async function abrirDetalleCotizacion(id) {
     </div>
     ${permisosCatalogos.editar && c.etapa === 'Negociacion' ? `
       <div id="panel-marcar-ganada" class="panel-form" hidden>
-        <p class="pista">Órdenes de ${escaparHtml(c.contacto_nombre || 'este contacto')} con fecha igual o posterior a la cotización (${escaparHtml(c.fecha_creacion)}). Selecciona las que correspondan (opcional):</p>
+        <p class="pista">Órdenes de ${escaparHtml(c.destino_nombre || 'este Hotel/Local')} con fecha igual o posterior a la cotización (${escaparHtml(c.fecha_creacion)}). Selecciona las que correspondan (opcional):</p>
         <div id="lista-ordenes-candidatas-ganada"></div>
         <div class="acciones-form">
           <button type="button" id="btn-confirmar-marcar-ganada" class="btn-mini">Confirmar como ganada</button>
@@ -1512,7 +1512,7 @@ async function abrirDetalleCotizacion(id) {
     ` : ''}
     ${permisosCatalogos.editar && c.etapa === 'Ganada' ? `
       <div id="panel-asociar-ordenes" class="panel-form" hidden>
-        <p class="pista">Órdenes de ${escaparHtml(c.contacto_nombre || 'este contacto')} con fecha posterior a la cotización (${escaparHtml(c.fecha_creacion)}):</p>
+        <p class="pista">Órdenes de ${escaparHtml(c.destino_nombre || 'este Hotel/Local')} con fecha posterior a la cotización (${escaparHtml(c.fecha_creacion)}):</p>
         <div id="lista-ordenes-candidatas"></div>
         <div class="acciones-form">
           <button type="button" id="btn-guardar-asociar-ordenes" class="btn-mini">Guardar asociación</button>
@@ -1664,7 +1664,7 @@ async function guardarOrdenesAsociadas(id, ordenIds) {
   return true;
 }
 
-// Carga y muestra las ordenes candidatas (mismo contacto, fecha igual o posterior a la
+// Carga y muestra las ordenes candidatas (mismo Hotel/Local, fecha igual o posterior a la
 // cotizacion) con un checkbox por orden, pre-marcadas las que ya estan asociadas a esta
 // cotizacion. Un mismo checklist sirve tanto para "Asociar ordenes" (ya Ganada) como para
 // "Marcar como ganada" (todavia en Negociacion, se asocia y se cierra en un solo paso).
@@ -1680,7 +1680,7 @@ async function cargarListaOrdenesCandidatas(id, contenedorId) {
           ${escaparHtml(o.fecha)} · ${escaparHtml(o.id)} — ${escaparHtml(o.moneda || '')} ${formatoImporte(o.importe)}
         </label>
       `).join('')
-    : '<p class="pista">No hay órdenes de este contacto con fecha igual o posterior a la cotización.</p>';
+    : '<p class="pista">No hay órdenes de este Hotel/Local con fecha igual o posterior a la cotización.</p>';
 }
 
 async function abrirPanelAsociarOrdenes(id) {

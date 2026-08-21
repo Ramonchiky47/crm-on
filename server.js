@@ -2572,20 +2572,21 @@ app.delete('/api/cotizaciones/:id', requirePermiso('catalogos', 'borrar'), ar(as
 }));
 
 // Ordenes candidatas para asociar a una cotizacion (tipicamente al marcarla como ganada): del
-// mismo contacto (el "cliente" de la cotizacion) y con fecha igual o posterior a la de creacion
-// de la cotizacion (la orden real se levanta el mismo dia que se gana o despues, no antes).
-// Incluye las que ya estan asociadas A ESTA cotizacion (para mostrarlas pre-marcadas), pero no
-// las que ya pertenecen a otra.
+// mismo Hotel/Local (el destino, no el contacto individual que la firmo: la misma propiedad
+// puede tener varios contactos cotizando/ordenando) y con fecha igual o posterior a la de
+// creacion de la cotizacion (la orden real se levanta el mismo dia que se gana o despues, no
+// antes). Incluye las que ya estan asociadas A ESTA cotizacion (para mostrarlas pre-marcadas),
+// pero no las que ya pertenecen a otra.
 app.get('/api/cotizaciones/:id/ordenes-candidatas', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
   if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
-  if (!cotizacion.contacto_id) return res.json([]);
+  if (!cotizacion.destino_id) return res.json([]);
 
   const ordenes = await db.prepare(`
     ${SELECT_ORDENES}
-    WHERE o.contacto_id = ? AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
+    WHERE o.destino_id = ? AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
     ORDER BY o.fecha
-  `).all(cotizacion.contacto_id, cotizacion.fecha_creacion, req.params.id);
+  `).all(cotizacion.destino_id, cotizacion.fecha_creacion, req.params.id);
 
   res.json(ordenes);
 }));
@@ -2593,8 +2594,8 @@ app.get('/api/cotizaciones/:id/ordenes-candidatas', requirePermiso('catalogos', 
 // Guarda que ordenes quedan asociadas a esta cotizacion (el pedido real generado a partir de
 // ella): las que vienen en orden_ids se marcan, y las que ya estaban asociadas pero ya no
 // vienen en la lista se desasocian. Solo toca ordenes que son candidatas validas (mismo
-// contacto, fecha igual o posterior, libres o ya de esta cotizacion) para no "robar" una orden
-// que ya pertenece a otra.
+// Hotel/Local, fecha igual o posterior, libres o ya de esta cotizacion) para no "robar" una
+// orden que ya pertenece a otra.
 app.put('/api/cotizaciones/:id/ordenes', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
   const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
   if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
@@ -2604,8 +2605,8 @@ app.put('/api/cotizaciones/:id/ordenes', requirePermiso('catalogos', 'editar'), 
   await transaction(async (db) => {
     const candidatas = await db.prepare(`
       SELECT o.id FROM ordenes o
-      WHERE o.contacto_id = ? AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
-    `).all(cotizacion.contacto_id, cotizacion.fecha_creacion, req.params.id);
+      WHERE o.destino_id = ? AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
+    `).all(cotizacion.destino_id, cotizacion.fecha_creacion, req.params.id);
     const idsValidos = new Set(candidatas.map((o) => o.id));
 
     for (const ordenId of ordenIds) {
@@ -3117,28 +3118,29 @@ app.get('/api/ordenes/:id', requirePermiso('ordenes', 'ver'), ar(async (req, res
 }));
 
 // Cotizaciones candidatas para asociar a esta orden (la direccion inversa de "Marcar como
-// ganada" en Cotizaciones): del mismo contacto que la orden, todavia en Negociacion y vigentes
-// (no vencidas). Al asociar una, esa cotizacion se cierra como Ganada en el mismo paso.
+// ganada" en Cotizaciones): del mismo Hotel/Local que la orden (no el contacto individual: la
+// misma propiedad puede tener varios contactos cotizando/ordenando), todavia en Negociacion y
+// vigentes (no vencidas). Al asociar una, esa cotizacion se cierra como Ganada en el mismo paso.
 app.get('/api/ordenes/:id/cotizaciones-candidatas', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
   const orden = await db.prepare('SELECT * FROM ordenes WHERE id = ?').get(req.params.id);
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
-  if (!orden.contacto_id) return res.json([]);
+  if (!orden.destino_id) return res.json([]);
 
   const cotizaciones = (await db.prepare(`
-    ${SELECT_COTIZACIONES} WHERE q.contacto_id = ? AND q.etapa = 'Negociacion'
-  `).all(orden.contacto_id)).map(conEstatus).filter((c) => c.estatus === 'Vigente');
+    ${SELECT_COTIZACIONES} WHERE q.destino_id = ? AND q.etapa = 'Negociacion'
+  `).all(orden.destino_id)).map(conEstatus).filter((c) => c.estatus === 'Vigente');
 
   res.json(cotizaciones);
 }));
 
-// Asocia esta orden a una cotizacion vigente del mismo cliente y, en el mismo paso, cierra esa
-// cotizacion como Ganada (el pedido real que llego confirma que se gano la venta).
+// Asocia esta orden a una cotizacion vigente del mismo Hotel/Local y, en el mismo paso, cierra
+// esa cotizacion como Ganada (el pedido real que llego confirma que se gano la venta).
 app.put('/api/ordenes/:id/asociar-cotizacion', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
   const orden = await db.prepare('SELECT * FROM ordenes WHERE id = ?').get(req.params.id);
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
 
   const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.body.cotizacion_id);
-  if (!cotizacion || cotizacion.contacto_id !== orden.contacto_id || cotizacion.etapa !== 'Negociacion') {
+  if (!cotizacion || cotizacion.destino_id !== orden.destino_id || cotizacion.etapa !== 'Negociacion') {
     return res.status(400).json({ errores: ['La cotización no es una candidata válida para esta orden'] });
   }
 

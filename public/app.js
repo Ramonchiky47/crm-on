@@ -130,13 +130,13 @@ async function abrirDetalle(id) {
             <p class="valor-cot"><a href="cotizaciones.html?cotizacion=${encodeURIComponent(orden.cotizacion_id)}">${escaparHtml(orden.cotizacion_id)}</a>${orden.cotizacion_nombre ? ` — ${escaparHtml(orden.cotizacion_nombre)}` : ''}</p>
           </div>
         </div>
-        ` : (permisosOrdenes.editar && orden.contacto_id ? `
+        ` : (permisosOrdenes.editar && orden.destino_id ? `
         <div class="tarjeta">
           <h3>Cotización</h3>
           <p class="pista">Esta orden no está asociada a ninguna cotización.</p>
           <button type="button" id="btn-mostrar-asociar-cotizacion" class="btn-mini">Asociar a cotización</button>
           <div id="panel-asociar-cotizacion-orden" class="panel-form" hidden>
-            <p class="pista">Cotizaciones vigentes de ${escaparHtml(orden.contacto_nombre || 'este contacto')}. Selecciona una para asociarla y marcarla como ganada:</p>
+            <p class="pista">Cotizaciones vigentes de ${escaparHtml(orden.destino_nombre || 'este Hotel/Local')}. Selecciona una para asociarla y marcarla como ganada:</p>
             <div id="lista-cotizaciones-candidatas"></div>
             <div class="acciones-form">
               <button type="button" id="btn-confirmar-asociar-cotizacion" class="btn-mini">Asociar y marcar como ganada</button>
@@ -213,7 +213,7 @@ async function abrirDetalle(id) {
   }
 }
 
-// Cotizaciones vigentes del mismo contacto que la orden, candidatas para asociar en el sentido
+// Cotizaciones vigentes del mismo Hotel/Local que la orden, candidatas para asociar en el sentido
 // inverso a "Marcar como ganada" en Cotizaciones (aqui se parte de una orden real y se cierra la
 // cotizacion correspondiente).
 async function cargarListaCotizacionesCandidatas(ordenId) {
@@ -228,7 +228,7 @@ async function cargarListaCotizacionesCandidatas(ordenId) {
           ${escaparHtml(c.fecha_creacion)} · ${escaparHtml(c.id_cotizacion)} — ${escaparHtml(c.nombre)} (${escaparHtml(c.moneda || '')} ${formatoImporte(c.gran_total)})
         </label>
       `).join('')
-    : '<p class="pista">No hay cotizaciones vigentes de este contacto.</p>';
+    : '<p class="pista">No hay cotizaciones vigentes de este Hotel/Local.</p>';
 }
 
 async function guardarAsociarCotizacion(ordenId, cotizacionId) {

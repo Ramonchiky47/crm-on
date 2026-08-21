@@ -1793,8 +1793,175 @@ td.celda-check {
 }
 
 .resumen-cotizacion div:last-child p {
-  color: #1565c0;
+  color: var(--peligro);
   font-size: 1.1rem !important;
+}
+
+/* ---------- Detalle de cotizacion (modal "Ver cotizacion" y formulario de edicion): tipografia
+   y componentes propios, con la misma identidad ya usada en el PDF/HTML de la cotizacion
+   (rojo Gonpal, IBM Plex) para que pantalla y documento se sientan el mismo producto. Se
+   escopea a estos contenedores especificos para no afectar el resto de la app. */
+.detalle-cotizacion-grid,
+.detalle-cotizacion,
+#cotizacion-acciones-edicion,
+#cotizacion-panel-etapa,
+#cotizacion-form-marcar-perdida {
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.detalle-cotizacion h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.eyebrow-cot {
+  margin: 0 0 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--peligro);
+}
+
+.pill-estatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+}
+.pill-estatus::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.pill-estatus.estatus-vigente { background: #eaf3ea; }
+.pill-estatus.estatus-vencido { background: #fbebe8; }
+
+.btn-marca {
+  background: var(--peligro);
+  color: #fff;
+}
+.btn-marca:hover { background: #a5311f; opacity: 1; }
+
+.btn-texto {
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.3rem 0.15rem;
+  cursor: pointer;
+  color: #757575;
+  border-bottom: 1px solid transparent;
+}
+.btn-texto:hover { color: inherit; border-color: currentColor; }
+.btn-texto.es-bueno:hover { color: var(--exito); }
+.btn-texto.es-malo:hover { color: var(--peligro); }
+
+.barra-acciones-cot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.7rem 1.2rem;
+  padding: 0.85rem 1rem;
+  background: var(--fondo-modal);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  margin-bottom: 1.1rem;
+}
+.barra-acciones-cot .grupo-acciones-cot { display: flex; gap: 0.45rem; flex-wrap: wrap; }
+.barra-acciones-cot .separador-vertical-cot { width: 1px; align-self: stretch; background: var(--borde); }
+.barra-acciones-cot .grupo-etapa-cot { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.grupo-etapa-cot .etiqueta-etapa-cot {
+  color: #9b9b9b;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.detalle-cotizacion-info .tarjeta { margin-bottom: 0.9rem; }
+.detalle-cotizacion-info .tarjeta:last-child { margin-bottom: 0; }
+.detalle-cotizacion-info .tarjeta h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9b9b9b;
+}
+.detalle-cotizacion-info .tarjeta .campo-cot { margin-bottom: 0.7rem; }
+.detalle-cotizacion-info .tarjeta .campo-cot:last-child { margin-bottom: 0; }
+.detalle-cotizacion-info .tarjeta .campo-cot .etiqueta-cot {
+  display: block;
+  font-size: 0.7rem;
+  color: #9b9b9b;
+  margin-bottom: 0.1rem;
+}
+.detalle-cotizacion-info .tarjeta .campo-cot .valor-cot {
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.tarjeta-productos-cot {
+  background: var(--fondo-modal);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.tarjeta-productos-cot table { margin: 0; font-size: 0.82rem; }
+.tarjeta-productos-cot thead th {
+  background: var(--fondo-suave);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #9b9b9b;
+  padding: 0.6rem 1rem;
+}
+.tarjeta-productos-cot tbody td { padding: 0.75rem 1rem; }
+.tarjeta-productos-cot td:first-child {
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+.tarjeta-productos-cot td.num, .tarjeta-productos-cot th.num {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  max-width: none;
+}
+.tarjeta-productos-cot .item-codigo { font-weight: 600; }
+.tarjeta-productos-cot .item-desc { color: #9b9b9b; font-size: 0.78rem; margin-top: 0.1rem; }
+.tarjeta-productos-cot .resumen-cotizacion {
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  border: none;
+  border-top: 1px solid var(--borde);
+  background: var(--fondo-suave);
+  max-width: none;
+  margin: 0;
+  padding: 0.9rem 1rem 1rem;
+}
+.tarjeta-productos-cot .resumen-cotizacion div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+.tarjeta-productos-cot .resumen-cotizacion div:last-child {
+  margin-top: 0.5rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--borde);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1829,4 +1996,14 @@ td.celda-check {
   .calendario-encabezado-dia {
     color: #eee;
   }
+  .pill-estatus.estatus-vigente { background: #1e2e1e; }
+  .pill-estatus.estatus-vencido { background: #33211d; }
+  .grupo-etapa-cot .etiqueta-etapa-cot,
+  .detalle-cotizacion-info .tarjeta h3,
+  .detalle-cotizacion-info .tarjeta .campo-cot .etiqueta-cot,
+  .tarjeta-productos-cot thead th,
+  .tarjeta-productos-cot .item-desc {
+    color: #a9a49c;
+  }
+  .btn-texto { color: #a9a49c; }
 }

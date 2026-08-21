@@ -1275,7 +1275,7 @@ function cargarCotizacionEnFormulario(c) {
   btnEnviarTareasSeguimiento.hidden = false;
 
   cotizacionAccionesEdicion.hidden = false;
-  cotizacionFormEstatus.innerHTML = celdaEstatus(c.estatus);
+  cotizacionFormEstatus.innerHTML = pillEstatus(c.estatus);
   cotizacionPanelEtapa.hidden = !(permisosCatalogos.editar && c.etapa === 'Negociacion');
   ocultarMarcarPerdidaForm();
 
@@ -1345,6 +1345,19 @@ const modalCerrar = document.getElementById('modal-cerrar');
 
 function campoFicha(etiqueta, valor) {
   return `<div><span>${escaparHtml(etiqueta)}</span><p>${valor !== null && valor !== undefined && valor !== '' ? escaparHtml(String(valor)) : '-'}</p></div>`;
+}
+
+// Campo dentro de una tarjeta del detalle de cotizacion (ver abrirDetalleCotizacion): mismo
+// dato que campoFicha, con las clases del rediseno en dos columnas por tarjetas tematicas.
+function campoCot(etiqueta, valor) {
+  return `<div class="campo-cot"><span class="etiqueta-cot">${escaparHtml(etiqueta)}</span><p class="valor-cot">${valor !== null && valor !== undefined && valor !== '' ? escaparHtml(String(valor)) : '-'}</p></div>`;
+}
+
+// Estatus como chip de color (verde/rojo), reutilizando las clases estatus-vigente/estatus-vencido
+// ya usadas en tablas (que solo dan color de texto) mas la clase pill-estatus (forma + fondo).
+function pillEstatus(estatus) {
+  const clase = estatus === 'Vencido' ? 'estatus-vencido' : 'estatus-vigente';
+  return `<span class="pill-estatus ${clase}">${escaparHtml(estatus)}</span>`;
 }
 
 // La clausula de "reportar daño en 24 horas" se resalta en rojo/negrita/mas grande que el
@@ -1422,19 +1435,29 @@ async function abrirDetalleCotizacion(id) {
   c.mostrarImpuesto = c.items.some((it) => it.causa_impuesto !== false);
 
   modalContenido.innerHTML = `
+    <div class="detalle-cotizacion">
+    <p class="eyebrow-cot">Cotización · ${escaparHtml(c.id_cotizacion)}</p>
     <h2>${escaparHtml(c.nombre)}</h2>
-    <div class="acciones-form">
-      <button type="button" class="btn-pdf-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Ver cotización</button>
-      <button type="button" class="btn-descargar-pdf-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Descargar PDF</button>
-      ${permisosCatalogos.editar ? `<button type="button" class="btn-clonar-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Clonar</button>` : ''}
-      ${permisosCatalogos.editar ? `<button type="button" class="btn-editar-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Editar</button>` : ''}
+    ${pillEstatus(c.estatus)}
+
+    <div class="barra-acciones-cot">
+      <div class="grupo-acciones-cot">
+        <button type="button" class="btn-marca btn-pdf-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Ver cotización</button>
+        <button type="button" class="btn-marca btn-descargar-pdf-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Descargar PDF</button>
+        ${permisosCatalogos.editar ? `<button type="button" class="btn-secundario btn-clonar-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Clonar</button>` : ''}
+        ${permisosCatalogos.editar ? `<button type="button" class="btn-secundario btn-editar-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Editar</button>` : ''}
+      </div>
+      ${permisosCatalogos.editar && c.etapa === 'Negociacion' ? `
+        <div class="separador-vertical-cot"></div>
+        <div class="grupo-etapa-cot">
+          <span class="etiqueta-etapa-cot">Etapa</span>
+          <button type="button" class="btn-texto es-bueno btn-marcar-ganada-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Marcar como ganada</button>
+          <button type="button" class="btn-texto es-malo btn-mostrar-marcar-perdida-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Marcar como perdida</button>
+        </div>
+      ` : ''}
     </div>
     ${permisosCatalogos.editar && c.etapa === 'Negociacion' ? `
-      <div class="acciones-form acciones-etapa-cotizacion">
-        <button type="button" class="btn-mini btn-marcar-ganada-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Marcar como ganada</button>
-        <button type="button" class="btn-mini btn-mostrar-marcar-perdida-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Marcar como perdida</button>
-      </div>
-      <form id="form-marcar-perdida-cotizacion" hidden>
+      <form id="form-marcar-perdida-cotizacion" class="panel-form" hidden>
         <label>
           Motivo (por qué no se ganó esta cotización)
           <select id="motivo-perdida-cotizacion-select">${htmlOpcionesMotivoPerdida()}</select>
@@ -1451,56 +1474,70 @@ async function abrirDetalleCotizacion(id) {
     ` : ''}
     <div class="detalle-cotizacion-grid">
       <div class="detalle-cotizacion-info">
-        <div class="ficha-detalle">
-          ${campoFicha('ID', c.id_cotizacion)}
-          ${campoFicha('Negocio', c.negocio_nombre)}
-          ${campoFicha('Contacto', c.contacto_nombre)}
-          ${campoFicha('Hotel / Local', c.destino_nombre)}
-          ${campoFicha('Representante de ventas', c.representante_nombre)}
-          ${campoFicha('Moneda', c.moneda)}
-          ${campoFicha('Fecha de creación', c.fecha_creacion)}
-          ${campoFicha('Fecha de vencimiento', c.fecha_vencimiento)}
-          <div><span>Estatus</span><p>${celdaEstatus(c.estatus)}</p></div>
-          ${campoFicha('Método de pago', c.metodo_pago)}
-          ${campoFicha('Lugar de entrega', c.lugar_entrega)}
-          ${campoFicha('Tiempo de entrega', c.tiempo_entrega)}
-          ${campoFicha('Fecha de seguimiento', c.fecha_seguimiento)}
-          ${c.etapa === 'Perdida' ? campoFicha('Motivo de pérdida', c.motivo_perdida) : ''}
+        <div class="tarjeta">
+          <h3>Resumen</h3>
+          ${campoCot('Fecha de creación', c.fecha_creacion)}
+          ${campoCot('Fecha de vencimiento', c.fecha_vencimiento)}
+          ${c.etapa === 'Perdida' ? campoCot('Motivo de pérdida', c.motivo_perdida) : ''}
         </div>
-        ${c.observaciones ? `<p><strong>Observaciones:</strong></p><p class="observaciones-cotizacion">${observacionesConClausulaResaltada(c.observaciones)}</p>` : ''}
+        <div class="tarjeta">
+          <h3>Cliente y destino</h3>
+          ${campoCot('Negocio', c.negocio_nombre)}
+          ${campoCot('Contacto', c.contacto_nombre)}
+          ${campoCot('Hotel / Local', c.destino_nombre)}
+          ${campoCot('Representante de ventas', c.representante_nombre)}
+          ${campoCot('Moneda', c.moneda)}
+        </div>
+        <div class="tarjeta">
+          <h3>Condiciones</h3>
+          ${campoCot('Método de pago', c.metodo_pago)}
+          ${campoCot('Lugar de entrega', c.lugar_entrega)}
+          ${campoCot('Tiempo de entrega', c.tiempo_entrega)}
+          ${campoCot('Fecha de seguimiento', c.fecha_seguimiento)}
+        </div>
+        ${c.observaciones ? `
+        <div class="tarjeta">
+          <h3>Observaciones</h3>
+          <p class="observaciones-cotizacion">${observacionesConClausulaResaltada(c.observaciones)}</p>
+        </div>
+        ` : ''}
       </div>
       <div class="detalle-cotizacion-productos">
-        <h3>Productos (${c.items.length})</h3>
-        <div class="tabla-scroll">
-          <table>
-            <thead><tr>
-              <th>Producto</th><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th>
-              ${c.mostrarImpuesto ? '<th>Impuesto %</th><th>Impuesto</th>' : ''}
-              <th>Total</th>
-            </tr></thead>
-            <tbody>
-              ${c.items.map((it) => `
-                <tr>
-                  <td>${escaparHtml(it.producto_item)}</td>
-                  <td>${escaparHtml(it.producto_descripcion || '')}</td>
-                  <td>${formatoImporte(it.cantidad)}</td>
-                  <td>${formatoImporte(it.precio_unitario)}</td>
-                  ${c.mostrarImpuesto ? `<td>${it.impuesto_porcentaje}%</td><td>${formatoImporte(it.impuesto_monto)}</td>` : ''}
-                  <td>${formatoImporte(it.total)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+        <div class="tarjeta-productos-cot">
+          <div class="tabla-scroll">
+            <table>
+              <thead><tr>
+                <th>Producto</th><th class="num">Cantidad</th><th class="num">Precio unitario</th>
+                ${c.mostrarImpuesto ? '<th class="num">Impuesto %</th><th class="num">Impuesto</th>' : ''}
+                <th class="num">Total</th>
+              </tr></thead>
+              <tbody>
+                ${c.items.map((it) => `
+                  <tr>
+                    <td>
+                      <div class="item-codigo">${escaparHtml(it.producto_item)}</div>
+                      ${it.producto_descripcion ? `<div class="item-desc">${escaparHtml(it.producto_descripcion)}</div>` : ''}
+                    </td>
+                    <td class="num">${formatoImporte(it.cantidad)}</td>
+                    <td class="num">${formatoImporte(it.precio_unitario)}</td>
+                    ${c.mostrarImpuesto ? `<td class="num">${it.impuesto_porcentaje}%</td><td class="num">${formatoImporte(it.impuesto_monto)}</td>` : ''}
+                    <td class="num">${formatoImporte(it.total)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${c.mostrar_totales === false ? '' : `
+          <div class="ficha-detalle resumen-cotizacion">
+            <div><span>Sub Total</span><p>${formatoImporte(c.subtotal)}</p></div>
+            <div><span>${textoDescuento(c)}</span><p>${formatoImporte(c.descuento_monto)}</p></div>
+            ${c.mostrarImpuesto ? `<div><span>IVA (16%)</span><p>${formatoImporte(c.iva)}</p></div>` : ''}
+            <div><span>Gran Total</span><p>${formatoImporte(c.gran_total)}</p></div>
+          </div>
+          `}
         </div>
-        ${c.mostrar_totales === false ? '' : `
-        <div class="ficha-detalle resumen-cotizacion">
-          <div><span>Sub Total</span><p>${formatoImporte(c.subtotal)}</p></div>
-          <div><span>${textoDescuento(c)}</span><p>${formatoImporte(c.descuento_monto)}</p></div>
-          ${c.mostrarImpuesto ? `<div><span>IVA (16%)</span><p>${formatoImporte(c.iva)}</p></div>` : ''}
-          <div><span>Gran Total</span><p>${formatoImporte(c.gran_total)}</p></div>
-        </div>
-        `}
       </div>
+    </div>
     </div>
   `;
   modalCaja.classList.add('modal-caja-ancha');

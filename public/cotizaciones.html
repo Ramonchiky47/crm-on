@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cotizaciones · CRM-ON</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -111,18 +113,21 @@
       <form id="form-cotizacion" hidden>
         <input type="hidden" id="cotizacion-id" />
 
-        <div class="acciones-form" id="cotizacion-acciones-edicion" hidden>
-          <button type="button" id="btn-form-ver-cotizacion" class="btn-mini">Visualizar</button>
-          <button type="button" id="btn-form-descargar-pdf-cotizacion" class="btn-mini">Descargar PDF</button>
-          <button type="button" id="btn-form-clonar-cotizacion" class="btn-mini">Clonar</button>
-          <span id="cotizacion-form-estatus"></span>
+        <div class="barra-acciones-cot" id="cotizacion-acciones-edicion" hidden>
+          <div class="grupo-acciones-cot">
+            <button type="button" id="btn-form-ver-cotizacion" class="btn-marca">Visualizar</button>
+            <button type="button" id="btn-form-descargar-pdf-cotizacion" class="btn-marca">Descargar PDF</button>
+            <button type="button" id="btn-form-clonar-cotizacion" class="btn-secundario">Clonar</button>
+            <span id="cotizacion-form-estatus"></span>
+          </div>
+          <div class="grupo-etapa-cot" id="cotizacion-panel-etapa" hidden>
+            <span class="separador-vertical-cot"></span>
+            <span class="etiqueta-etapa-cot">Etapa</span>
+            <button type="button" id="btn-form-marcar-ganada" class="btn-texto es-bueno">Marcar como ganada</button>
+            <button type="button" id="btn-form-mostrar-marcar-perdida" class="btn-texto es-malo">Marcar como perdida</button>
+          </div>
         </div>
-
-        <div class="acciones-form acciones-etapa-cotizacion" id="cotizacion-panel-etapa" hidden>
-          <button type="button" id="btn-form-marcar-ganada" class="btn-mini">Marcar como ganada</button>
-          <button type="button" id="btn-form-mostrar-marcar-perdida" class="btn-mini">Marcar como perdida</button>
-        </div>
-        <div id="cotizacion-form-marcar-perdida" hidden>
+        <div id="cotizacion-form-marcar-perdida" class="panel-form" hidden>
           <label>
             Motivo (por qué no se ganó esta cotización)
             <select id="cotizacion-motivo-perdida-select">

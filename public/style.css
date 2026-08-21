@@ -1983,6 +1983,16 @@ td.celda-check {
   border-top: 1px solid var(--borde);
 }
 
+.opcion-orden-candidata {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.3rem 0;
+  font-size: 0.85rem;
+}
+.opcion-orden-candidata input { flex: none; width: auto; margin-top: 0.2rem; }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --borde: #444;

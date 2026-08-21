@@ -2276,7 +2276,13 @@ async function itemsDeCotizacion(cotizacionId) {
 async function cotizacionConDetalle(id) {
   const cabecera = await db.prepare(`${SELECT_COTIZACIONES} WHERE q.id_cotizacion = ?`).get(id);
   if (!cabecera) return null;
-  return { ...conEstatus(cabecera), items: await itemsDeCotizacion(id) };
+  return { ...conEstatus(cabecera), items: await itemsDeCotizacion(id), ordenes: await ordenesDeCotizacion(id) };
+}
+
+// Ordenes ya asociadas a una cotizacion (ordenes.cotizacion_id), tipicamente al marcarla como
+// Ganada: el pedido real del cliente, generado a partir de esta cotizacion.
+async function ordenesDeCotizacion(cotizacionId) {
+  return db.prepare(`${SELECT_ORDENES} WHERE o.cotizacion_id = ? ORDER BY o.fecha`).all(cotizacionId);
 }
 
 async function validarItems(items) {
@@ -2547,6 +2553,52 @@ app.delete('/api/cotizaciones/:id', requirePermiso('catalogos', 'borrar'), ar(as
     await avanzarNegocioSiTodoPerdido(db, cotizacion.negocio_id);
   });
   res.status(204).end();
+}));
+
+// Ordenes candidatas para asociar a una cotizacion ganada: del mismo contacto (el "cliente"
+// de la cotizacion) y con fecha posterior a la de creacion de la cotizacion (la orden real se
+// levanta despues de cotizar, no antes). Incluye las que ya estan asociadas A ESTA cotizacion
+// (para mostrarlas pre-marcadas), pero no las que ya pertenecen a otra.
+app.get('/api/cotizaciones/:id/ordenes-candidatas', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
+  if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
+  if (!cotizacion.contacto_id) return res.json([]);
+
+  const ordenes = await db.prepare(`
+    ${SELECT_ORDENES}
+    WHERE o.contacto_id = ? AND o.fecha > ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
+    ORDER BY o.fecha
+  `).all(cotizacion.contacto_id, cotizacion.fecha_creacion, req.params.id);
+
+  res.json(ordenes);
+}));
+
+// Guarda que ordenes quedan asociadas a esta cotizacion (el pedido real generado a partir de
+// ella): las que vienen en orden_ids se marcan, y las que ya estaban asociadas pero ya no
+// vienen en la lista se desasocian. Solo toca ordenes que son candidatas validas (mismo
+// contacto, fecha posterior, libres o ya de esta cotizacion) para no "robar" ordenes de otra.
+app.put('/api/cotizaciones/:id/ordenes', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
+  if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
+
+  const ordenIds = Array.isArray(req.body.orden_ids) ? req.body.orden_ids.map(String) : [];
+
+  await transaction(async (db) => {
+    const candidatas = await db.prepare(`
+      SELECT o.id FROM ordenes o
+      WHERE o.contacto_id = ? AND o.fecha > ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
+    `).all(cotizacion.contacto_id, cotizacion.fecha_creacion, req.params.id);
+    const idsValidos = new Set(candidatas.map((o) => o.id));
+
+    for (const ordenId of ordenIds) {
+      if (!idsValidos.has(ordenId)) continue;
+      await db.prepare('UPDATE ordenes SET cotizacion_id = ? WHERE id = ?').run(req.params.id, ordenId);
+    }
+    await db.prepare('UPDATE ordenes SET cotizacion_id = NULL WHERE cotizacion_id = ? AND NOT (id = ANY(?))')
+      .run(req.params.id, ordenIds.length ? ordenIds : ['']);
+  });
+
+  res.json(await cotizacionConDetalle(req.params.id));
 }));
 
 // Mismos datos de emisor/empresa que usa la vista HTML de "Ver" (cotizaciones.js,
@@ -4303,7 +4355,7 @@ app.use((err, req, res, next) => {
 });
 
 if (require.main === module) {
-  const PORT = process.env.PORT || 3000;
+  const PORT = process.env.PORT || 3005;
   app.listen(PORT, () => {
     console.log(`CRM-ON escuchando en http://localhost:${PORT}`);
   });

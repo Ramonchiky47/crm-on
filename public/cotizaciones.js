@@ -1455,6 +1455,12 @@ async function abrirDetalleCotizacion(id) {
           <button type="button" class="btn-texto es-malo btn-mostrar-marcar-perdida-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Marcar como perdida</button>
         </div>
       ` : ''}
+      ${permisosCatalogos.editar && c.etapa === 'Ganada' ? `
+        <div class="separador-vertical-cot"></div>
+        <div class="grupo-etapa-cot">
+          <button type="button" class="btn-texto btn-mostrar-asociar-ordenes" data-id="${escaparHtml(c.id_cotizacion)}">Asociar órdenes</button>
+        </div>
+      ` : ''}
     </div>
     ${permisosCatalogos.editar && c.etapa === 'Negociacion' ? `
       <form id="form-marcar-perdida-cotizacion" class="panel-form" hidden>
@@ -1471,6 +1477,16 @@ async function abrirDetalleCotizacion(id) {
           <button type="button" id="btn-cancelar-marcar-perdida-cotizacion" class="btn-mini">Cancelar</button>
         </div>
       </form>
+    ` : ''}
+    ${permisosCatalogos.editar && c.etapa === 'Ganada' ? `
+      <div id="panel-asociar-ordenes" class="panel-form" hidden>
+        <p class="pista">Órdenes de ${escaparHtml(c.contacto_nombre || 'este contacto')} con fecha posterior a la cotización (${escaparHtml(c.fecha_creacion)}):</p>
+        <div id="lista-ordenes-candidatas"></div>
+        <div class="acciones-form">
+          <button type="button" id="btn-guardar-asociar-ordenes" class="btn-mini">Guardar asociación</button>
+          <button type="button" id="btn-cancelar-asociar-ordenes" class="btn-mini">Cancelar</button>
+        </div>
+      </div>
     ` : ''}
     <div class="detalle-cotizacion-grid">
       <div class="detalle-cotizacion-info">
@@ -1495,6 +1511,17 @@ async function abrirDetalleCotizacion(id) {
           ${campoCot('Tiempo de entrega', c.tiempo_entrega)}
           ${campoCot('Fecha de seguimiento', c.fecha_seguimiento)}
         </div>
+        ${c.etapa === 'Ganada' ? `
+        <div class="tarjeta">
+          <h3>Órdenes asociadas (${c.ordenes.length})</h3>
+          ${c.ordenes.length ? c.ordenes.map((o) => `
+            <div class="campo-cot">
+              <span class="etiqueta-cot">${escaparHtml(o.fecha)}</span>
+              <p class="valor-cot"><a href="ordenes.html?orden=${encodeURIComponent(o.id)}">${escaparHtml(o.id)}</a> — ${escaparHtml(o.moneda || '')} ${formatoImporte(o.importe)}</p>
+            </div>
+          `).join('') : '<p class="pista">Sin órdenes asociadas todavía.</p>'}
+        </div>
+        ` : ''}
         ${c.observaciones ? `
         <div class="tarjeta">
           <h3>Observaciones</h3>
@@ -1555,7 +1582,47 @@ async function abrirDetalleCotizacion(id) {
     });
   }
 
+  const panelOrdenes = document.getElementById('panel-asociar-ordenes');
+  if (panelOrdenes) {
+    document.getElementById('btn-cancelar-asociar-ordenes').addEventListener('click', () => {
+      panelOrdenes.hidden = true;
+    });
+    document.getElementById('btn-guardar-asociar-ordenes').addEventListener('click', async () => {
+      const ordenIds = [...document.querySelectorAll('#lista-ordenes-candidatas input[type="checkbox"]:checked')]
+        .map((el) => el.value);
+      const res2 = await fetch(`/api/cotizaciones/${encodeURIComponent(c.id_cotizacion)}/ordenes`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orden_ids: ordenIds }),
+      });
+      if (!res2.ok) {
+        const error = await res2.json().catch(() => ({}));
+        alert('Error: ' + (error.errores ? error.errores.join(', ') : res2.statusText));
+        return;
+      }
+      abrirDetalleCotizacion(c.id_cotizacion);
+    });
+  }
+
   modalOverlay.hidden = false;
+}
+
+// Carga y muestra las ordenes candidatas (mismo contacto, fecha posterior a la cotizacion) con
+// un checkbox por orden, pre-marcadas las que ya estan asociadas a esta cotizacion.
+async function abrirPanelAsociarOrdenes(id) {
+  document.getElementById('panel-asociar-ordenes').hidden = false;
+  const lista = document.getElementById('lista-ordenes-candidatas');
+  lista.innerHTML = '<p class="pista">Cargando…</p>';
+  const res = await fetch(`/api/cotizaciones/${encodeURIComponent(id)}/ordenes-candidatas`);
+  const ordenes = res.ok ? await res.json() : [];
+  lista.innerHTML = ordenes.length
+    ? ordenes.map((o) => `
+        <label class="opcion-orden-candidata">
+          <input type="checkbox" value="${escaparHtml(o.id)}" ${o.cotizacion_id === id ? 'checked' : ''} />
+          ${escaparHtml(o.fecha)} · ${escaparHtml(o.id)} — ${escaparHtml(o.moneda || '')} ${formatoImporte(o.importe)}
+        </label>
+      `).join('')
+    : '<p class="pista">No hay órdenes de este contacto con fecha posterior a la cotización.</p>';
 }
 
 // Cambia la etapa de una cotizacion a Ganada o Perdida (desde el modal de detalle o desde el
@@ -1613,6 +1680,10 @@ modalContenido.addEventListener('click', (e) => {
   if (e.target.classList.contains('btn-mostrar-marcar-perdida-cotizacion')) {
     document.getElementById('form-marcar-perdida-cotizacion').hidden = false;
     document.getElementById('motivo-perdida-cotizacion-select').focus();
+    return;
+  }
+  if (e.target.classList.contains('btn-mostrar-asociar-ordenes')) {
+    abrirPanelAsociarOrdenes(e.target.dataset.id);
   }
 });
 

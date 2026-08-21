@@ -198,11 +198,24 @@ const resumenDesde = document.getElementById('resumen-desde');
 const resumenHasta = document.getElementById('resumen-hasta');
 const btnAplicarRango = document.getElementById('btn-aplicar-rango');
 
-const inicioMesInicial = `${hoyISO().slice(0, 7)}-01`;
-let rangoPanel = {
-  desde: inicioMesInicial, hasta: hoyISO(),
-  desdePrevio: mesAnteriorMismoDia(inicioMesInicial), hastaPrevio: mesAnteriorMismoDia(hoyISO()),
-};
+// La semana inicia en lunes. Si hoy es sabado/domingo la semana ya se completo (Lun-Vie);
+// si no, se corta en hoy (no se muestran dias futuros de la semana en curso). El periodo
+// anterior es exactamente 7 dias atras (mismos dias de la semana pasada), no los N dias de
+// calendario justo antes de "desde": eso compararia, por ejemplo, Lun-Mie contra
+// Vie-Dom de la semana pasada en vez de contra su propio Lun-Mie.
+function rangoSemanaActual() {
+  const hoy = hoyISO();
+  const diaSemanaIso = (new Date(`${hoy}T00:00:00`).getDay() + 6) % 7; // 0 = lunes ... 6 = domingo
+  const lunes = sumarDiasIso(hoy, -diaSemanaIso);
+  const viernes = sumarDiasIso(lunes, 4);
+  const hastaSemana = hoy < viernes ? hoy : viernes;
+  return {
+    desde: lunes, hasta: hastaSemana,
+    desdePrevio: sumarDiasIso(lunes, -7), hastaPrevio: sumarDiasIso(hastaSemana, -7),
+  };
+}
+
+let rangoPanel = rangoSemanaActual();
 
 function marcarBotonActivo(rango) {
   rangoBotones.querySelectorAll('.rango-periodo__boton').forEach((b) => {
@@ -232,19 +245,7 @@ rangoBotones.addEventListener('click', (e) => {
     else if (diaSemana === 6) comparar = sumarDiasIso(comparar, -1);
     rangoPanel = { desde: hoy, hasta: hoy, desdePrevio: comparar, hastaPrevio: comparar };
   } else if (rango === 'semana') {
-    // La semana inicia en lunes. Si hoy es sabado/domingo la semana ya se completo (Lun-Vie);
-    // si no, se corta en hoy (no se muestran dias futuros de la semana en curso). El periodo
-    // anterior es exactamente 7 dias atras (mismos dias de la semana pasada), no los N dias de
-    // calendario justo antes de "desde": eso compararia, por ejemplo, Lun-Mie contra
-    // Vie-Dom de la semana pasada en vez de contra su propio Lun-Mie.
-    const diaSemanaIso = (new Date(`${hoy}T00:00:00`).getDay() + 6) % 7; // 0 = lunes ... 6 = domingo
-    const lunes = sumarDiasIso(hoy, -diaSemanaIso);
-    const viernes = sumarDiasIso(lunes, 4);
-    const hastaSemana = hoy < viernes ? hoy : viernes;
-    rangoPanel = {
-      desde: lunes, hasta: hastaSemana,
-      desdePrevio: sumarDiasIso(lunes, -7), hastaPrevio: sumarDiasIso(hastaSemana, -7),
-    };
+    rangoPanel = rangoSemanaActual();
   } else {
     // "Mes": del dia 1 a hoy, comparado contra el mismo tramo de dias del mes anterior
     // (1 al 19 de julio si hoy es 19 de agosto), no contra los N dias justo antes del dia 1.
@@ -263,7 +264,7 @@ btnAplicarRango.addEventListener('click', () => {
   cargarPanel();
 });
 
-marcarBotonActivo('mes');
+marcarBotonActivo('semana');
 
 async function cargarPanel() {
   const query = new URLSearchParams({ desde: rangoPanel.desde, hasta: rangoPanel.hasta });

@@ -130,7 +130,21 @@ async function abrirDetalle(id) {
             <p class="valor-cot"><a href="cotizaciones.html?cotizacion=${encodeURIComponent(orden.cotizacion_id)}">${escaparHtml(orden.cotizacion_id)}</a>${orden.cotizacion_nombre ? ` — ${escaparHtml(orden.cotizacion_nombre)}` : ''}</p>
           </div>
         </div>
-        ` : ''}
+        ` : (permisosOrdenes.editar && orden.contacto_id ? `
+        <div class="tarjeta">
+          <h3>Cotización</h3>
+          <p class="pista">Esta orden no está asociada a ninguna cotización.</p>
+          <button type="button" id="btn-mostrar-asociar-cotizacion" class="btn-mini">Asociar a cotización</button>
+          <div id="panel-asociar-cotizacion-orden" class="panel-form" hidden>
+            <p class="pista">Cotizaciones vigentes de ${escaparHtml(orden.contacto_nombre || 'este contacto')}. Selecciona una para asociarla y marcarla como ganada:</p>
+            <div id="lista-cotizaciones-candidatas"></div>
+            <div class="acciones-form">
+              <button type="button" id="btn-confirmar-asociar-cotizacion" class="btn-mini">Asociar y marcar como ganada</button>
+              <button type="button" id="btn-cancelar-asociar-cotizacion" class="btn-mini">Cancelar</button>
+            </div>
+          </div>
+        </div>
+        ` : '')}
         ${orden.nota ? `
         <div class="tarjeta">
           <h3>Nota</h3>
@@ -180,6 +194,55 @@ async function abrirDetalle(id) {
 
   modalCaja.classList.add('modal-caja-ancha');
   modalOverlay.hidden = false;
+
+  const btnMostrarAsociarCotizacion = document.getElementById('btn-mostrar-asociar-cotizacion');
+  if (btnMostrarAsociarCotizacion) {
+    btnMostrarAsociarCotizacion.addEventListener('click', async () => {
+      document.getElementById('panel-asociar-cotizacion-orden').hidden = false;
+      await cargarListaCotizacionesCandidatas(orden.id);
+    });
+    document.getElementById('btn-cancelar-asociar-cotizacion').addEventListener('click', () => {
+      document.getElementById('panel-asociar-cotizacion-orden').hidden = true;
+    });
+    document.getElementById('btn-confirmar-asociar-cotizacion').addEventListener('click', async () => {
+      const seleccionada = document.querySelector('#lista-cotizaciones-candidatas input[type="radio"]:checked');
+      if (!seleccionada) return;
+      const ok = await guardarAsociarCotizacion(orden.id, seleccionada.value);
+      if (ok) abrirDetalle(orden.id);
+    });
+  }
+}
+
+// Cotizaciones vigentes del mismo contacto que la orden, candidatas para asociar en el sentido
+// inverso a "Marcar como ganada" en Cotizaciones (aqui se parte de una orden real y se cierra la
+// cotizacion correspondiente).
+async function cargarListaCotizacionesCandidatas(ordenId) {
+  const lista = document.getElementById('lista-cotizaciones-candidatas');
+  lista.innerHTML = '<p class="pista">Cargando…</p>';
+  const res = await fetch(`/api/ordenes/${encodeURIComponent(ordenId)}/cotizaciones-candidatas`);
+  const cotizaciones = res.ok ? await res.json() : [];
+  lista.innerHTML = cotizaciones.length
+    ? cotizaciones.map((c) => `
+        <label class="opcion-orden-candidata">
+          <input type="radio" name="cotizacion-candidata" value="${escaparHtml(c.id_cotizacion)}" />
+          ${escaparHtml(c.fecha_creacion)} · ${escaparHtml(c.id_cotizacion)} — ${escaparHtml(c.nombre)} (${escaparHtml(c.moneda || '')} ${formatoImporte(c.gran_total)})
+        </label>
+      `).join('')
+    : '<p class="pista">No hay cotizaciones vigentes de este contacto.</p>';
+}
+
+async function guardarAsociarCotizacion(ordenId, cotizacionId) {
+  const res = await fetch(`/api/ordenes/${encodeURIComponent(ordenId)}/asociar-cotizacion`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cotizacion_id: cotizacionId }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return false;
+  }
+  return true;
 }
 
 function cerrarModal() {

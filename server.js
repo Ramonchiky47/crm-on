@@ -3116,6 +3116,42 @@ app.get('/api/ordenes/:id', requirePermiso('ordenes', 'ver'), ar(async (req, res
   res.json(row);
 }));
 
+// Cotizaciones candidatas para asociar a esta orden (la direccion inversa de "Marcar como
+// ganada" en Cotizaciones): del mismo contacto que la orden, todavia en Negociacion y vigentes
+// (no vencidas). Al asociar una, esa cotizacion se cierra como Ganada en el mismo paso.
+app.get('/api/ordenes/:id/cotizaciones-candidatas', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const orden = await db.prepare('SELECT * FROM ordenes WHERE id = ?').get(req.params.id);
+  if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
+  if (!orden.contacto_id) return res.json([]);
+
+  const cotizaciones = (await db.prepare(`
+    ${SELECT_COTIZACIONES} WHERE q.contacto_id = ? AND q.etapa = 'Negociacion'
+  `).all(orden.contacto_id)).map(conEstatus).filter((c) => c.estatus === 'Vigente');
+
+  res.json(cotizaciones);
+}));
+
+// Asocia esta orden a una cotizacion vigente del mismo cliente y, en el mismo paso, cierra esa
+// cotizacion como Ganada (el pedido real que llego confirma que se gano la venta).
+app.put('/api/ordenes/:id/asociar-cotizacion', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
+  const orden = await db.prepare('SELECT * FROM ordenes WHERE id = ?').get(req.params.id);
+  if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
+
+  const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.body.cotizacion_id);
+  if (!cotizacion || cotizacion.contacto_id !== orden.contacto_id || cotizacion.etapa !== 'Negociacion') {
+    return res.status(400).json({ errores: ['La cotización no es una candidata válida para esta orden'] });
+  }
+
+  await transaction(async (db) => {
+    await db.prepare('UPDATE ordenes SET cotizacion_id = ? WHERE id = ?').run(cotizacion.id_cotizacion, orden.id);
+    await db.prepare("UPDATE cotizaciones SET etapa = 'Ganada', fecha_cierre = (CURRENT_DATE)::text WHERE id_cotizacion = ?")
+      .run(cotizacion.id_cotizacion);
+    await avanzarNegocioSiTodoGanado(db, cotizacion.negocio_id);
+  });
+
+  res.json(await db.prepare(`${SELECT_ORDENES} WHERE o.id = ?`).get(orden.id));
+}));
+
 app.post('/api/ordenes', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
   const errores = validarOrden(req.body);
   if (errores.length) return res.status(400).json({ errores });

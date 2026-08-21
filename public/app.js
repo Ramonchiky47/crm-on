@@ -369,7 +369,7 @@ function renderizar(ordenes) {
       <td>${escaparHtml(o.contacto_nombre || '')}</td>
       <td>${escaparHtml(o.estado_entrega_nombre || '')}</td>
       <td class="acciones">
-        ${permisosOrdenes.borrar ? `<button class="btn-borrar" data-id="${escaparHtml(o.id)}">Borrar</button>` : ''}
+        ${permisosOrdenes.borrar ? `<button class="btn-borrar btn-icono" data-id="${escaparHtml(o.id)}" title="Borrar" aria-label="Borrar">🗑️</button>` : ''}
       </td>
     `;
     tabla.appendChild(tr);

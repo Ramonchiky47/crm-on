@@ -1679,6 +1679,12 @@ tfoot td {
   background: var(--peligro);
 }
 
+.btn-icono {
+  padding: 0.25rem 0.4rem;
+  line-height: 1;
+  font-size: 0.85rem;
+}
+
 .btn-listo {
   background: var(--exito);
 }

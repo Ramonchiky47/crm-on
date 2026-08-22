@@ -770,7 +770,13 @@ function filtrarSelectAsociado(select, opcionesCompletas, campoValor, campoTexto
   const valorActual = select.value;
   const opciones = (!idsPermitidos || idsPermitidos.size === 0)
     ? opcionesCompletas
-    : opcionesCompletas.filter((o) => idsPermitidos.has(String(o[campoValor])) || String(o[campoValor]) === valorActual);
+    : opcionesCompletas.filter((o) => idsPermitidos.has(String(o[campoValor])));
+  // El valor previo solo se conserva si sigue siendo valido tras filtrar (ej. edito una
+  // cotizacion y cambio el Contacto: si el Hotel/Local que ya tenia capturado no es de ese
+  // contacto, se limpia para forzar una eleccion consistente en vez de quedarse ahi sin que se
+  // note el filtro). poblarSelect conserva select.value tal cual, asi que aqui se limpia antes
+  // si ya no aplica.
+  if (valorActual && !opciones.some((o) => String(o[campoValor]) === valorActual)) select.value = '';
   poblarSelect(select, opciones, campoValor, campoTexto);
 }
 

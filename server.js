@@ -2393,15 +2393,18 @@ function validarCamposCotizacion(body) {
 app.post('/api/cotizaciones', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
   const nombre = (req.body.nombre || '').trim();
   if (!nombre) return res.status(400).json({ errores: ['nombre es requerido'] });
-  if (!req.body.negocio_id) return res.status(400).json({ errores: ['negocio es requerido'] });
   if (!['USD', 'MXN'].includes(req.body.moneda)) return res.status(400).json({ errores: ['moneda debe ser USD o MXN'] });
   const etapa = req.body.etapa || 'Negociacion';
   if (!['Negociacion', 'Ganada', 'Perdida'].includes(etapa)) {
     return res.status(400).json({ errores: ['etapa debe ser Negociacion, Ganada o Perdida'] });
   }
 
-  const negocio = await db.prepare('SELECT * FROM negocios WHERE id_negocio = ?').get(req.body.negocio_id);
-  if (!negocio || !esDueno(negocio, req)) return res.status(400).json({ errores: ['El negocio seleccionado no existe'] });
+  // El negocio ahora es opcional: se reserva para proyectos a largo plazo que ameritan seguir
+  // varias cotizaciones como un solo trato; una cotizacion suelta no necesita uno.
+  if (req.body.negocio_id) {
+    const negocio = await db.prepare('SELECT * FROM negocios WHERE id_negocio = ?').get(req.body.negocio_id);
+    if (!negocio || !esDueno(negocio, req)) return res.status(400).json({ errores: ['El negocio seleccionado no existe'] });
+  }
   if (!(await referenciaPropia('contactos', 'id_contacto', req.body.contacto_id, req))
     || !(await referenciaPropia('destinos', 'id_destino', req.body.destino_id, req))) {
     return res.status(400).json({ errores: ['El contacto o el hotel/local seleccionado no existe'] });
@@ -2461,15 +2464,17 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
 
   const nombre = (req.body.nombre || '').trim();
   if (!nombre) return res.status(400).json({ errores: ['nombre es requerido'] });
-  if (!req.body.negocio_id) return res.status(400).json({ errores: ['negocio es requerido'] });
   if (!['USD', 'MXN'].includes(req.body.moneda)) return res.status(400).json({ errores: ['moneda debe ser USD o MXN'] });
   const etapa = req.body.etapa || 'Negociacion';
   if (!['Negociacion', 'Ganada', 'Perdida'].includes(etapa)) {
     return res.status(400).json({ errores: ['etapa debe ser Negociacion, Ganada o Perdida'] });
   }
 
-  const negocio = await db.prepare('SELECT * FROM negocios WHERE id_negocio = ?').get(req.body.negocio_id);
-  if (!negocio || !esDueno(negocio, req)) return res.status(400).json({ errores: ['El negocio seleccionado no existe'] });
+  // El negocio ahora es opcional (ver nota en el POST): solo se valida si se mando alguno.
+  if (req.body.negocio_id) {
+    const negocio = await db.prepare('SELECT * FROM negocios WHERE id_negocio = ?').get(req.body.negocio_id);
+    if (!negocio || !esDueno(negocio, req)) return res.status(400).json({ errores: ['El negocio seleccionado no existe'] });
+  }
   if (!(await referenciaPropia('contactos', 'id_contacto', req.body.contacto_id, req))
     || !(await referenciaPropia('destinos', 'id_destino', req.body.destino_id, req))) {
     return res.status(400).json({ errores: ['El contacto o el hotel/local seleccionado no existe'] });

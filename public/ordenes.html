@@ -104,6 +104,7 @@
                 </select>
               </label>
             </div>
+            <p id="pista-asociar-contacto-destino" class="pista" hidden></p>
           </div>
 
           <div class="tarjeta">
@@ -196,6 +197,22 @@
         </label>
         <div class="acciones-form">
           <button type="submit">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="modal-asociar-overlay" class="modal-overlay" hidden>
+    <div class="modal-caja modal-caja-chica" role="dialog" aria-modal="true">
+      <button type="button" id="modal-asociar-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
+      <h3 id="modal-asociar-titulo"></h3>
+      <form id="form-asociar">
+        <label>
+          <span id="modal-asociar-etiqueta"></span>
+          <select id="modal-asociar-select" required></select>
+        </label>
+        <div class="acciones-form">
+          <button type="submit">Asociar</button>
         </div>
       </form>
     </div>

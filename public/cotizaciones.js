@@ -745,9 +745,12 @@ let filtroNegocioId = null;
 
 // ---------- Filtro cruzado Contacto <-> Hotel/Local (formulario de Cotizaciones) ----------
 // Al elegir un Contacto, el select de Hotel/Local se reduce a los que tiene asociados (mismo
-// dato de "Contactos asociados" en Catalogos), y viceversa; sin asociaciones capturadas no se
-// restringe nada, y el valor ya elegido en el otro campo nunca se pierde aunque no forme parte
-// de la asociacion (datos capturados antes de esta funcion).
+// dato de "Contactos asociados" en Catalogos), y viceversa. Si el contacto/destino elegido no
+// tiene NINGUNA asociacion capturada todavia, el otro select queda vacio a proposito (no se cae
+// al catalogo completo): eso fuerza a asociarlo antes de seguir. Para resolverlo sin salir de la
+// pantalla aparece una pista con un boton que abre un mini-modal para asociar uno existente (ver
+// abrirModalAsociar). El valor ya elegido en el otro campo se limpia si deja de ser valido tras
+// filtrar, para que el bloqueo siempre sea visible.
 let destinosPorContacto = new Map();
 let contactosPorDestino = new Map();
 
@@ -757,7 +760,7 @@ function indexarContactoDestinos(contactos) {
   for (const c of contactos) {
     const cid = String(c.id_contacto);
     const destinos = c.destinos || [];
-    if (destinos.length) destinosPorContacto.set(cid, new Set(destinos.map((d) => String(d.id_destino))));
+    destinosPorContacto.set(cid, new Set(destinos.map((d) => String(d.id_destino))));
     for (const d of destinos) {
       const did = String(d.id_destino);
       if (!contactosPorDestino.has(did)) contactosPorDestino.set(did, new Set());
@@ -766,16 +769,15 @@ function indexarContactoDestinos(contactos) {
   }
 }
 
+// `idsPermitidos === null` significa "el otro campo no tiene nada elegido": no se filtra, se ve
+// el catalogo completo. Cualquier otro caso (incluido un Set vacio) SI filtra, aunque el
+// resultado sea una lista vacia: es la senal de que hace falta asociar.
 function filtrarSelectAsociado(select, opcionesCompletas, campoValor, campoTexto, idsPermitidos) {
   const valorActual = select.value;
-  const opciones = (!idsPermitidos || idsPermitidos.size === 0)
+  const opciones = idsPermitidos === null
     ? opcionesCompletas
     : opcionesCompletas.filter((o) => idsPermitidos.has(String(o[campoValor])));
-  // El valor previo solo se conserva si sigue siendo valido tras filtrar (ej. edito una
-  // cotizacion y cambio el Contacto: si el Hotel/Local que ya tenia capturado no es de ese
-  // contacto, se limpia para forzar una eleccion consistente en vez de quedarse ahi sin que se
-  // note el filtro). poblarSelect conserva select.value tal cual, asi que aqui se limpia antes
-  // si ya no aplica.
+  // poblarSelect conserva select.value tal cual, asi que aqui se limpia antes si ya no es valido.
   if (valorActual && !opciones.some((o) => String(o[campoValor]) === valorActual)) select.value = '';
   poblarSelect(select, opciones, campoValor, campoTexto);
 }
@@ -806,17 +808,127 @@ async function poblarSelectsCotizacion() {
 }
 
 function filtrarDestinosPorContacto() {
+  const cid = cotizacionContacto.value;
   filtrarSelectAsociado(cotizacionDestino, destinosCache, 'id_destino', 'destino',
-    cotizacionContacto.value ? destinosPorContacto.get(cotizacionContacto.value) : null);
+    cid ? (destinosPorContacto.get(cid) || new Set()) : null);
+  actualizarPistaAsociar();
 }
 
 function filtrarContactosPorDestino() {
+  const did = cotizacionDestino.value;
   filtrarSelectAsociado(cotizacionContacto, contactosCache, 'id_contacto', 'nombre_completo_correo',
-    cotizacionDestino.value ? contactosPorDestino.get(cotizacionDestino.value) : null);
+    did ? (contactosPorDestino.get(did) || new Set()) : null);
+  actualizarPistaAsociar();
 }
 
 cotizacionContacto.addEventListener('change', filtrarDestinosPorContacto);
 cotizacionDestino.addEventListener('change', filtrarContactosPorDestino);
+
+// Muestra, cuando corresponde, la pista con el boton para asociar un Hotel/Local o Contacto
+// existente al que ya se eligio del otro lado (el select quedo vacio por el filtro cruzado).
+const pistaAsociar = document.getElementById('pista-asociar-contacto-destino');
+
+function actualizarPistaAsociar() {
+  const contactoId = cotizacionContacto.value;
+  const destinoId = cotizacionDestino.value;
+  const destinoBloqueado = contactoId && cotizacionDestino.options.length <= 1;
+  const contactoBloqueado = destinoId && cotizacionContacto.options.length <= 1;
+
+  if (destinoBloqueado) {
+    const nombre = cotizacionContacto.options[cotizacionContacto.selectedIndex]?.textContent || 'Este contacto';
+    pistaAsociar.innerHTML = `${escaparHtml(nombre)} no tiene Hotel/Local asociado. <button type="button" id="btn-asociar-existente" class="btn-mini">Asociar uno existente</button>`;
+    pistaAsociar.dataset.modo = 'destino';
+    pistaAsociar.hidden = false;
+  } else if (contactoBloqueado) {
+    const nombre = cotizacionDestino.options[cotizacionDestino.selectedIndex]?.textContent || 'Este Hotel/Local';
+    pistaAsociar.innerHTML = `${escaparHtml(nombre)} no tiene Contacto asociado. <button type="button" id="btn-asociar-existente" class="btn-mini">Asociar uno existente</button>`;
+    pistaAsociar.dataset.modo = 'contacto';
+    pistaAsociar.hidden = false;
+  } else {
+    pistaAsociar.hidden = true;
+    pistaAsociar.innerHTML = '';
+  }
+}
+
+pistaAsociar.addEventListener('click', (e) => {
+  if (e.target.id !== 'btn-asociar-existente') return;
+  abrirModalAsociar(pistaAsociar.dataset.modo);
+});
+
+// ---------- Mini-modal "Asociar existente" (resuelve el bloqueo de la pista de arriba) ----------
+
+const modalAsociarOverlay = document.getElementById('modal-asociar-overlay');
+const modalAsociarCerrar = document.getElementById('modal-asociar-cerrar');
+const modalAsociarTitulo = document.getElementById('modal-asociar-titulo');
+const modalAsociarEtiqueta = document.getElementById('modal-asociar-etiqueta');
+const modalAsociarSelect = document.getElementById('modal-asociar-select');
+const formAsociar = document.getElementById('form-asociar');
+let modoAsociar = null; // 'destino': falta Hotel/Local para el contacto ya elegido; 'contacto': falta Contacto para el hotel ya elegido
+
+function abrirModalAsociar(modo) {
+  modoAsociar = modo;
+  modalAsociarSelect.innerHTML = '<option value="">-- Selecciona --</option>';
+  if (modo === 'destino') {
+    modalAsociarTitulo.textContent = 'Asociar Hotel/Local existente';
+    modalAsociarEtiqueta.textContent = 'Hotel / Local';
+    poblarSelect(modalAsociarSelect, destinosCache, 'id_destino', 'destino');
+  } else {
+    modalAsociarTitulo.textContent = 'Asociar Contacto existente';
+    modalAsociarEtiqueta.textContent = 'Contacto';
+    poblarSelect(modalAsociarSelect, contactosCache, 'id_contacto', 'nombre_completo_correo');
+  }
+  modalAsociarOverlay.hidden = false;
+  modalAsociarSelect.focus();
+}
+
+function cerrarModalAsociar() {
+  modalAsociarOverlay.hidden = true;
+  modoAsociar = null;
+}
+
+modalAsociarCerrar.addEventListener('click', cerrarModalAsociar);
+modalAsociarOverlay.addEventListener('click', (e) => {
+  if (e.target === modalAsociarOverlay) cerrarModalAsociar();
+});
+
+// Vuelve a pedir los Contactos (traen sus Hoteles/Locales asociados) para reconstruir los dos
+// mapas con la asociacion recien creada, sin recargar toda la pagina.
+async function refrescarAsociaciones() {
+  const contactos = await fetch('/api/contactos').then((r) => r.json());
+  contactosCache = contactos;
+  indexarContactoDestinos(contactos);
+}
+
+formAsociar.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const elegidoId = modalAsociarSelect.value;
+  if (!elegidoId) return;
+
+  const destinoId = modoAsociar === 'destino' ? elegidoId : cotizacionDestino.value;
+  const contactoId = modoAsociar === 'contacto' ? elegidoId : cotizacionContacto.value;
+
+  const res = await fetch(`/api/destinos/${encodeURIComponent(destinoId)}/contactos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contacto_id: contactoId }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+
+  await refrescarAsociaciones();
+  if (modoAsociar === 'destino') {
+    filtrarDestinosPorContacto();
+    cotizacionDestino.value = elegidoId;
+  } else {
+    filtrarContactosPorDestino();
+    cotizacionContacto.value = elegidoId;
+  }
+  actualizarPistaAsociar();
+  cerrarModalAsociar();
+});
 
 // Al capturar una cotizacion a partir de un negocio, se replican el Contacto del negocio y,
 // si ese contacto tiene destinos asociados en su catalogo, el primero de ellos como Destino.

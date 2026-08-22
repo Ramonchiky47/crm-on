@@ -1052,6 +1052,20 @@ th.num, td.num {
   margin-top: 0.3rem;
 }
 
+/* Pista "falta asociar Contacto/Hotel-Local" (Ordenes y Cotizaciones): a diferencia de una
+   pista informativa comun, esta bloquea la captura hasta resolverse, por eso lleva fondo y
+   borde de alerta en vez del texto gris suelto. */
+#pista-asociar-contacto-destino:not([hidden]) {
+  color: var(--alerta);
+  background: #fbf1e0;
+  border: 1px solid #f0ddb0;
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+}
+#pista-asociar-contacto-destino button {
+  margin-left: 0.3rem;
+}
+
 .estatus-vencido {
   color: var(--peligro);
   font-weight: 600;
@@ -2132,4 +2146,8 @@ td.celda-check {
     color: #a9a49c;
   }
   .btn-texto { color: #a9a49c; }
+  #pista-asociar-contacto-destino:not([hidden]) {
+    background: #332b16;
+    border-color: #4d3f1e;
+  }
 }

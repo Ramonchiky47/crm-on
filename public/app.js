@@ -3,11 +3,8 @@ const inputIdOriginal = document.getElementById('orden-id-original');
 const campos = {
   id: document.getElementById('id'),
   fecha: document.getElementById('fecha'),
-  imprimir: document.getElementById('imprimir'),
   nombre: document.getElementById('nombre'),
   numero_oc: document.getElementById('numero_oc'),
-  estatus_sistema: document.getElementById('estatus_sistema'),
-  numero_seguimiento: document.getElementById('numero_seguimiento'),
   estatus_id: document.getElementById('estatus_id'),
   moneda: document.getElementById('moneda'),
   importe_moneda_extranjera: document.getElementById('importe_moneda_extranjera'),
@@ -711,11 +708,8 @@ form.addEventListener('submit', async (e) => {
   const payload = {
     id: campos.id.value.trim(),
     fecha: campos.fecha.value,
-    imprimir: campos.imprimir.value.trim(),
     nombre: campos.nombre.value.trim(),
     numero_oc: campos.numero_oc.value.trim(),
-    estatus_sistema: campos.estatus_sistema.value.trim(),
-    numero_seguimiento: campos.numero_seguimiento.value.trim(),
     estatus_id: campos.estatus_id.value,
     moneda: campos.moneda.value,
     importe_moneda_extranjera: campos.importe_moneda_extranjera.value,
@@ -769,11 +763,8 @@ function cargarOrdenEnFormulario(o) {
   campos.id.value = o.id;
   campos.id.disabled = true;
   campos.fecha.value = o.fecha || '';
-  campos.imprimir.value = o.imprimir || '';
   campos.nombre.value = o.nombre || '';
   campos.numero_oc.value = o.numero_oc || '';
-  campos.estatus_sistema.value = o.estatus_sistema || '';
-  campos.numero_seguimiento.value = o.numero_seguimiento || '';
   campos.estatus_id.value = o.estatus_id ?? '';
   campos.moneda.value = o.moneda ?? '';
   campos.importe_moneda_extranjera.value = o.importe_moneda_extranjera ?? '';

@@ -2557,15 +2557,18 @@ app.put('/api/cotizaciones/:id/etapa', requirePermiso('catalogos', 'editar'), ar
 
 // Un negocio no puede quedarse sin cotizaciones: si esta es la unica del negocio, no se puede
 // borrar aqui (hay que borrar el negocio completo, que se lleva su ultima cotizacion consigo).
+// Una cotizacion sin negocio (ahora opcional) no tiene nada que proteger, se borra directo.
 app.delete('/api/cotizaciones/:id', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {
   const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
   if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
 
-  const totalDelNegocioFila = await db.prepare('SELECT COUNT(*) c FROM cotizaciones WHERE negocio_id = ?').get(cotizacion.negocio_id);
-  if (Number(totalDelNegocioFila.c) <= 1) {
-    return res.status(400).json({
-      errores: ['No se puede borrar: es la única cotización de este negocio. Borra el negocio si deseas eliminarla.'],
-    });
+  if (cotizacion.negocio_id) {
+    const totalDelNegocioFila = await db.prepare('SELECT COUNT(*) c FROM cotizaciones WHERE negocio_id = ?').get(cotizacion.negocio_id);
+    if (Number(totalDelNegocioFila.c) <= 1) {
+      return res.status(400).json({
+        errores: ['No se puede borrar: es la única cotización de este negocio. Borra el negocio si deseas eliminarla.'],
+      });
+    }
   }
 
   await transaction(async (db) => {

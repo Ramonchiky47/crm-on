@@ -962,8 +962,20 @@ app.get('/api/grupos/:id', requirePermiso('catalogos', 'ver'), ar(async (req, re
   res.json(grupo);
 }));
 
+// Ademas de destinos/cotizaciones/ordenes/tareas (via asociadosDeGrupoCatalogo), un Grupo
+// tambien puede tener Contactos asociados directamente (ej. un comprador corporativo que no
+// pertenece a un Hotel/Local especifico dentro del grupo). Tabla propia grupo_contactos, sin
+// equivalente en Plaza/Cadena por ahora.
 app.get('/api/grupos/:id/asociados', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
-  res.json(await asociadosDeGrupoCatalogo('destino_grupos', 'grupo_id', req.params.id));
+  const base = await asociadosDeGrupoCatalogo('destino_grupos', 'grupo_id', req.params.id);
+  const contactos = await db.prepare(`
+    SELECT c.id_contacto, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS nombre_completo
+    FROM grupo_contactos gc
+    JOIN contactos c ON c.id_contacto = gc.contacto_id
+    WHERE gc.grupo_id = ?
+    ORDER BY c.nombre, c.apellido
+  `).all(req.params.id);
+  res.json({ ...base, contactos });
 }));
 
 // Asociar/desasociar hoteles/locales desde el lado del Grupo.
@@ -986,6 +998,30 @@ app.post('/api/grupos/:id/destinos', requirePermiso('catalogos', 'editar'), ar(a
 
 app.delete('/api/grupos/:id/destinos/:destinoId', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
   await db.prepare('DELETE FROM destino_grupos WHERE grupo_id = ? AND destino_id = ?').run(req.params.id, req.params.destinoId);
+  res.status(204).end();
+}));
+
+// Asociar/desasociar contactos desde el lado del Grupo.
+app.get('/api/grupos/:id/contactos', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const contactos = await db.prepare(`
+    SELECT c.id_contacto, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS nombre_completo
+    FROM grupo_contactos gc
+    JOIN contactos c ON c.id_contacto = gc.contacto_id
+    WHERE gc.grupo_id = ?
+    ORDER BY c.nombre, c.apellido
+  `).all(req.params.id);
+  res.json(contactos);
+}));
+
+app.post('/api/grupos/:id/contactos', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  if (!req.body.contacto_id) return res.status(400).json({ errores: ['contacto_id es requerido'] });
+  await db.prepare('INSERT INTO grupo_contactos (grupo_id, contacto_id) VALUES (?, ?) ON CONFLICT (grupo_id, contacto_id) DO NOTHING')
+    .run(req.params.id, req.body.contacto_id);
+  res.status(201).json({ ok: true });
+}));
+
+app.delete('/api/grupos/:id/contactos/:contactoId', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  await db.prepare('DELETE FROM grupo_contactos WHERE grupo_id = ? AND contacto_id = ?').run(req.params.id, req.params.contactoId);
   res.status(204).end();
 }));
 

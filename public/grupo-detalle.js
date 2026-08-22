@@ -21,7 +21,7 @@ function campoFicha(etiqueta, valor) {
 const idGrupo = new URLSearchParams(window.location.search).get('id');
 let permisosCatalogos = { ver: false, editar: false, borrar: false };
 let grupoActual = null;
-let asociadosActual = { destinos: [], cotizaciones: [], ordenes: [], tareas: [] };
+let asociadosActual = { destinos: [], contactos: [], cotizaciones: [], ordenes: [], tareas: [] };
 
 const grupoFicha = document.getElementById('grupo-ficha');
 const tituloGrupo = document.getElementById('titulo-grupo');
@@ -129,6 +129,65 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.tarjeta-buscador-wrap')) opcionesDestinoAgregar.hidden = true;
 });
 
+// ---------- Contactos: agregar por buscador, quitar con boton (mismo patron que Destinos) ----------
+
+const listaContactosGrupo = document.getElementById('lista-contactos-grupo');
+const contadorContactosGrupo = document.getElementById('contador-contactos-grupo');
+const buscarContactoAgregar = document.getElementById('buscar-contacto-agregar');
+const opcionesContactoAgregar = document.getElementById('opciones-contacto-agregar');
+let contactosDisponiblesCache = [];
+
+async function cargarContactosDisponibles() {
+  const res = await fetch('/api/contactos');
+  contactosDisponiblesCache = await res.json();
+}
+
+buscarContactoAgregar.addEventListener('input', () => {
+  const filtro = buscarContactoAgregar.value.trim().toLowerCase();
+  if (!filtro) {
+    opcionesContactoAgregar.hidden = true;
+    opcionesContactoAgregar.innerHTML = '';
+    return;
+  }
+  const yaAsociados = new Set((asociadosActual.contactos || []).map((c) => c.id_contacto));
+  const coincidencias = contactosDisponiblesCache
+    .filter((c) => !yaAsociados.has(c.id_contacto) && c.nombre_completo.toLowerCase().includes(filtro))
+    .slice(0, 20);
+  opcionesContactoAgregar.innerHTML = coincidencias.length
+    ? coincidencias.map((c) => `<button type="button" data-id="${c.id_contacto}">${escaparHtml(c.nombre_completo)}</button>`).join('')
+    : '<button type="button" disabled>Sin resultados</button>';
+  opcionesContactoAgregar.hidden = false;
+});
+
+opcionesContactoAgregar.addEventListener('click', async (e) => {
+  const id = e.target.dataset.id;
+  if (!id) return;
+  const res = await fetch(`/api/grupos/${encodeURIComponent(idGrupo)}/contactos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contacto_id: Number(id) }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  buscarContactoAgregar.value = '';
+  opcionesContactoAgregar.hidden = true;
+  await cargarAsociados();
+});
+
+listaContactosGrupo.addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('btn-quitar-contacto')) return;
+  const id = e.target.dataset.id;
+  await fetch(`/api/grupos/${encodeURIComponent(idGrupo)}/contactos/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  await cargarAsociados();
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.tarjeta-buscador-wrap')) opcionesContactoAgregar.hidden = true;
+});
+
 // ---------- Cotizaciones, Ordenes, Tareas, Destinos (via /asociados) ----------
 
 const listaCotizaciones = document.getElementById('lista-cotizaciones');
@@ -151,6 +210,16 @@ async function cargarAsociados() {
         </div>
       `).join('')
     : '<p class="tarjeta-vacio">Sin hoteles/locales asociados.</p>';
+
+  contadorContactosGrupo.textContent = `(${asociadosActual.contactos.length})`;
+  listaContactosGrupo.innerHTML = asociadosActual.contactos.length
+    ? asociadosActual.contactos.map((c) => `
+        <div class="tarjeta-item">
+          <a href="contacto-detalle.html?id=${c.id_contacto}">${escaparHtml(c.nombre_completo)}</a>
+          ${permisosCatalogos.editar ? `<button type="button" class="btn-mini btn-quitar-contacto" data-id="${c.id_contacto}">Quitar</button>` : ''}
+        </div>
+      `).join('')
+    : '<p class="tarjeta-vacio">Sin contactos asociados.</p>';
 
   contadorCotizaciones.textContent = `(${asociadosActual.cotizaciones.length})`;
   listaCotizaciones.innerHTML = asociadosActual.cotizaciones.length
@@ -197,13 +266,15 @@ promesaAuth.then(async (sesion) => {
   permisosCatalogos = sesion.permisos.catalogos;
   formEditarGrupo.hidden = true;
   btnEditarGrupo.hidden = !permisosCatalogos.editar;
-  document.querySelector('.tarjeta-buscador-wrap').hidden = !permisosCatalogos.editar;
+  document.querySelectorAll('.tarjeta-buscador-wrap').forEach((el) => { el.hidden = !permisosCatalogos.editar; });
 
   await cargarDestinosDisponibles();
+  await cargarContactosDisponibles();
   await cargarGrupo();
   await cargarAsociados();
 
   suscribirTiempoReal(['grupos'], cargarGrupo);
   suscribirTiempoReal(['destinos', 'destino_grupos'], () => { cargarDestinosDisponibles(); cargarAsociados(); });
+  suscribirTiempoReal(['contactos', 'grupo_contactos'], () => { cargarContactosDisponibles(); cargarAsociados(); });
   suscribirTiempoReal(['cotizaciones', 'ordenes', 'pendientes'], cargarAsociados);
 });

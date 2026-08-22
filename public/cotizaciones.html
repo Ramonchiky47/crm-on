@@ -129,214 +129,233 @@
 
       <button type="button" id="btn-mostrar-form-cotizacion" class="btn-agregar">+ Nueva cotización</button>
 
-      <form id="form-cotizacion" hidden>
-        <input type="hidden" id="cotizacion-id" />
+      <div id="modal-cotizacion-overlay" class="modal-overlay" hidden>
+        <div class="modal-caja modal-caja-ancha detalle-cotizacion" role="dialog" aria-modal="true">
+          <button type="button" id="modal-cotizacion-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
+          <p class="eyebrow-cot">Cotización</p>
+          <h2 id="titulo-form-cotizacion">Nueva cotización</h2>
 
-        <div class="barra-acciones-cot" id="cotizacion-acciones-edicion" hidden>
-          <div class="grupo-acciones-cot">
-            <button type="button" id="btn-form-ver-cotizacion" class="btn-marca">Visualizar</button>
-            <button type="button" id="btn-form-descargar-pdf-cotizacion" class="btn-marca">Descargar PDF</button>
-            <button type="button" id="btn-form-clonar-cotizacion" class="btn-secundario">Clonar</button>
-            <span id="cotizacion-form-estatus"></span>
-          </div>
-          <div class="grupo-etapa-cot" id="cotizacion-panel-etapa" hidden>
-            <span class="separador-vertical-cot"></span>
-            <span class="etiqueta-etapa-cot">Etapa</span>
-            <button type="button" id="btn-form-mostrar-marcar-ganada" class="btn-texto es-bueno">Marcar como ganada</button>
-            <button type="button" id="btn-form-mostrar-marcar-perdida" class="btn-texto es-malo">Marcar como perdida</button>
-          </div>
-        </div>
-        <div id="cotizacion-panel-marcar-ganada" class="panel-form" hidden>
-          <p class="pista" id="cotizacion-marcar-ganada-pista"></p>
-          <div id="lista-ordenes-candidatas-ganada-form"></div>
-          <div class="acciones-form">
-            <button type="button" id="btn-form-confirmar-marcar-ganada" class="btn-mini">Confirmar como ganada</button>
-            <button type="button" id="btn-form-cancelar-marcar-ganada" class="btn-mini">Cancelar</button>
-          </div>
-        </div>
-        <div id="cotizacion-form-marcar-perdida" class="panel-form" hidden>
-          <label>
-            Motivo (por qué no se ganó esta cotización)
-            <select id="cotizacion-motivo-perdida-select">
-              <option value="">-- Selecciona un motivo --</option>
-              <option value="Precio">Precio</option>
-              <option value="Tiempo de entrega">Tiempo de entrega</option>
-              <option value="Se fue con otro proveedor">Se fue con otro proveedor</option>
-              <option value="Proyecto cancelado o pospuesto">Proyecto cancelado o pospuesto</option>
-              <option value="Cambio de especificaciones del cliente">Cambio de especificaciones del cliente</option>
-              <option value="Sin respuesta del cliente">Sin respuesta del cliente</option>
-              <option value="Otro">Otro</option>
-            </select>
-          </label>
-          <label>
-            Comentarios (opcional)
-            <textarea id="cotizacion-motivo-perdida-comentarios" rows="2" placeholder="Detalles de por qué se perdió, con quién se habló, qué hubiera cambiado el resultado..."></textarea>
-          </label>
-          <div class="acciones-form">
-            <button type="button" id="btn-form-confirmar-marcar-perdida" class="btn-mini">Confirmar como perdida</button>
-            <button type="button" id="btn-form-cancelar-marcar-perdida" class="btn-mini">Cancelar</button>
-          </div>
-        </div>
+          <form id="form-cotizacion">
+            <input type="hidden" id="cotizacion-id" />
 
-        <div class="detalle-cotizacion-grid detalle-cotizacion-grid-formulario">
-        <div class="detalle-cotizacion-info">
-        <div class="tarjeta">
-          <h3>General</h3>
-          <label>
-            Nombre de cotización
-            <input type="text" id="cotizacion-nombre" required />
-          </label>
-          <div class="fila">
-            <label>
-              Negocio (opcional, para proyectos a largo plazo)
-              <span class="campo-con-boton">
-                <select id="cotizacion-negocio"><option value="">-- Selecciona --</option></select>
-                <button type="button" id="btn-nuevo-negocio" class="btn-mini" title="Agregar negocio nuevo">+</button>
-              </span>
-            </label>
-            <label class="campo-angosto">
-              Moneda
-              <select id="cotizacion-moneda" required>
-                <option value="">-- Selecciona --</option>
-                <option value="USD">USD</option>
-                <option value="MXN">MXN</option>
-              </select>
-            </label>
-            <label class="campo-angosto">
-              Etapa
-              <select id="cotizacion-etapa" required>
-                <option value="Negociacion">Negociación</option>
-                <option value="Ganada">Ganada</option>
-                <option value="Perdida">Perdida</option>
-              </select>
-            </label>
-          </div>
-        </div>
-        <div id="cotizacion-detalles-generales">
-        <div class="tarjeta">
-          <h3>Cliente y destino</h3>
-          <label>
-            Contacto
-            <span class="campo-con-boton">
-              <select id="cotizacion-contacto" class="select-contacto-ancho"><option value="">-- Selecciona --</option></select>
-              <button type="button" id="btn-nuevo-contacto-cotizacion" class="btn-mini" title="Agregar contacto nuevo">+</button>
-            </span>
-          </label>
-          <div class="fila">
-            <label>
-              Hotel / Local
-              <span class="campo-con-boton">
-                <select id="cotizacion-destino"><option value="">-- Selecciona --</option></select>
-                <button type="button" id="btn-nuevo-destino-cotizacion" class="btn-mini" title="Agregar hotel/local nuevo">+</button>
-              </span>
-            </label>
-            <label>
-              Representante de ventas
-              <select id="cotizacion-representante"><option value="">-- Selecciona --</option></select>
-            </label>
-          </div>
-          <p id="pista-asociar-contacto-destino" class="pista" hidden></p>
-          <label class="campo-angosto">
-            Descuento
-            <span class="campo-con-boton">
-              <input type="number" id="cotizacion-descuento" step="0.01" min="0" max="100" value="0" />
-              <select id="cotizacion-descuento-tipo" class="select-descuento-tipo">
-                <option value="porcentaje">%</option>
-                <option value="monto">$</option>
-              </select>
-            </span>
-          </label>
-        </div>
-        <div class="tarjeta">
-          <h3>Condiciones y seguimiento</h3>
-          <div class="fila">
-            <label>
-              Fecha de creación
-              <input type="date" id="cotizacion-fecha-creacion" readonly />
-            </label>
-            <label>
-              Vencimiento
-              <select id="cotizacion-vencimiento-opcion">
-                <option value="30">30 días</option>
-                <option value="60">60 días</option>
-                <option value="90">90 días</option>
-                <option value="personalizada">Personalizada</option>
-              </select>
-            </label>
-            <label>
-              Fecha de vencimiento
-              <input type="date" id="cotizacion-vencimiento-fecha" />
-            </label>
-          </div>
-          <div class="fila">
-            <label>
-              Método de pago
-              <input type="text" id="cotizacion-metodo-pago" maxlength="50" placeholder="Ej. Contado" />
-            </label>
-            <label>
-              Lugar de entrega
-              <input type="text" id="cotizacion-lugar-entrega" maxlength="50" />
-            </label>
-            <label>
-              Tiempo de entrega
-              <input type="text" id="cotizacion-tiempo-entrega" maxlength="50" />
-            </label>
-          </div>
-          <label class="campo-angosto">
-            Fecha de seguimiento
-            <input type="date" id="cotizacion-fecha-seguimiento" />
-          </label>
-        </div>
-        <div class="tarjeta">
-          <h3>Observaciones</h3>
-          <textarea id="cotizacion-observaciones" rows="3" aria-label="Observaciones" placeholder="Notas para esta cotización..."></textarea>
-        </div>
-        </div>
+            <div class="barra-acciones-cot" id="cotizacion-acciones-edicion" hidden>
+              <div class="grupo-acciones-cot">
+                <button type="button" id="btn-form-ver-cotizacion" class="btn-marca">Visualizar</button>
+                <button type="button" id="btn-form-descargar-pdf-cotizacion" class="btn-marca">Descargar PDF</button>
+                <button type="button" id="btn-form-clonar-cotizacion" class="btn-secundario">Clonar</button>
+                <span id="cotizacion-form-estatus"></span>
+              </div>
+              <div class="grupo-etapa-cot" id="cotizacion-panel-etapa" hidden>
+                <span class="separador-vertical-cot"></span>
+                <span class="etiqueta-etapa-cot">Etapa</span>
+                <button type="button" id="btn-form-mostrar-marcar-ganada" class="btn-texto es-bueno">Marcar como ganada</button>
+                <button type="button" id="btn-form-mostrar-marcar-perdida" class="btn-texto es-malo">Marcar como perdida</button>
+              </div>
+            </div>
+            <div id="cotizacion-panel-marcar-ganada" class="panel-form" hidden>
+              <p class="pista" id="cotizacion-marcar-ganada-pista"></p>
+              <div id="lista-ordenes-candidatas-ganada-form"></div>
+              <div class="acciones-form">
+                <button type="button" id="btn-form-confirmar-marcar-ganada" class="btn-mini">Confirmar como ganada</button>
+                <button type="button" id="btn-form-cancelar-marcar-ganada" class="btn-mini">Cancelar</button>
+              </div>
+            </div>
+            <div id="cotizacion-form-marcar-perdida" class="panel-form" hidden>
+              <label>
+                Motivo (por qué no se ganó esta cotización)
+                <select id="cotizacion-motivo-perdida-select">
+                  <option value="">-- Selecciona un motivo --</option>
+                  <option value="Precio">Precio</option>
+                  <option value="Tiempo de entrega">Tiempo de entrega</option>
+                  <option value="Se fue con otro proveedor">Se fue con otro proveedor</option>
+                  <option value="Proyecto cancelado o pospuesto">Proyecto cancelado o pospuesto</option>
+                  <option value="Cambio de especificaciones del cliente">Cambio de especificaciones del cliente</option>
+                  <option value="Sin respuesta del cliente">Sin respuesta del cliente</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </label>
+              <label>
+                Comentarios (opcional)
+                <textarea id="cotizacion-motivo-perdida-comentarios" rows="2" placeholder="Detalles de por qué se perdió, con quién se habló, qué hubiera cambiado el resultado..."></textarea>
+              </label>
+              <div class="acciones-form">
+                <button type="button" id="btn-form-confirmar-marcar-perdida" class="btn-mini">Confirmar como perdida</button>
+                <button type="button" id="btn-form-cancelar-marcar-perdida" class="btn-mini">Cancelar</button>
+              </div>
+            </div>
 
-        <div class="acciones-form">
-          <button type="button" id="btn-toggle-detalles-cotizacion" class="btn-mini">▲ Ver menos campos</button>
-        </div>
-        </div>
+            <!-- Paso 1: datos de la cotizacion. Bloque propio (sin la tabla de productos al
+                 lado) para que los campos no se amontonen; "Siguiente" pasa al paso 2. -->
+            <div id="cotizacion-paso-datos">
+              <div class="detalle-cotizacion-info">
+                <div class="tarjeta">
+                  <h3>General</h3>
+                  <label>
+                    Nombre de cotización
+                    <input type="text" id="cotizacion-nombre" required />
+                  </label>
+                  <div class="fila">
+                    <label>
+                      Negocio (opcional, para proyectos a largo plazo)
+                      <span class="campo-con-boton">
+                        <select id="cotizacion-negocio"><option value="">-- Selecciona --</option></select>
+                        <button type="button" id="btn-nuevo-negocio" class="btn-mini" title="Agregar negocio nuevo">+</button>
+                      </span>
+                    </label>
+                    <label class="campo-angosto">
+                      Moneda
+                      <select id="cotizacion-moneda" required>
+                        <option value="">-- Selecciona --</option>
+                        <option value="USD">USD</option>
+                        <option value="MXN">MXN</option>
+                      </select>
+                    </label>
+                    <label class="campo-angosto">
+                      Etapa
+                      <select id="cotizacion-etapa" required>
+                        <option value="Negociacion">Negociación</option>
+                        <option value="Ganada">Ganada</option>
+                        <option value="Perdida">Perdida</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+                <div id="cotizacion-detalles-generales">
+                <div class="tarjeta">
+                  <h3>Cliente y destino</h3>
+                  <label>
+                    Contacto
+                    <span class="campo-con-boton">
+                      <select id="cotizacion-contacto" class="select-contacto-ancho"><option value="">-- Selecciona --</option></select>
+                      <button type="button" id="btn-nuevo-contacto-cotizacion" class="btn-mini" title="Agregar contacto nuevo">+</button>
+                    </span>
+                  </label>
+                  <div class="fila">
+                    <label>
+                      Hotel / Local
+                      <span class="campo-con-boton">
+                        <select id="cotizacion-destino"><option value="">-- Selecciona --</option></select>
+                        <button type="button" id="btn-nuevo-destino-cotizacion" class="btn-mini" title="Agregar hotel/local nuevo">+</button>
+                      </span>
+                    </label>
+                    <label>
+                      Representante de ventas
+                      <select id="cotizacion-representante"><option value="">-- Selecciona --</option></select>
+                    </label>
+                  </div>
+                  <p id="pista-asociar-contacto-destino" class="pista" hidden></p>
+                  <label class="campo-angosto">
+                    Descuento
+                    <span class="campo-con-boton">
+                      <input type="number" id="cotizacion-descuento" step="0.01" min="0" max="100" value="0" />
+                      <select id="cotizacion-descuento-tipo" class="select-descuento-tipo">
+                        <option value="porcentaje">%</option>
+                        <option value="monto">$</option>
+                      </select>
+                    </span>
+                  </label>
+                </div>
+                <div class="tarjeta">
+                  <h3>Condiciones y seguimiento</h3>
+                  <div class="fila">
+                    <label>
+                      Fecha de creación
+                      <input type="date" id="cotizacion-fecha-creacion" readonly />
+                    </label>
+                    <label>
+                      Vencimiento
+                      <select id="cotizacion-vencimiento-opcion">
+                        <option value="30">30 días</option>
+                        <option value="60">60 días</option>
+                        <option value="90">90 días</option>
+                        <option value="personalizada">Personalizada</option>
+                      </select>
+                    </label>
+                    <label>
+                      Fecha de vencimiento
+                      <input type="date" id="cotizacion-vencimiento-fecha" />
+                    </label>
+                  </div>
+                  <div class="fila">
+                    <label>
+                      Método de pago
+                      <input type="text" id="cotizacion-metodo-pago" maxlength="50" placeholder="Ej. Contado" />
+                    </label>
+                    <label>
+                      Lugar de entrega
+                      <input type="text" id="cotizacion-lugar-entrega" maxlength="50" />
+                    </label>
+                    <label>
+                      Tiempo de entrega
+                      <input type="text" id="cotizacion-tiempo-entrega" maxlength="50" />
+                    </label>
+                  </div>
+                  <label class="campo-angosto">
+                    Fecha de seguimiento
+                    <input type="date" id="cotizacion-fecha-seguimiento" />
+                  </label>
+                </div>
+                <div class="tarjeta">
+                  <h3>Observaciones</h3>
+                  <textarea id="cotizacion-observaciones" rows="3" aria-label="Observaciones" placeholder="Notas para esta cotización..."></textarea>
+                </div>
+                </div>
 
-        <div class="detalle-cotizacion-productos">
-        <datalist id="lista-productos"></datalist>
+                <div class="acciones-form">
+                  <button type="button" id="btn-toggle-detalles-cotizacion" class="btn-mini">▲ Ver menos campos</button>
+                </div>
+              </div>
 
-        <div class="tabla-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th title="Si se desmarca, esta partida no suma IVA">Causa impuesto</th><th>Total</th><th></th>
-              </tr>
-            </thead>
-            <tbody id="tabla-partidas"></tbody>
-          </table>
-        </div>
-        <div class="acciones-form">
-          <button type="button" id="btn-agregar-partida">+ Agregar producto</button>
-        </div>
+              <div class="acciones-form">
+                <button type="button" id="btn-siguiente-productos-cotizacion" class="btn-marca">Siguiente: Agregar productos →</button>
+                <button type="button" id="btn-cancelar-cotizacion">Cancelar</button>
+              </div>
+            </div>
 
-        <div class="acciones-form">
-          <span>
-            <input type="checkbox" id="cotizacion-mostrar-totales" checked />
-            Mostrar totales en la cotización
-          </span>
-        </div>
+            <!-- Paso 2: productos de la cotizacion, en su propia ventana con espacio completo
+                 para la tabla; "Guardar cotización" manda los datos de ambos pasos juntos. -->
+            <div id="cotizacion-paso-productos" hidden>
+              <div class="detalle-cotizacion-productos">
+                <datalist id="lista-productos"></datalist>
 
-        <div class="ficha-detalle resumen-cotizacion">
-          <div><span>Sub Total</span><p id="resumen-subtotal">0.00</p></div>
-          <div><span>Descuento</span><p id="resumen-descuento">0.00</p></div>
-          <div><span>IVA (16%)</span><p id="resumen-iva">0.00</p></div>
-          <div><span>Gran Total</span><p id="resumen-gran-total">0.00</p></div>
-        </div>
-        </div>
-        </div>
+                <div class="tabla-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th title="Si se desmarca, esta partida no suma IVA">Causa impuesto</th><th>Total</th><th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="tabla-partidas"></tbody>
+                  </table>
+                </div>
+                <div class="acciones-form">
+                  <button type="button" id="btn-agregar-partida">+ Agregar producto</button>
+                </div>
 
-        <div class="acciones-form">
-          <button type="submit" id="btn-guardar-cotizacion">Guardar cotización</button>
-          <button type="button" id="btn-cancelar-cotizacion">Cancelar</button>
-          <button type="button" id="btn-enviar-tareas-seguimiento" class="btn-mini" hidden>Enviar a Tareas de seguimiento</button>
+                <div class="acciones-form">
+                  <span>
+                    <input type="checkbox" id="cotizacion-mostrar-totales" checked />
+                    Mostrar totales en la cotización
+                  </span>
+                </div>
+
+                <div class="ficha-detalle resumen-cotizacion">
+                  <div><span>Sub Total</span><p id="resumen-subtotal">0.00</p></div>
+                  <div><span>Descuento</span><p id="resumen-descuento">0.00</p></div>
+                  <div><span>IVA (16%)</span><p id="resumen-iva">0.00</p></div>
+                  <div><span>Gran Total</span><p id="resumen-gran-total">0.00</p></div>
+                </div>
+              </div>
+
+              <div class="acciones-form">
+                <button type="button" id="btn-regresar-datos-cotizacion" class="btn-secundario">← Regresar a datos generales</button>
+                <button type="submit" id="btn-guardar-cotizacion">Guardar cotización</button>
+                <button type="button" id="btn-enviar-tareas-seguimiento" class="btn-mini" hidden>Enviar a Tareas de seguimiento</button>
+              </div>
+            </div>
+          </form>
         </div>
-      </form>
+      </div>
     </div>
 
     <div data-subpanel="visualizacion" hidden>

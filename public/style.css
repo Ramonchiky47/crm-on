@@ -1783,37 +1783,34 @@ td.celda-check {
   margin-top: 1rem;
 }
 
-/* El formulario de captura/edicion tiene campos vivos (inputs/selects), no solo texto como la
-   vista de lectura, por lo que necesita una columna izquierda mucho mas ancha para no amontonar
-   3-4 campos en ~300px. */
-.detalle-cotizacion-grid-formulario {
-  grid-template-columns: minmax(420px, 540px) 1fr;
-  gap: 1.75rem;
-}
-
-.detalle-cotizacion-grid-formulario .detalle-cotizacion-info .tarjeta label {
+/* Paso 1 de la captura de cotizacion (datos generales, ver cotizaciones.html/js): ya no
+   comparte pantalla con la tabla de productos, es una columna suelta dentro de un modal ancho,
+   por eso estas reglas no dependen de ningun grid — solo evitan que los campos vivos
+   (inputs/selects) se amontonen y les dan el espaciado que .campo-cot ya tiene en la vista de
+   solo lectura. */
+.detalle-cotizacion-info .tarjeta label {
   min-width: 150px;
 }
 
-.detalle-cotizacion-grid-formulario .detalle-cotizacion-info .tarjeta label.campo-angosto {
-  flex: 0 0 130px;
-  min-width: 110px;
+.detalle-cotizacion-info .tarjeta label.campo-angosto {
+  flex: 0 0 160px;
+  min-width: 140px;
 }
 
-.detalle-cotizacion-grid-formulario .detalle-cotizacion-info .tarjeta .fila {
+.detalle-cotizacion-info .tarjeta .fila {
   gap: 0.9rem 1.1rem;
 }
 
-.detalle-cotizacion-grid-formulario .detalle-cotizacion-info .tarjeta textarea {
+.detalle-cotizacion-info .tarjeta textarea {
   width: 100%;
 }
 
-.detalle-cotizacion-grid-formulario .detalle-cotizacion-info .tarjeta > label,
-.detalle-cotizacion-grid-formulario .detalle-cotizacion-info .tarjeta > .fila {
+.detalle-cotizacion-info .tarjeta > label,
+.detalle-cotizacion-info .tarjeta > .fila {
   margin-bottom: 0.8rem;
 }
-.detalle-cotizacion-grid-formulario .detalle-cotizacion-info .tarjeta > label:last-child,
-.detalle-cotizacion-grid-formulario .detalle-cotizacion-info .tarjeta > .fila:last-child {
+.detalle-cotizacion-info .tarjeta > label:last-child,
+.detalle-cotizacion-info .tarjeta > .fila:last-child {
   margin-bottom: 0;
 }
 

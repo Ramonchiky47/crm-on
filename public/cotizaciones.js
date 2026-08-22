@@ -545,6 +545,13 @@ tablaNegocios.addEventListener('click', (e) => {
 
 const filtroPista = document.getElementById('cotizaciones-filtro-pista');
 const btnMostrarFormCotizacion = document.getElementById('btn-mostrar-form-cotizacion');
+const modalCotizacionOverlay = document.getElementById('modal-cotizacion-overlay');
+const modalCotizacionCerrar = document.getElementById('modal-cotizacion-cerrar');
+const tituloFormCotizacion = document.getElementById('titulo-form-cotizacion');
+const cotizacionPasoDatos = document.getElementById('cotizacion-paso-datos');
+const cotizacionPasoProductos = document.getElementById('cotizacion-paso-productos');
+const btnSiguienteProductosCotizacion = document.getElementById('btn-siguiente-productos-cotizacion');
+const btnRegresarDatosCotizacion = document.getElementById('btn-regresar-datos-cotizacion');
 const formCotizacion = document.getElementById('form-cotizacion');
 const cotizacionId = document.getElementById('cotizacion-id');
 const cotizacionNombre = document.getElementById('cotizacion-nombre');
@@ -1298,18 +1305,43 @@ function limpiarFormCotizacion() {
 
   mostrarDetallesGeneralesCotizacion(true);
   actualizarCamposVaciosCotizacion();
+  tituloFormCotizacion.textContent = 'Nueva cotización';
+  mostrarPasoDatosCotizacion();
 }
 
+// Captura en dos pasos para que los datos generales no compartan pantalla con la tabla de
+// productos (se sentia amontonado): paso 1 son los datos, "Siguiente" valida solo esos campos
+// (los del paso 2, oculto, no cuentan para la validacion nativa del navegador) y pasa al paso 2.
+function mostrarPasoDatosCotizacion() {
+  cotizacionPasoDatos.hidden = false;
+  cotizacionPasoProductos.hidden = true;
+}
+
+function mostrarPasoProductosCotizacion() {
+  cotizacionPasoDatos.hidden = true;
+  cotizacionPasoProductos.hidden = false;
+}
+
+btnSiguienteProductosCotizacion.addEventListener('click', () => {
+  if (!formCotizacion.reportValidity()) return;
+  mostrarPasoProductosCotizacion();
+});
+
+btnRegresarDatosCotizacion.addEventListener('click', mostrarPasoDatosCotizacion);
+
 function abrirFormCotizacion() {
-  formCotizacion.hidden = false;
-  btnMostrarFormCotizacion.hidden = true;
+  modalCotizacionOverlay.hidden = false;
 }
 
 function cerrarFormCotizacion() {
-  formCotizacion.hidden = true;
-  btnMostrarFormCotizacion.hidden = false;
+  modalCotizacionOverlay.hidden = true;
   limpiarFormCotizacion();
 }
+
+modalCotizacionCerrar.addEventListener('click', cerrarFormCotizacion);
+modalCotizacionOverlay.addEventListener('click', (e) => {
+  if (e.target === modalCotizacionOverlay) cerrarFormCotizacion();
+});
 
 btnMostrarFormCotizacion.addEventListener('click', () => {
   limpiarFormCotizacion();
@@ -1488,6 +1520,8 @@ function cargarCotizacionEnFormulario(c) {
 
   mostrarDetallesGeneralesCotizacion(false);
   actualizarCamposVaciosCotizacion();
+  tituloFormCotizacion.textContent = `Editar cotización · ${c.id_cotizacion}`;
+  mostrarPasoDatosCotizacion();
   activarSubtab('captura');
   abrirFormCotizacion();
   cotizacionNombre.focus();

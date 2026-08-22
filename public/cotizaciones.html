@@ -39,29 +39,48 @@
       <button type="button" id="btn-mostrar-form-negocio" class="btn-agregar">+ Agregar negocio</button>
 
       <div id="modal-negocio-overlay" class="modal-overlay" hidden>
-        <div class="modal-caja" role="dialog" aria-modal="true">
+        <div class="modal-caja detalle-negocio" role="dialog" aria-modal="true">
           <button type="button" id="modal-negocio-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
-          <form id="form-negocio" class="form-catalogo form-catalogo-vertical panel-form">
+          <p class="eyebrow-cot">Negocio</p>
+          <h2 id="titulo-form-negocio">Nuevo negocio</h2>
+          <form id="form-negocio">
             <input type="hidden" id="negocio-id" />
-            <input type="text" id="negocio-nombre" placeholder="Nombre del negocio" required />
-            <div class="fila">
+            <div class="tarjeta">
+              <h3>Datos generales</h3>
               <label>
-                Contacto
-                <select id="negocio-contacto" class="select-contacto-ancho"><option value="">-- Selecciona --</option></select>
+                Nombre del negocio
+                <input type="text" id="negocio-nombre" placeholder="Ej. Renovación de pantallas — Hotel Bonito" required />
               </label>
+              <div class="fila">
+                <label>
+                  Contacto (opcional)
+                  <select id="negocio-contacto" class="select-contacto-ancho"><option value="">-- Selecciona --</option></select>
+                </label>
+                <label>
+                  Etapa del negocio
+                  <select id="negocio-etapa"><option value="">-- Selecciona --</option></select>
+                </label>
+                <label>
+                  Fecha estimada de cierre
+                  <input type="date" id="negocio-fecha-estimada-cierre" />
+                </label>
+              </div>
+            </div>
+            <div class="tarjeta" id="negocio-motivo-perdida-wrap" hidden>
+              <h3>Motivo</h3>
               <label>
-                Etapa del negocio
-                <select id="negocio-etapa"><option value="">-- Selecciona --</option></select>
-              </label>
-              <label>
-                Fecha estimada de cierre
-                <input type="date" id="negocio-fecha-estimada-cierre" />
+                Por qué no compraron la propuesta
+                <input type="text" id="negocio-motivo-perdida" />
               </label>
             </div>
-            <label id="negocio-motivo-perdida-wrap" hidden>
-              Motivo (por qué no compraron la propuesta)
-              <input type="text" id="negocio-motivo-perdida" />
-            </label>
+            <div class="tarjeta">
+              <h3>Seguimiento</h3>
+              <p class="pista" id="negocio-seguimiento-pista">
+                Aquí vas a poder ir registrando cada llamada — correos y teléfonos que consigas, con quién hablaste,
+                qué prometiste — hasta cerrar al cliente. Disponible en cuanto guardes este negocio.
+              </p>
+              <button type="button" id="btn-ver-notas-negocio" class="btn-marca" hidden>Ver notas de seguimiento</button>
+            </div>
             <div class="acciones-form">
               <button type="submit" id="btn-guardar-negocio">Agregar</button>
               <button type="button" id="btn-cancelar-negocio" hidden>Cancelar</button>

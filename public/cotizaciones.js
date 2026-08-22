@@ -107,6 +107,9 @@ const btnMostrarFormNegocio = document.getElementById('btn-mostrar-form-negocio'
 const tablaNegocios = document.getElementById('tabla-negocios');
 const modalNegocioOverlay = document.getElementById('modal-negocio-overlay');
 const modalNegocioCerrar = document.getElementById('modal-negocio-cerrar');
+const tituloFormNegocio = document.getElementById('titulo-form-negocio');
+const negocioSeguimientoPista = document.getElementById('negocio-seguimiento-pista');
+const btnVerNotasNegocio = document.getElementById('btn-ver-notas-negocio');
 
 // La alta y edicion de un Negocio se hacen en el mismo formulario, mostrado como ventana
 // emergente (igual que el detalle de una cotizacion): abrirFormNegocio() lo abre ya sea vacio
@@ -118,6 +121,19 @@ function abrirFormNegocio() {
 function cerrarFormNegocio() {
   modalNegocioOverlay.hidden = true;
 }
+
+// La bitacora de seguimiento (notas con fecha/hora) solo existe para un negocio ya guardado:
+// en alta nueva se explica que estara disponible al guardar; en edicion se puede abrir directo.
+function actualizarSeguimientoNegocio() {
+  const yaExiste = Boolean(negocioId.value);
+  btnVerNotasNegocio.hidden = !yaExiste;
+  negocioSeguimientoPista.hidden = yaExiste;
+}
+
+btnVerNotasNegocio.addEventListener('click', () => {
+  cerrarFormNegocio();
+  abrirNotasNegocio(negocioId.value, negocioNombre.value);
+});
 
 modalNegocioCerrar.addEventListener('click', limpiarFormNegocio);
 modalNegocioOverlay.addEventListener('click', (e) => {
@@ -418,6 +434,8 @@ function limpiarFormNegocio() {
   seleccionarEtapaPorNombre(negocioEtapa, 'negociacion');
   negocioMotivoPerdida.value = '';
   actualizarVisibilidadMotivoPerdida();
+  tituloFormNegocio.textContent = 'Nuevo negocio';
+  actualizarSeguimientoNegocio();
   btnGuardarNegocio.textContent = 'Agregar';
   btnCancelarNegocio.hidden = true;
   cerrarFormNegocio();
@@ -505,6 +523,8 @@ async function editarNegocio(id) {
   negocioMotivoPerdida.value = n.motivo_perdida || '';
   actualizarVisibilidadMotivoPerdida();
 
+  tituloFormNegocio.textContent = 'Editar negocio';
+  actualizarSeguimientoNegocio();
   btnGuardarNegocio.textContent = 'Guardar cambios';
   btnCancelarNegocio.hidden = false;
   abrirFormNegocio();
@@ -1572,21 +1592,29 @@ async function abrirNotasNegocio(id, nombre) {
   const notas = res.ok ? await res.json() : [];
 
   modalContenido.innerHTML = `
-    <h2>Notas de seguimiento</h2>
-    <p class="pista">${escaparHtml(nombre)}</p>
-    <div class="notas-lista" id="notas-lista">
-      ${notas.length ? notas.map((n) => `
-        <div class="nota-item">
-          <span class="nota-fecha">${fechaHoraNota(n.creado_en)}</span>
-          <p>${escaparHtml(n.nota)}</p>
+    <div class="detalle-negocio">
+      <p class="eyebrow-cot">Negocio</p>
+      <h2>${escaparHtml(nombre)}</h2>
+      <div class="tarjeta">
+        <h3>Seguimiento (${notas.length})</h3>
+        <div class="notas-lista" id="notas-lista">
+          ${notas.length ? notas.map((n) => `
+            <div class="nota-item">
+              <span class="nota-fecha">${fechaHoraNota(n.creado_en)}</span>
+              <p>${escaparHtml(n.nota)}</p>
+            </div>
+          `).join('') : '<p class="pista">Todavía no hay notas — registra aquí cada llamada, correo o teléfono que consigas.</p>'}
         </div>
-      `).join('') : '<p class="pista">Todavía no hay notas para este negocio.</p>'}
+        ${permisosCatalogos.editar ? `
+          <form id="form-negocio-nota">
+            <textarea id="negocio-nota-texto" rows="3" placeholder="Ej. Llamé al hotel, hablé con recepción, me dieron el correo de compras: compras@hotel.com. Prometí enviar cotización de pantallas la próxima semana..." autofocus></textarea>
+            <div class="acciones-form">
+              <button type="submit" class="btn-marca">Agregar nota</button>
+            </div>
+          </form>
+        ` : ''}
+      </div>
     </div>
-    ${permisosCatalogos.editar ? `
-      <form id="form-negocio-nota">
-        <input type="text" id="negocio-nota-texto" placeholder="Escribe una nota y presiona Enter..." autofocus />
-      </form>
-    ` : ''}
   `;
 
   const form = document.getElementById('form-negocio-nota');

@@ -1817,6 +1817,20 @@ td.celda-check {
   margin-bottom: 0;
 }
 
+/* Formulario de Negocio (alta/edicion): mismo criterio de espaciado que el de Cotizaciones,
+   pero de una sola columna (no es un grid con productos al lado, es un formulario chico). */
+.detalle-negocio .tarjeta > label,
+.detalle-negocio .tarjeta > .fila {
+  margin-bottom: 0.8rem;
+}
+.detalle-negocio .tarjeta > label:last-child,
+.detalle-negocio .tarjeta > .fila:last-child {
+  margin-bottom: 0;
+}
+.detalle-negocio .tarjeta textarea {
+  width: 100%;
+}
+
 .detalle-cotizacion-productos .resumen-cotizacion {
   max-width: 320px;
   margin-left: auto;
@@ -1903,13 +1917,14 @@ td.celda-check {
 .detalle-cotizacion-grid,
 .detalle-cotizacion,
 .detalle-orden,
+.detalle-negocio,
 #cotizacion-acciones-edicion,
 #cotizacion-panel-etapa,
 #cotizacion-form-marcar-perdida {
   font-family: 'IBM Plex Sans', system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-.detalle-cotizacion h2, .detalle-orden h2 {
+.detalle-cotizacion h2, .detalle-orden h2, .detalle-negocio h2 {
   margin: 0 0 0.5rem;
   font-size: 1.3rem;
   font-weight: 700;
@@ -2016,9 +2031,9 @@ td.celda-check {
   font-weight: 600;
 }
 
-.detalle-cotizacion-info .tarjeta, .detalle-orden .tarjeta { margin-bottom: 0.9rem; }
-.detalle-cotizacion-info .tarjeta:last-child, .detalle-orden .tarjeta:last-child { margin-bottom: 0; }
-.detalle-cotizacion-info .tarjeta h3, .detalle-orden .tarjeta h3 {
+.detalle-cotizacion-info .tarjeta, .detalle-orden .tarjeta, .detalle-negocio .tarjeta { margin-bottom: 0.9rem; }
+.detalle-cotizacion-info .tarjeta:last-child, .detalle-orden .tarjeta:last-child, .detalle-negocio .tarjeta:last-child { margin-bottom: 0; }
+.detalle-cotizacion-info .tarjeta h3, .detalle-orden .tarjeta h3, .detalle-negocio .tarjeta h3 {
   margin: 0 0 0.75rem;
   font-size: 0.7rem;
   font-weight: 600;

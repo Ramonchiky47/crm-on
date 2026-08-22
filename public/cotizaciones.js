@@ -571,8 +571,6 @@ const cotizacionLugarEntrega = document.getElementById('cotizacion-lugar-entrega
 const cotizacionTiempoEntrega = document.getElementById('cotizacion-tiempo-entrega');
 const cotizacionFechaSeguimiento = document.getElementById('cotizacion-fecha-seguimiento');
 const cotizacionObservaciones = document.getElementById('cotizacion-observaciones');
-const cotizacionDetallesGenerales = document.getElementById('cotizacion-detalles-generales');
-const btnToggleDetallesCotizacion = document.getElementById('btn-toggle-detalles-cotizacion');
 const tablaPartidas = document.getElementById('tabla-partidas');
 const datalistProductos = document.getElementById('lista-productos');
 
@@ -598,17 +596,6 @@ camposObligatoriosCotizacion.forEach((campo) => {
   campo.addEventListener('change', () => actualizarCampoVacio(campo));
 });
 
-// Seccion colapsable de datos generales: se expande al capturar una cotizacion nueva (para
-// llenarlos) y se colapsa al editar una ya existente (para dejar mas espacio a los productos).
-// El boton siempre permite alternar manualmente.
-function mostrarDetallesGeneralesCotizacion(mostrar) {
-  cotizacionDetallesGenerales.hidden = !mostrar;
-  btnToggleDetallesCotizacion.textContent = mostrar ? '▲ Ver menos campos' : '▼ Ver más campos';
-}
-
-btnToggleDetallesCotizacion.addEventListener('click', () => {
-  mostrarDetallesGeneralesCotizacion(cotizacionDetallesGenerales.hidden);
-});
 const btnAgregarPartida = document.getElementById('btn-agregar-partida');
 const btnGuardarCotizacion = document.getElementById('btn-guardar-cotizacion');
 const btnCancelarCotizacion = document.getElementById('btn-cancelar-cotizacion');
@@ -1197,7 +1184,6 @@ btnAgregarPartida.addEventListener('click', () => {
   partidas.push({ producto_item: '', cantidad: 1, precio_unitario: 0, causa_impuesto: true });
   renderizarPartidas();
   actualizarResumen();
-  mostrarDetallesGeneralesCotizacion(false);
 });
 
 tablaPartidas.addEventListener('input', (e) => {
@@ -1303,7 +1289,6 @@ function limpiarFormCotizacion() {
   actualizarVencimientoPorOpcion();
   cotizacionFechaSeguimiento.value = sumarDias(hoyISO(), 15);
 
-  mostrarDetallesGeneralesCotizacion(true);
   actualizarCamposVaciosCotizacion();
   tituloFormCotizacion.textContent = 'Nueva cotización';
   mostrarPasoDatosCotizacion();
@@ -1518,7 +1503,6 @@ function cargarCotizacionEnFormulario(c) {
   ocultarMarcarPerdidaForm();
   ocultarMarcarGanadaPanel();
 
-  mostrarDetallesGeneralesCotizacion(false);
   actualizarCamposVaciosCotizacion();
   tituloFormCotizacion.textContent = `Editar cotización · ${c.id_cotizacion}`;
   mostrarPasoDatosCotizacion();
@@ -1569,7 +1553,6 @@ async function clonarCotizacion(id) {
   cotizacionMostrarTotales.checked = c.mostrar_totales !== false;
   actualizarResumen();
 
-  mostrarDetallesGeneralesCotizacion(true);
   actualizarCamposVaciosCotizacion();
   activarSubtab('captura');
   abrirFormCotizacion();

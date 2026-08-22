@@ -738,9 +738,41 @@ btnCancelarFiltroCotRepresentante.addEventListener('click', () => {
 let productosCache = [];
 let negociosCache = [];
 let contactosCache = [];
+let destinosCache = [];
 let cotizacionesCache = [];
 let partidas = [];
 let filtroNegocioId = null;
+
+// ---------- Filtro cruzado Contacto <-> Hotel/Local (formulario de Cotizaciones) ----------
+// Al elegir un Contacto, el select de Hotel/Local se reduce a los que tiene asociados (mismo
+// dato de "Contactos asociados" en Catalogos), y viceversa; sin asociaciones capturadas no se
+// restringe nada, y el valor ya elegido en el otro campo nunca se pierde aunque no forme parte
+// de la asociacion (datos capturados antes de esta funcion).
+let destinosPorContacto = new Map();
+let contactosPorDestino = new Map();
+
+function indexarContactoDestinos(contactos) {
+  destinosPorContacto = new Map();
+  contactosPorDestino = new Map();
+  for (const c of contactos) {
+    const cid = String(c.id_contacto);
+    const destinos = c.destinos || [];
+    if (destinos.length) destinosPorContacto.set(cid, new Set(destinos.map((d) => String(d.id_destino))));
+    for (const d of destinos) {
+      const did = String(d.id_destino);
+      if (!contactosPorDestino.has(did)) contactosPorDestino.set(did, new Set());
+      contactosPorDestino.get(did).add(cid);
+    }
+  }
+}
+
+function filtrarSelectAsociado(select, opcionesCompletas, campoValor, campoTexto, idsPermitidos) {
+  const valorActual = select.value;
+  const opciones = (!idsPermitidos || idsPermitidos.size === 0)
+    ? opcionesCompletas
+    : opcionesCompletas.filter((o) => idsPermitidos.has(String(o[campoValor])) || String(o[campoValor]) === valorActual);
+  poblarSelect(select, opciones, campoValor, campoTexto);
+}
 
 // Si se llega desde una Tarea con la actividad "Cotizacion" (Tareas -> clic en la fila), se
 // guarda aqui su ID: al guardar la cotizacion nueva, esa tarea se borra automaticamente.
@@ -761,9 +793,24 @@ async function poblarSelectsCotizacion() {
   poblarOpcionesFiltroCotRepresentante(representantes);
   negociosCache = negocios;
   contactosCache = contactos;
+  destinosCache = destinos;
+  indexarContactoDestinos(contactos);
   productosCache = productos;
   poblarDatalistProductos();
 }
+
+function filtrarDestinosPorContacto() {
+  filtrarSelectAsociado(cotizacionDestino, destinosCache, 'id_destino', 'destino',
+    cotizacionContacto.value ? destinosPorContacto.get(cotizacionContacto.value) : null);
+}
+
+function filtrarContactosPorDestino() {
+  filtrarSelectAsociado(cotizacionContacto, contactosCache, 'id_contacto', 'nombre_completo_correo',
+    cotizacionDestino.value ? contactosPorDestino.get(cotizacionDestino.value) : null);
+}
+
+cotizacionContacto.addEventListener('change', filtrarDestinosPorContacto);
+cotizacionDestino.addEventListener('change', filtrarContactosPorDestino);
 
 // Al capturar una cotizacion a partir de un negocio, se replican el Contacto del negocio y,
 // si ese contacto tiene destinos asociados en su catalogo, el primero de ellos como Destino.

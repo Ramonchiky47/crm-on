@@ -387,6 +387,60 @@ function poblarSelect(select, lista, campoValor, campoTexto) {
   }
 }
 
+// ---------- Filtro cruzado Contacto <-> Hotel/Local ----------
+// Al elegir un Contacto, el select de Hotel/Local se reduce a los que tiene asociados (tabla
+// contacto_destinos, la misma que alimenta "Contactos asociados" en Catalogos), y viceversa. Si
+// el contacto/destino elegido no tiene ninguna asociacion capturada todavia, no se restringe
+// nada (se ve el catalogo completo, como antes). El valor ya seleccionado en el otro campo
+// nunca se pierde aunque no forme parte de la asociacion, para no romper el llenado de una
+// orden ya capturada con datos mas viejos que esta funcion.
+let listaDestinos = [];
+let listaContactos = [];
+let destinosPorContacto = new Map();
+let contactosPorDestino = new Map();
+
+// La lista de Contactos ya trae, por cada uno, sus Hoteles/Locales asociados (campo
+// `destinos`, mismo dato que alimenta "Contactos asociados" en Catalogos) — de ahi se derivan
+// los dos mapas, sin pedir nada extra al servidor.
+function indexarContactoDestinos(contactos) {
+  destinosPorContacto = new Map();
+  contactosPorDestino = new Map();
+  for (const c of contactos) {
+    const cid = String(c.id_contacto);
+    const destinos = c.destinos || [];
+    if (destinos.length) destinosPorContacto.set(cid, new Set(destinos.map((d) => String(d.id_destino))));
+    for (const d of destinos) {
+      const did = String(d.id_destino);
+      if (!contactosPorDestino.has(did)) contactosPorDestino.set(did, new Set());
+      contactosPorDestino.get(did).add(cid);
+    }
+  }
+}
+
+function filtrarSelectAsociado(select, opcionesCompletas, campoValor, campoTexto, idsPermitidos) {
+  const valorActual = select.value;
+  const opciones = (!idsPermitidos || idsPermitidos.size === 0)
+    ? opcionesCompletas
+    : opcionesCompletas.filter((o) => idsPermitidos.has(String(o[campoValor])) || String(o[campoValor]) === valorActual);
+
+  select.innerHTML = '<option value="">-- Selecciona --</option>';
+  poblarSelect(select, opciones, campoValor, campoTexto);
+  select.value = valorActual;
+}
+
+function filtrarDestinosPorContacto() {
+  filtrarSelectAsociado(campos.destino_id, listaDestinos, 'id_destino', 'destino',
+    campos.contacto_id.value ? destinosPorContacto.get(campos.contacto_id.value) : null);
+}
+
+function filtrarContactosPorDestino() {
+  filtrarSelectAsociado(campos.contacto_id, listaContactos, 'id_contacto', 'nombre_completo',
+    campos.destino_id.value ? contactosPorDestino.get(campos.destino_id.value) : null);
+}
+
+campos.contacto_id.addEventListener('change', filtrarDestinosPorContacto);
+campos.destino_id.addEventListener('change', filtrarContactosPorDestino);
+
 async function cargarCatalogos() {
   const [destinos, contactos, estatusLista, estadosEntrega] = await Promise.all([
     fetch('/api/destinos').then((r) => r.json()),
@@ -394,6 +448,10 @@ async function cargarCatalogos() {
     fetch('/api/estatus').then((r) => r.json()),
     fetch('/api/estados-entrega').then((r) => r.json()),
   ]);
+
+  listaDestinos = destinos;
+  listaContactos = contactos;
+  indexarContactoDestinos(contactos);
 
   poblarSelect(campos.destino_id, destinos, 'id_destino', 'destino');
   poblarSelect(campos.contacto_id, contactos, 'id_contacto', 'nombre_completo');

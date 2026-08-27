@@ -9,92 +9,146 @@ function formatoImporte(valor) {
   return Number(valor).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function resumenProductos(items) {
+  return items.map((it) => `${it.codigo} (x${it.cantidad})`).join(', ');
+}
+
 const vistaCargando = document.getElementById('vista-cargando');
 const vistaPortal = document.getElementById('vista-portal');
 const portalTitulo = document.getElementById('portal-titulo');
-const listaPendientes = document.getElementById('lista-pendientes');
-const listaRespondidas = document.getElementById('lista-respondidas');
+const btnLogoutProveedor = document.getElementById('btn-logout-proveedor');
+
+const vistaLista = document.getElementById('vista-lista');
+const tablaPendientes = document.getElementById('tabla-pendientes');
+const tablaRespondidas = document.getElementById('tabla-respondidas');
 const pendientesVacio = document.getElementById('pendientes-vacio');
 const respondidasVacio = document.getElementById('respondidas-vacio');
-const btnLogoutProveedor = document.getElementById('btn-logout-proveedor');
-const plantillaPendiente = document.getElementById('plantilla-solicitud-pendiente');
+
+const vistaDetalle = document.getElementById('vista-detalle');
+const btnVolverLista = document.getElementById('btn-volver-lista');
+const formDetalleSolicitud = document.getElementById('form-detalle-solicitud');
+const detalleDestino = formDetalleSolicitud.querySelector('.campo-destino');
+const detalleLugarEntrega = formDetalleSolicitud.querySelector('.campo-lugar-entrega');
+const detalleTablaItems = formDetalleSolicitud.querySelector('.tabla-items');
+const detalleComentarios = formDetalleSolicitud.querySelector('.campo-comentarios');
+const detalleBtnEnviar = formDetalleSolicitud.querySelector('button[type="submit"]');
+
 const plantillaItemEditable = document.getElementById('plantilla-item-editable');
-const plantillaRespondida = document.getElementById('plantilla-solicitud-respondida');
+const plantillaItemSoloLectura = document.getElementById('plantilla-item-solo-lectura');
 
-function renderizarPendiente(solicitud) {
-  const nodo = plantillaPendiente.content.cloneNode(true);
-  const form = nodo.querySelector('form');
-  form.dataset.id = solicitud.id_solicitud;
-  form.querySelector('.campo-destino').textContent = solicitud.destino_nombre || 'Sin especificar';
-  form.querySelector('.campo-lugar-entrega').textContent = solicitud.lugar_entrega || 'Sin especificar';
+let solicitudesPendientes = [];
+let solicitudesRespondidas = [];
 
-  const tbody = form.querySelector('.tabla-items');
+function mostrarVistaLista() {
+  vistaDetalle.hidden = true;
+  vistaLista.hidden = false;
+}
+
+function mostrarVistaDetalle() {
+  vistaLista.hidden = true;
+  vistaDetalle.hidden = false;
+}
+
+function abrirDetalle(solicitud, editable) {
+  formDetalleSolicitud.dataset.id = solicitud.id_solicitud;
+  formDetalleSolicitud.dataset.editable = editable ? 'true' : 'false';
+  detalleDestino.textContent = solicitud.destino_nombre || 'Sin especificar';
+  detalleLugarEntrega.textContent = solicitud.lugar_entrega || 'Sin especificar';
+
+  detalleTablaItems.innerHTML = '';
   solicitud.items.forEach((it) => {
-    const fila = plantillaItemEditable.content.cloneNode(true);
+    const plantilla = editable ? plantillaItemEditable : plantillaItemSoloLectura;
+    const fila = plantilla.content.cloneNode(true);
     const tr = fila.querySelector('tr');
     tr.dataset.id = it.id;
     tr.querySelector('.celda-codigo').textContent = it.codigo;
     tr.querySelector('.celda-descripcion').textContent = it.descripcion || '';
     tr.querySelector('.celda-marca').textContent = it.marca || '';
     tr.querySelector('.celda-cantidad').textContent = it.cantidad;
-    tbody.appendChild(fila);
+    if (editable) {
+      tr.querySelector('.item-precio-venta').value = it.precio_venta ?? '';
+      tr.querySelector('.item-tiempo-entrega').value = it.tiempo_entrega || '';
+    } else {
+      tr.querySelector('.celda-precio').textContent = it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio';
+      tr.querySelector('.celda-tiempo').textContent = it.tiempo_entrega || 'sin tiempo de entrega';
+    }
+    detalleTablaItems.appendChild(fila);
   });
 
-  return form;
+  detalleComentarios.value = solicitud.comentarios || '';
+  detalleComentarios.disabled = !editable;
+  detalleBtnEnviar.hidden = !editable;
+
+  mostrarVistaDetalle();
 }
 
-function renderizarRespondida(solicitud) {
-  const nodo = plantillaRespondida.content.cloneNode(true);
-  const contenedor = nodo.querySelector('.panel-form');
-  contenedor.querySelector('.campo-destino').textContent = solicitud.destino_nombre || 'Sin especificar';
-  contenedor.querySelector('.campo-resumen-items').innerHTML = solicitud.items
-    .map((it) => `${escaparHtml(it.codigo)}: ${it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio'} — ${escaparHtml(it.tiempo_entrega || 'sin tiempo de entrega')}`)
-    .join('<br>');
-  const comentariosEl = contenedor.querySelector('.campo-comentarios-resp');
-  if (solicitud.comentarios) {
-    comentariosEl.innerHTML = `<strong>Comentarios:</strong> ${escaparHtml(solicitud.comentarios)}`;
-  } else {
-    comentariosEl.remove();
-  }
-  return contenedor;
+function renderizarTablas() {
+  pendientesVacio.hidden = solicitudesPendientes.length > 0;
+  tablaPendientes.hidden = solicitudesPendientes.length === 0;
+  tablaPendientes.querySelector('tbody').innerHTML = solicitudesPendientes.map((s) => `
+    <tr data-id="${escaparHtml(s.id_solicitud)}">
+      <td>${escaparHtml(s.destino_nombre || 'Sin especificar')}</td>
+      <td>${escaparHtml(s.lugar_entrega || 'Sin especificar')}</td>
+      <td>${escaparHtml(resumenProductos(s.items))}</td>
+      <td><button type="button" class="btn-mini btn-abrir-pendiente" data-id="${escaparHtml(s.id_solicitud)}">Cotizar</button></td>
+    </tr>
+  `).join('');
+
+  respondidasVacio.hidden = solicitudesRespondidas.length > 0;
+  tablaRespondidas.hidden = solicitudesRespondidas.length === 0;
+  tablaRespondidas.querySelector('tbody').innerHTML = solicitudesRespondidas.map((s) => `
+    <tr data-id="${escaparHtml(s.id_solicitud)}">
+      <td>${escaparHtml(s.destino_nombre || 'Sin especificar')}</td>
+      <td>${escaparHtml(s.lugar_entrega || 'Sin especificar')}</td>
+      <td>${escaparHtml(resumenProductos(s.items))}</td>
+      <td><button type="button" class="btn-mini btn-abrir-respondida" data-id="${escaparHtml(s.id_solicitud)}">Ver</button></td>
+    </tr>
+  `).join('');
 }
 
 async function cargarSolicitudes() {
   const res = await fetch('/api/proveedor-portal/solicitudes');
   const solicitudes = await res.json();
-
-  const pendientes = solicitudes.filter((s) => s.estatus !== 'Respondida');
-  const respondidas = solicitudes.filter((s) => s.estatus === 'Respondida');
-
-  listaPendientes.innerHTML = '';
-  pendientesVacio.hidden = pendientes.length > 0;
-  pendientes.forEach((s) => listaPendientes.appendChild(renderizarPendiente(s)));
-
-  listaRespondidas.innerHTML = '';
-  respondidasVacio.hidden = respondidas.length > 0;
-  respondidas.forEach((s) => listaRespondidas.appendChild(renderizarRespondida(s)));
+  solicitudesPendientes = solicitudes.filter((s) => s.estatus !== 'Respondida');
+  solicitudesRespondidas = solicitudes.filter((s) => s.estatus === 'Respondida');
+  renderizarTablas();
 }
 
-listaPendientes.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const form = e.target;
-  const id = form.dataset.id;
-  const btn = form.querySelector('button[type="submit"]');
+tablaPendientes.addEventListener('click', (e) => {
+  const id = e.target.dataset.id;
+  if (!id || !e.target.classList.contains('btn-abrir-pendiente')) return;
+  const solicitud = solicitudesPendientes.find((s) => s.id_solicitud === id);
+  if (solicitud) abrirDetalle(solicitud, true);
+});
 
-  const items = [...form.querySelectorAll('.tabla-items tr')].map((tr) => ({
+tablaRespondidas.addEventListener('click', (e) => {
+  const id = e.target.dataset.id;
+  if (!id || !e.target.classList.contains('btn-abrir-respondida')) return;
+  const solicitud = solicitudesRespondidas.find((s) => s.id_solicitud === id);
+  if (solicitud) abrirDetalle(solicitud, false);
+});
+
+btnVolverLista.addEventListener('click', mostrarVistaLista);
+
+formDetalleSolicitud.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (formDetalleSolicitud.dataset.editable !== 'true') return;
+
+  const id = formDetalleSolicitud.dataset.id;
+  const items = [...detalleTablaItems.querySelectorAll('tr')].map((tr) => ({
     id: Number(tr.dataset.id),
     precio_venta: tr.querySelector('.item-precio-venta').value,
     tiempo_entrega: tr.querySelector('.item-tiempo-entrega').value,
   }));
-  const comentarios = form.querySelector('.campo-comentarios').value.trim();
+  const comentarios = detalleComentarios.value.trim();
 
-  btn.disabled = true;
+  detalleBtnEnviar.disabled = true;
   const res = await fetch(`/api/proveedor-portal/solicitudes/${encodeURIComponent(id)}/responder`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ items, comentarios }),
   });
-  btn.disabled = false;
+  detalleBtnEnviar.disabled = false;
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
@@ -103,6 +157,7 @@ listaPendientes.addEventListener('submit', async (e) => {
   }
 
   await cargarSolicitudes();
+  mostrarVistaLista();
 });
 
 btnLogoutProveedor.addEventListener('click', async () => {
@@ -120,6 +175,7 @@ async function iniciar() {
   portalTitulo.textContent = `Hola, ${proveedor.nombre}`;
 
   await cargarSolicitudes();
+  mostrarVistaLista();
   vistaCargando.hidden = true;
   vistaPortal.hidden = false;
 }

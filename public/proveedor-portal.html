@@ -23,47 +23,68 @@
         <button type="button" class="btn-secundario" id="btn-logout-proveedor">Cerrar sesión</button>
       </div>
 
-      <div class="detalle-cotizacion" style="margin-top: 1.1rem;">
-        <h3>Pendientes de cotizar</h3>
-        <p class="pista" id="pendientes-vacio" hidden>No tienes solicitudes pendientes en este momento.</p>
-        <div id="lista-pendientes"></div>
+      <!-- Vista de lista: dos tablas compactas; cada renglon abre la vista de detalle al hacer clic. -->
+      <div id="vista-lista">
+        <div class="detalle-cotizacion" style="margin-top: 1.1rem;">
+          <h3>Pendientes de cotizar</h3>
+          <p class="pista" id="pendientes-vacio" hidden>No tienes solicitudes pendientes en este momento.</p>
+          <div class="tabla-scroll">
+            <table id="tabla-pendientes" hidden>
+              <thead>
+                <tr><th>Hotel / Local</th><th>Lugar de entrega</th><th>Productos</th><th></th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="detalle-cotizacion" style="margin-top: 1.1rem;">
+          <h3>Ya cotizadas</h3>
+          <p class="pista" id="respondidas-vacio" hidden>Todavía no has respondido ninguna solicitud.</p>
+          <div class="tabla-scroll">
+            <table id="tabla-respondidas" hidden>
+              <thead>
+                <tr><th>Hotel / Local</th><th>Lugar de entrega</th><th>Productos cotizados</th><th></th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      <div class="detalle-cotizacion" style="margin-top: 1.1rem;">
-        <h3>Ya cotizadas</h3>
-        <p class="pista" id="respondidas-vacio" hidden>Todavía no has respondido ninguna solicitud.</p>
-        <div id="lista-respondidas"></div>
+      <!-- Vista de detalle: se llena con una sola solicitud (pendiente o ya cotizada) al hacer
+           clic en un renglon de las tablas de arriba. -->
+      <div id="vista-detalle" hidden>
+        <button type="button" class="btn-texto" id="btn-volver-lista">← Volver al listado</button>
+
+        <form class="detalle-cotizacion" id="form-detalle-solicitud" style="margin-top: 0.7rem;">
+          <div class="campo-cot">
+            <span class="etiqueta-cot">Hotel / Local</span>
+            <p class="valor-cot campo-destino"></p>
+          </div>
+          <div class="campo-cot">
+            <span class="etiqueta-cot">Lugar de entrega</span>
+            <p class="valor-cot campo-lugar-entrega"></p>
+          </div>
+          <div class="tabla-scroll" style="margin-top: 0.7rem;">
+            <table>
+              <thead>
+                <tr><th>Código</th><th>Descripción</th><th>Marca</th><th>Cantidad</th><th>Precio de venta</th><th>Tiempo de entrega</th></tr>
+              </thead>
+              <tbody class="tabla-items"></tbody>
+            </table>
+          </div>
+          <label style="display: block; margin-top: 0.7rem;">
+            <span class="etiqueta-cot" style="display: block; margin-bottom: 0.3rem;">Comentarios (opcional)</span>
+            <textarea class="campo-comentarios" rows="2" style="width: 100%; box-sizing: border-box;"></textarea>
+          </label>
+          <div class="acciones-form" style="margin-top: 0.7rem;">
+            <button type="submit" class="btn-marca">Enviar cotización</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
-
-  <template id="plantilla-solicitud-pendiente">
-    <form class="panel-form solicitud-pendiente" style="margin-bottom: 1.1rem;">
-      <div class="campo-cot">
-        <span class="etiqueta-cot">Hotel / Local</span>
-        <p class="valor-cot campo-destino"></p>
-      </div>
-      <div class="campo-cot">
-        <span class="etiqueta-cot">Lugar de entrega</span>
-        <p class="valor-cot campo-lugar-entrega"></p>
-      </div>
-      <div class="tabla-scroll" style="margin-top: 0.7rem;">
-        <table>
-          <thead>
-            <tr><th>Código</th><th>Descripción</th><th>Marca</th><th>Cantidad</th><th>Precio de venta</th><th>Tiempo de entrega</th></tr>
-          </thead>
-          <tbody class="tabla-items"></tbody>
-        </table>
-      </div>
-      <label style="display: block; margin-top: 0.7rem;">
-        <span class="etiqueta-cot" style="display: block; margin-bottom: 0.3rem;">Comentarios (opcional)</span>
-        <textarea class="campo-comentarios" rows="2" style="width: 100%; box-sizing: border-box;"></textarea>
-      </label>
-      <div class="acciones-form" style="margin-top: 0.7rem;">
-        <button type="submit" class="btn-mini">Enviar cotización</button>
-      </div>
-    </form>
-  </template>
 
   <template id="plantilla-item-editable">
     <tr>
@@ -76,15 +97,15 @@
     </tr>
   </template>
 
-  <template id="plantilla-solicitud-respondida">
-    <div class="panel-form" style="margin-bottom: 0.9rem;">
-      <div>
-        <span class="etiqueta-cot campo-destino"></span>
-        <span class="pill-estatus estatus-vigente">Cotizada</span>
-      </div>
-      <div class="pista campo-resumen-items" style="margin-top: 0.4rem;"></div>
-      <div class="pista campo-comentarios-resp" style="margin-top: 0.4rem;"></div>
-    </div>
+  <template id="plantilla-item-solo-lectura">
+    <tr>
+      <td class="celda-codigo"></td>
+      <td class="celda-descripcion"></td>
+      <td class="celda-marca"></td>
+      <td class="num celda-cantidad"></td>
+      <td class="celda-precio"></td>
+      <td class="celda-tiempo"></td>
+    </tr>
   </template>
 
   <script src="proveedor-portal.js"></script>

@@ -1174,7 +1174,12 @@ function renderizarPartidas() {
   const sinMoneda = !cotizacionMoneda.value;
   tablaPartidas.innerHTML = partidas.map((it, i) => `
     <tr data-index="${i}">
-      <td><input type="text" class="partida-producto" list="lista-productos" placeholder="Código" value="${escaparHtml(it.producto_item || '')}" ${sinMoneda ? 'disabled title="Selecciona primero la Moneda"' : ''} /></td>
+      <td>
+        <span class="campo-con-boton">
+          <input type="text" class="partida-producto" list="lista-productos" placeholder="Código" value="${escaparHtml(it.producto_item || '')}" ${sinMoneda ? 'disabled title="Selecciona primero la Moneda"' : ''} />
+          <button type="button" class="btn-mini btn-nuevo-producto-partida" data-index="${i}" title="Este código no existe en el catálogo, créalo" ${!it.producto_item || productosCache.some((p) => p.item === it.producto_item) ? 'hidden' : ''}>+</button>
+        </span>
+      </td>
       <td><input type="number" class="partida-cantidad" step="1" min="0" value="${it.cantidad || ''}" /></td>
       <td><input type="number" class="partida-precio" step="0.01" min="0" value="${it.precio_unitario || ''}" /></td>
       <td class="celda-check"><input type="checkbox" class="partida-causa-impuesto" ${it.causa_impuesto !== false ? 'checked' : ''} title="Si se desmarca, esta partida no suma IVA" /></td>
@@ -1264,6 +1269,8 @@ tablaPartidas.addEventListener('input', (e) => {
         tr.querySelector('.partida-precio').value = sugerido;
       }
     }
+    const btnNuevo = tr.querySelector('.btn-nuevo-producto-partida');
+    if (btnNuevo) btnNuevo.hidden = !partidas[i].producto_item || Boolean(producto);
   } else if (e.target.classList.contains('partida-causa-impuesto')) {
     partidas[i].causa_impuesto = e.target.checked;
     actualizarResumen();
@@ -1286,8 +1293,58 @@ tablaPartidas.addEventListener('click', (e) => {
   if (e.target.classList.contains('btn-solicitar-proveedor')) {
     const i = Number(e.target.dataset.index);
     abrirModalSolicitudProveedor(partidas[i]);
+    return;
+  }
+  if (e.target.classList.contains('btn-nuevo-producto-partida')) {
+    const i = Number(e.target.dataset.index);
+    irACrearProductoYVolver(partidas[i]);
   }
 });
+
+// Si el codigo que se escribio no existe en el catalogo de Productos: manda a crearlo alli
+// mismo y guarda en sessionStorage a que cotizacion regresar (con el codigo pendiente), para
+// retomar exactamente donde se quedo en cuanto vuelva. Requiere que la cotizacion ya este
+// guardada (si no, no hay a donde "regresar" todavia).
+function irACrearProductoYVolver(partida) {
+  if (!cotizacionId.value) {
+    alert('Guarda la cotización primero para poder regresar a ella después de crear el producto.');
+    return;
+  }
+  sessionStorage.setItem('cotizacionPendienteProducto', JSON.stringify({
+    cotizacionId: cotizacionId.value,
+    codigo: partida.producto_item,
+    cantidad: partida.cantidad,
+  }));
+  window.location.href = `catalogos.html?tab=productos&codigo=${encodeURIComponent(partida.producto_item)}&volver=cotizacion`;
+}
+
+async function restaurarCotizacionPendienteProducto() {
+  const guardado = sessionStorage.getItem('cotizacionPendienteProducto');
+  if (!guardado) return;
+  sessionStorage.removeItem('cotizacionPendienteProducto');
+
+  const pendiente = JSON.parse(guardado);
+  const res = await fetch(`/api/cotizaciones/${encodeURIComponent(pendiente.cotizacionId)}`);
+  if (!res.ok) return;
+  const c = await res.json();
+
+  activarSubtab('captura');
+  cargarCotizacionEnFormulario(c);
+
+  if (pendiente.codigo && !partidas.some((p) => p.producto_item === pendiente.codigo)) {
+    const producto = productosCache.find((p) => p.item === pendiente.codigo);
+    const sugerido = producto ? (c.moneda === 'USD' ? producto.precio_usd : producto.precio_mxn) : null;
+    partidas.push({
+      producto_item: pendiente.codigo,
+      cantidad: pendiente.cantidad || 1,
+      precio_unitario: sugerido ?? 0,
+      causa_impuesto: true,
+    });
+  }
+  renderizarPartidas();
+  actualizarResumen();
+  mostrarPasoProductosCotizacion();
+}
 
 cotizacionDescuento.addEventListener('input', actualizarResumen);
 
@@ -2671,7 +2728,10 @@ promesaAuth.then(async (sesion) => {
   btnNuevaCotizacionVisualizacion.hidden = !permisosCatalogos.editar;
 
   poblarSelectsNegocio().then(cargarNegocios);
-  poblarSelectsCotizacion().then(cargarCotizaciones);
+  poblarSelectsCotizacion().then(() => {
+    cargarCotizaciones();
+    restaurarCotizacionPendienteProducto();
+  });
   cargarProveedoresCotizacion();
 
   const parametros = new URLSearchParams(window.location.search);

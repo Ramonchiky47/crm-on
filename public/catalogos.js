@@ -1830,6 +1830,17 @@ btnMostrarFormProducto.addEventListener('click', () => {
   productoItem.focus();
 });
 
+// Si se llega desde el "+" de un codigo no encontrado en una cotizacion: abre el formulario con
+// el Item precargado, y al guardar (o si ya se guardo antes y solo se volvio a entrar) regresa
+// directo a esa cotizacion (cotizaciones.js retoma el hilo via sessionStorage).
+const parametrosProductoUrl = new URLSearchParams(window.location.search);
+const codigoDesdeCotizacion = parametrosProductoUrl.get('codigo');
+const volverACotizacionTrasProducto = parametrosProductoUrl.get('volver') === 'cotizacion';
+if (codigoDesdeCotizacion) {
+  abrirFormProducto();
+  productoItem.value = codigoDesdeCotizacion;
+}
+
 function poblarSelect(select, lista, valor, texto, valorActual) {
   const actual = valorActual || select.value;
   select.innerHTML = '<option value="">-- Selecciona --</option>' + lista.map((item) => `
@@ -2149,6 +2160,12 @@ formProducto.addEventListener('submit', async (e) => {
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
     alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  if (volverACotizacionTrasProducto) {
+    // Sin parametros: cotizaciones.js retoma solo (via sessionStorage) sin chocar con el manejo
+    // de ?tab=captura, que limpia y abre un formulario nuevo vacio.
+    window.location.href = 'cotizaciones.html';
     return;
   }
   limpiarFormProducto();

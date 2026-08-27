@@ -3766,28 +3766,57 @@ app.delete('/api/actividades/:id', requirePermiso('catalogos', 'borrar'), ar(asy
 // Catalogo simple, mismo patron que Actividades, para poder mandarles una Solicitud de
 // cotizacion (ver mas abajo) desde un producto de una cotizacion.
 
+// SELECT explicito (nunca *): password_hash del proveedor nunca debe llegar al navegador del
+// staff interno; en su lugar se manda tiene_acceso para que Catalogos pueda mostrar si ya tiene
+// usuario/contraseña configurados para el Portal de Proveedores.
+const SELECT_PROVEEDORES = `
+  SELECT id_proveedor, nombre, empresa, correo_electronico, telefono, usuario_id, creado_en, usuario,
+    (password_hash IS NOT NULL) AS tiene_acceso
+  FROM proveedores
+`;
+
 app.get('/api/proveedores', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const proveedores = req.session.esAdmin
-    ? await db.prepare('SELECT * FROM proveedores ORDER BY nombre').all()
-    : await db.prepare('SELECT * FROM proveedores WHERE usuario_id = ? ORDER BY nombre').all(req.session.usuarioId);
+    ? await db.prepare(`${SELECT_PROVEEDORES} ORDER BY nombre`).all()
+    : await db.prepare(`${SELECT_PROVEEDORES} WHERE usuario_id = ? ORDER BY nombre`).all(req.session.usuarioId);
   res.json(proveedores);
 }));
+
+// El Usuario/Contraseña del Portal de Proveedores son opcionales: un proveedor solo puede
+// responder ligas publicas (RFQ por token) hasta que alguien le configure acceso al portal.
+async function validarUsuarioPortalProveedor(usuarioDeseado, idProveedorActual) {
+  const usuario = quitarAcentos((usuarioDeseado || '').trim());
+  if (!usuario) return { usuario: null, errores: [] };
+  const enUso = await db.prepare('SELECT id_proveedor FROM proveedores WHERE usuario = ?').get(usuario);
+  if (enUso && enUso.id_proveedor !== idProveedorActual) {
+    return { usuario, errores: ['Ese usuario de Portal ya esta en uso por otro proveedor'] };
+  }
+  return { usuario, errores: [] };
+}
 
 app.post('/api/proveedores', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
   const nombre = quitarAcentos((req.body.nombre || '').trim());
   if (!nombre) return res.status(400).json({ errores: ['nombre es requerido'] });
 
+  const { usuario, errores } = await validarUsuarioPortalProveedor(req.body.usuario, null);
+  if (errores.length) return res.status(400).json({ errores });
+  if (usuario && (!req.body.password || req.body.password.length < 4)) {
+    return res.status(400).json({ errores: ['password debe tener al menos 4 caracteres'] });
+  }
+
   const info = await db.prepare(`
-    INSERT INTO proveedores (nombre, empresa, correo_electronico, telefono, usuario_id, creado_en)
-    VALUES (?, ?, ?, ?, ?, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))
+    INSERT INTO proveedores (nombre, empresa, correo_electronico, telefono, usuario_id, creado_en, usuario, password_hash)
+    VALUES (?, ?, ?, ?, ?, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'), ?, ?)
   `).run(
     nombre,
     quitarAcentos((req.body.empresa || '').trim()) || null,
     (req.body.correo_electronico || '').trim() || null,
     (req.body.telefono || '').trim() || null,
-    req.session.usuarioId
+    req.session.usuarioId,
+    usuario,
+    usuario ? hashPassword(req.body.password) : null
   );
-  res.status(201).json(await db.prepare('SELECT * FROM proveedores WHERE id_proveedor = ?').get(info.lastInsertRowid));
+  res.status(201).json(await db.prepare(`${SELECT_PROVEEDORES} WHERE id_proveedor = ?`).get(info.lastInsertRowid));
 }));
 
 app.put('/api/proveedores/:id', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
@@ -3797,16 +3826,35 @@ app.put('/api/proveedores/:id', requirePermiso('catalogos', 'editar'), ar(async 
   const nombre = quitarAcentos((req.body.nombre || '').trim());
   if (!nombre) return res.status(400).json({ errores: ['nombre es requerido'] });
 
-  await db.prepare(`
-    UPDATE proveedores SET nombre = ?, empresa = ?, correo_electronico = ?, telefono = ? WHERE id_proveedor = ?
-  `).run(
+  const { usuario, errores } = await validarUsuarioPortalProveedor(req.body.usuario, existente.id_proveedor);
+  if (errores.length) return res.status(400).json({ errores });
+  if (req.body.password && req.body.password.length < 4) {
+    return res.status(400).json({ errores: ['password debe tener al menos 4 caracteres'] });
+  }
+  if (usuario && !existente.password_hash && !req.body.password) {
+    return res.status(400).json({ errores: ['Asigna una password para este usuario de Portal'] });
+  }
+
+  // Sin usuario no puede haber contraseña. Con usuario, la contraseña solo se toca si se mando
+  // una nueva; dejar el campo en blanco al editar conserva la contraseña actual (igual que en
+  // Usuarios internos).
+  const passwordHashSql = !usuario ? 'NULL' : req.body.password ? '?' : 'password_hash';
+  const params = [
     nombre,
     quitarAcentos((req.body.empresa || '').trim()) || null,
     (req.body.correo_electronico || '').trim() || null,
     (req.body.telefono || '').trim() || null,
-    req.params.id
-  );
-  res.json(await db.prepare('SELECT * FROM proveedores WHERE id_proveedor = ?').get(req.params.id));
+    usuario,
+  ];
+  if (usuario && req.body.password) params.push(hashPassword(req.body.password));
+  params.push(req.params.id);
+
+  await db.prepare(`
+    UPDATE proveedores SET nombre = ?, empresa = ?, correo_electronico = ?, telefono = ?, usuario = ?,
+      password_hash = ${passwordHashSql}
+    WHERE id_proveedor = ?
+  `).run(...params);
+  res.json(await db.prepare(`${SELECT_PROVEEDORES} WHERE id_proveedor = ?`).get(req.params.id));
 }));
 
 app.delete('/api/proveedores/:id', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {
@@ -3953,19 +4001,96 @@ app.get('/api/rfq/:token', ar(async (req, res) => {
   });
 }));
 
-app.post('/api/rfq/:token/responder', ar(async (req, res) => {
-  const solicitud = await db.prepare('SELECT * FROM solicitudes_proveedor WHERE token_publico = ?').get(req.params.token);
-  if (!solicitud) return res.status(404).json({ error: 'Solicitud no encontrada' });
-
-  const respuestas = Array.isArray(req.body.items) ? req.body.items : [];
+async function responderSolicitudProveedor(solicitud, body) {
+  const respuestas = Array.isArray(body.items) ? body.items : [];
   for (const r of respuestas) {
     if (!r.id) continue;
     await db.prepare('UPDATE solicitud_proveedor_items SET precio_venta = ?, tiempo_entrega = ? WHERE id = ? AND solicitud_id = ?')
       .run(numeroOpcional(r.precio_venta), (r.tiempo_entrega || '').trim() || null, r.id, solicitud.id_solicitud);
   }
   await db.prepare("UPDATE solicitudes_proveedor SET estatus = 'Respondida', fecha_respuesta = to_char(now(), 'YYYY-MM-DD HH24:MI:SS'), comentarios = ? WHERE id_solicitud = ?")
-    .run((req.body.comentarios || '').trim() || null, solicitud.id_solicitud);
+    .run((body.comentarios || '').trim() || null, solicitud.id_solicitud);
+}
 
+app.post('/api/rfq/:token/responder', ar(async (req, res) => {
+  const solicitud = await db.prepare('SELECT * FROM solicitudes_proveedor WHERE token_publico = ?').get(req.params.token);
+  if (!solicitud) return res.status(404).json({ error: 'Solicitud no encontrada' });
+  await responderSolicitudProveedor(solicitud, req.body);
+  res.json({ ok: true });
+}));
+
+// ---- Portal de Proveedores: login con usuario/password (independiente de la sesion de Usuarios
+// internos) para que un proveedor vea TODAS sus solicitudes pendientes en un solo lugar, sin
+// depender de que le reenvien cada liga individual por token. ----
+
+const intentosLoginProveedor = new Map();
+
+app.post('/api/proveedor-portal/login', ar(async (req, res) => {
+  const { usuario, password } = req.body;
+  if (!usuario || !password) return res.status(400).json({ error: 'Usuario y password son requeridos' });
+
+  const nombreUsuario = usuario.trim();
+  let estado = intentosLoginProveedor.get(nombreUsuario);
+
+  if (estado && estado.bloqueadoHasta) {
+    if (estado.bloqueadoHasta > Date.now()) {
+      const minutos = Math.ceil((estado.bloqueadoHasta - Date.now()) / 60000);
+      return res.status(429).json({ error: `Demasiados intentos fallidos. Intenta de nuevo en ${minutos} minuto(s).` });
+    }
+    intentosLoginProveedor.delete(nombreUsuario);
+    estado = undefined;
+  }
+
+  const p = await db.prepare('SELECT * FROM proveedores WHERE usuario = ?').get(nombreUsuario);
+  if (!p || !p.password_hash || !verificarPassword(password, p.password_hash)) {
+    const intentos = (estado ? estado.intentos : 0) + 1;
+    if (intentos >= MAX_INTENTOS_LOGIN) {
+      intentosLoginProveedor.set(nombreUsuario, { intentos, bloqueadoHasta: Date.now() + BLOQUEO_LOGIN_MS });
+      return res.status(429).json({ error: 'Demasiados intentos fallidos. Intenta de nuevo en 60 minutos.' });
+    }
+    intentosLoginProveedor.set(nombreUsuario, { intentos, bloqueadoHasta: null });
+    return res.status(401).json({ error: 'Usuario o password incorrectos' });
+  }
+
+  intentosLoginProveedor.delete(nombreUsuario);
+  req.session.proveedorId = p.id_proveedor;
+  req.session.proveedorNombre = p.nombre;
+
+  res.json({ id_proveedor: p.id_proveedor, nombre: p.nombre });
+}));
+
+app.post('/api/proveedor-portal/logout', (req, res) => {
+  req.session.destroy(() => res.status(204).end());
+});
+
+function requireProveedor(req, res, next) {
+  if (!req.session.proveedorId) return res.status(401).json({ error: 'No autenticado' });
+  next();
+}
+
+app.get('/api/proveedor-portal/me', requireProveedor, (req, res) => {
+  res.json({ id_proveedor: req.session.proveedorId, nombre: req.session.proveedorNombre });
+});
+
+// Todas las solicitudes de este proveedor (de cualquier cotizacion), igual que la liga publica
+// pero sin exponer nunca datos de otras cotizaciones o de otros proveedores.
+app.get('/api/proveedor-portal/solicitudes', requireProveedor, ar(async (req, res) => {
+  const filas = await db.prepare(`
+    ${SELECT_SOLICITUDES_PROVEEDOR} WHERE s.proveedor_id = ? ORDER BY s.fecha_creacion DESC
+  `).all(req.session.proveedorId);
+  const conItems = await Promise.all(filas.map(async (f) => ({
+    id_solicitud: f.id_solicitud, destino_nombre: f.destino_nombre, contacto_nombre: f.contacto_nombre,
+    lugar_entrega: f.lugar_entrega, estatus: f.estatus, fecha_creacion: f.fecha_creacion, comentarios: f.comentarios,
+    items: await itemsDeSolicitudProveedor(f.id_solicitud),
+  })));
+  res.json(conItems);
+}));
+
+app.post('/api/proveedor-portal/solicitudes/:id/responder', requireProveedor, ar(async (req, res) => {
+  const solicitud = await db.prepare('SELECT * FROM solicitudes_proveedor WHERE id_solicitud = ? AND proveedor_id = ?')
+    .get(req.params.id, req.session.proveedorId);
+  if (!solicitud) return res.status(404).json({ error: 'Solicitud no encontrada' });
+  await responderSolicitudProveedor(solicitud, req.body);
   res.json({ ok: true });
 }));
 

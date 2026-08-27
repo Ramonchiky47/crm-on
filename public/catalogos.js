@@ -2447,6 +2447,8 @@ const proveedorNombre = document.getElementById('proveedor-nombre');
 const proveedorEmpresa = document.getElementById('proveedor-empresa');
 const proveedorCorreo = document.getElementById('proveedor-correo');
 const proveedorTelefono = document.getElementById('proveedor-telefono');
+const proveedorUsuario = document.getElementById('proveedor-usuario');
+const proveedorPassword = document.getElementById('proveedor-password');
 const btnCancelarProveedor = document.getElementById('btn-cancelar-proveedor');
 const tablaProveedores = document.getElementById('tabla-proveedores');
 let proveedoresCache = [];
@@ -2460,6 +2462,7 @@ async function cargarProveedores() {
       <td>${escaparHtml(p.empresa || '')}</td>
       <td>${escaparHtml(p.correo_electronico || '')}</td>
       <td>${escaparHtml(p.telefono || '')}</td>
+      <td>${p.tiene_acceso ? `<span class="pill-estatus estatus-vigente">${escaparHtml(p.usuario)}</span>` : '<span class="pista">Sin acceso</span>'}</td>
       <td class="acciones">
         ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${p.id_proveedor}">Editar</button>` : ''}
         ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${p.id_proveedor}">Borrar</button>` : ''}
@@ -2481,6 +2484,8 @@ formProveedor.addEventListener('submit', async (e) => {
     empresa: proveedorEmpresa.value.trim(),
     correo_electronico: proveedorCorreo.value.trim(),
     telefono: proveedorTelefono.value.trim(),
+    usuario: proveedorUsuario.value.trim(),
+    password: proveedorPassword.value,
   };
   const id = proveedorId.value;
   const res = await fetch(id ? `/api/proveedores/${id}` : '/api/proveedores', {
@@ -2516,6 +2521,8 @@ tablaProveedores.addEventListener('click', async (e) => {
     proveedorEmpresa.value = p.empresa || '';
     proveedorCorreo.value = p.correo_electronico || '';
     proveedorTelefono.value = p.telefono || '';
+    proveedorUsuario.value = p.usuario || '';
+    proveedorPassword.value = '';
     btnCancelarProveedor.hidden = false;
     proveedorNombre.focus();
   }

@@ -544,11 +544,14 @@
         <input type="text" id="proveedor-empresa" placeholder="Empresa" />
         <input type="email" id="proveedor-correo" placeholder="Correo electrónico" />
         <input type="text" id="proveedor-telefono" placeholder="Teléfono" />
+        <input type="text" id="proveedor-usuario" placeholder="Usuario del Portal (opcional)" autocomplete="off" />
+        <input type="password" id="proveedor-password" placeholder="Contraseña del Portal" autocomplete="new-password" />
         <button type="submit">Agregar</button>
         <button type="button" id="btn-cancelar-proveedor" hidden>Cancelar</button>
       </form>
+      <p class="pista">Usuario y Contraseña son para que el proveedor entre a <a href="proveedor-login.html" target="_blank">su Portal</a> y vea ahí todas sus solicitudes pendientes; déjalos en blanco si por ahora solo va a responder por la liga de cada solicitud. Al editar, deja la Contraseña en blanco para conservar la actual.</p>
       <table>
-        <thead><tr><th>Nombre</th><th>Empresa</th><th>Correo</th><th>Teléfono</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Empresa</th><th>Correo</th><th>Teléfono</th><th>Portal</th><th>Acciones</th></tr></thead>
         <tbody id="tabla-proveedores"></tbody>
       </table>
     </section>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portal de Proveedores · GONPAL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="contenedor" style="max-width: 420px;">
+    <div class="detalle-cotizacion" style="margin-top: 3rem;">
+      <p class="eyebrow-cot">GONPAL · Portal de Proveedores</p>
+      <h2>Inicia sesión</h2>
+      <p class="pista">Aquí puedes ver todas tus solicitudes de cotización pendientes y responderlas.</p>
+
+      <form id="form-login-proveedor" style="margin-top: 1.1rem; display: flex; flex-direction: column; gap: 0.7rem;">
+        <label>
+          <span class="etiqueta-cot" style="display: block; margin-bottom: 0.3rem;">Usuario</span>
+          <input type="text" id="login-usuario" autocomplete="username" required style="width: 100%; box-sizing: border-box;" />
+        </label>
+        <label>
+          <span class="etiqueta-cot" style="display: block; margin-bottom: 0.3rem;">Contraseña</span>
+          <input type="password" id="login-password" autocomplete="current-password" required style="width: 100%; box-sizing: border-box;" />
+        </label>
+        <p class="pista" id="login-error" style="color: var(--peligro);" hidden></p>
+        <button type="submit" class="btn-marca" id="btn-login-proveedor">Entrar</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="proveedor-login.js"></script>
+</body>
+</html>

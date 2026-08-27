@@ -62,7 +62,7 @@ formEditarPlaza.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   formEditarPlaza.hidden = true;
@@ -110,7 +110,7 @@ opcionesDestinoAgregar.addEventListener('click', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   buscarDestinoAgregar.value = '';

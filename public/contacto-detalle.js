@@ -95,7 +95,7 @@ formEditarContacto.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   formEditarContacto.hidden = true;
@@ -149,7 +149,7 @@ opcionesDestinoAgregar.addEventListener('click', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   buscarDestinoAgregar.value = '';
@@ -218,7 +218,7 @@ btnAgregarGrupo.addEventListener('click', async () => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   agregarGrupoSelect.value = '';
@@ -297,7 +297,7 @@ formNuevoNegocio.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   formNuevoNegocio.reset();
@@ -401,7 +401,7 @@ formNuevaTarea.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   formNuevaTarea.reset();

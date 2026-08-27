@@ -174,7 +174,7 @@ formRapidoCatalogoDestino.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   const creado = await res.json();
@@ -231,7 +231,7 @@ formEditarDestino.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   formEditarDestino.hidden = true;
@@ -292,7 +292,7 @@ opcionesContactoAgregar.addEventListener('click', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   buscarContactoAgregar.value = '';
@@ -418,7 +418,7 @@ formNuevaTarea.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   formNuevaTarea.reset();

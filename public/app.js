@@ -236,7 +236,7 @@ async function guardarAsociarCotizacion(ordenId, cotizacionId) {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return false;
   }
   return true;
@@ -312,7 +312,7 @@ formRapido.addEventListener('submit', async (e) => {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
 
@@ -534,7 +534,7 @@ formAsociar.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
 
@@ -732,7 +732,7 @@ form.addEventListener('submit', async (e) => {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error al guardar: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error al guardar: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
 
@@ -836,7 +836,7 @@ btnEnviarTareasOrdenes.addEventListener('click', async () => {
       enviados++;
     } else {
       const error = await res.json().catch(() => ({}));
-      errores.push(`${id}: ${error.errores ? error.errores.join(', ') : res.statusText}`);
+      errores.push(`${id}: ${error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)}`);
     }
   }
 

@@ -143,7 +143,7 @@ form.addEventListener('submit', async (e) => {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error al guardar: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error al guardar: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
 

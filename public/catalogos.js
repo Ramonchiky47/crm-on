@@ -13,7 +13,7 @@ async function eliminarYRecargar(url, recargar) {
   const res = await fetch(url, { method: 'DELETE' });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : error.error || res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   recargar();
@@ -402,7 +402,7 @@ formRapidoCatalogoDestino.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   const creado = await res.json();
@@ -539,7 +539,7 @@ formDestino.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormDestino();
@@ -644,7 +644,7 @@ formPlaza.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormPlaza();
@@ -714,7 +714,7 @@ formGrupo.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormGrupo();
@@ -784,7 +784,7 @@ formCadena.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormCadena();
@@ -1080,7 +1080,7 @@ formContacto.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormContacto();
@@ -1249,7 +1249,7 @@ formEstatus.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormEstatus();
@@ -1314,7 +1314,7 @@ formEstadoEntrega.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormEstadoEntrega();
@@ -1468,7 +1468,7 @@ formUsuario.addEventListener('submit', async (e) => {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error al guardar: ' + (error.errores ? error.errores.join(', ') : error.error || res.statusText));
+    alert('Error al guardar: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
 
@@ -1564,7 +1564,7 @@ formRepresentante.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormRepresentante();
@@ -1636,7 +1636,7 @@ formCategoria.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormCategoria();
@@ -1703,7 +1703,7 @@ formLinea.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormLinea();
@@ -1770,7 +1770,7 @@ formMarca.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormMarca();
@@ -2018,7 +2018,7 @@ formRapidoCatalogoProducto.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   const creado = await res.json();
@@ -2159,7 +2159,7 @@ formProducto.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   if (volverACotizacionTrasProducto) {
@@ -2348,7 +2348,7 @@ formEtapaNegocio.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormEtapaNegocio();
@@ -2413,7 +2413,7 @@ formActividad.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormActividad();
@@ -2499,7 +2499,7 @@ formProveedor.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormProveedor();

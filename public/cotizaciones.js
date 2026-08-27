@@ -373,7 +373,7 @@ btnEnviarTareasNegocios.addEventListener('click', async () => {
       enviados++;
     } else {
       const error = await res.json().catch(() => ({}));
-      errores.push(`${negocio.negocio}: ${error.errores ? error.errores.join(', ') : res.statusText}`);
+      errores.push(`${negocio.negocio}: ${error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)}`);
     }
   }
 
@@ -458,7 +458,7 @@ formNegocio.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   limpiarFormNegocio();
@@ -497,7 +497,7 @@ tablaNegocios.addEventListener('click', async (e) => {
     const res = await fetch(`/api/negocios/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
-      alert('Error: ' + (error.errores ? error.errores.join(', ') : error.error || res.statusText));
+      alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
       return;
     }
     cargarNegocios();
@@ -959,7 +959,7 @@ async function asociarDestinoContacto(destinoId, contactoId) {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return false;
   }
   return true;
@@ -1500,7 +1500,7 @@ formSolicitudProveedor.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   const creado = await res.json();
@@ -1550,7 +1550,7 @@ formRapidoProveedor.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   const creado = await res.json();
@@ -1627,7 +1627,7 @@ listaSolicitudesProveedor.addEventListener('click', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   const data = await res.json();
@@ -1868,7 +1868,7 @@ btnEnviarTareasSeguimiento.addEventListener('click', async () => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   cargarNegocios();
@@ -1906,7 +1906,7 @@ formCotizacion.addEventListener('submit', async (e) => {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
 
@@ -1945,7 +1945,7 @@ tablaCotizaciones.addEventListener('click', async (e) => {
     const res = await fetch(`/api/cotizaciones/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
-      alert('Error: ' + (error.errores ? error.errores.join(', ') : error.error || res.statusText));
+      alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
       return;
     }
     cargarCotizaciones();
@@ -2368,7 +2368,7 @@ async function guardarOrdenesAsociadas(id, ordenIds) {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return false;
   }
   return true;
@@ -2414,7 +2414,7 @@ async function marcarEtapaCotizacion(id, etapa, motivoPerdida, alExito = () => a
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
   alExito();
@@ -2529,7 +2529,7 @@ formRapidoNegocio.addEventListener('submit', async (e) => {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
 
@@ -2596,7 +2596,7 @@ formRapidoContacto.addEventListener('submit', async (e) => {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
 
@@ -2648,7 +2648,7 @@ formRapidoDestino.addEventListener('submit', async (e) => {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
     return;
   }
 

@@ -191,6 +191,14 @@
             <!-- Paso 1: datos de la cotizacion. Bloque propio (sin la tabla de productos al
                  lado) para que los campos no se amontonen; "Siguiente" pasa al paso 2. -->
             <div id="cotizacion-paso-datos">
+              <!-- Arriba de todo, para que se vea de inmediato al abrir la cotizacion (sin tener
+                   que ir al paso de Productos): que se solicito a cada proveedor y si ya respondio. -->
+              <div class="tarjeta" id="tarjeta-solicitudes-proveedor" hidden>
+                <h3>Solicitudes a proveedor</h3>
+                <p class="pista">Cada solicitud tiene su propia liga (sin necesidad de que el proveedor inicie sesión). Si el proveedor ya tiene usuario y contraseña del <a href="proveedor-login.html" target="_blank">Portal de Proveedores</a>, ahí puede ver y responder todas sus solicitudes pendientes en un solo lugar.</p>
+                <div id="lista-solicitudes-proveedor"></div>
+              </div>
+
               <div class="detalle-cotizacion-info">
                 <div class="tarjeta">
                   <h3>General</h3>
@@ -345,12 +353,6 @@
                   <div><span>Descuento</span><p id="resumen-descuento">0.00</p></div>
                   <div><span>IVA (16%)</span><p id="resumen-iva">0.00</p></div>
                   <div><span>Gran Total</span><p id="resumen-gran-total">0.00</p></div>
-                </div>
-
-                <div class="tarjeta" id="tarjeta-solicitudes-proveedor" hidden>
-                  <h3>Solicitudes a proveedor</h3>
-                  <p class="pista">Cada solicitud tiene su propia liga (sin necesidad de que el proveedor inicie sesión). Si el proveedor ya tiene usuario y contraseña del <a href="proveedor-login.html" target="_blank">Portal de Proveedores</a>, ahí puede ver y responder todas sus solicitudes pendientes en un solo lugar.</p>
-                  <div id="lista-solicitudes-proveedor"></div>
                 </div>
               </div>
 

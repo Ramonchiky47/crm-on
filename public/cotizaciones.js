@@ -1054,10 +1054,19 @@ function celdaEtapaCotizacion(etapa) {
   return etiquetas[etapa] || escaparHtml(etapa || '');
 }
 
+// Estatus (a nivel cotizacion) de sus solicitudes a proveedor: "Pendiente" si alguna todavia no
+// se responde, "OK" si ya se respondieron todas, vacio si nunca se le mando ninguna.
+function celdaSolicitudProveedorCotizacion(estatus) {
+  if (estatus === 'Pendiente') return '<span class="pill-estatus pill-neutro">Pendiente</span>';
+  if (estatus === 'OK') return '<span class="pill-estatus estatus-vigente">OK</span>';
+  return '';
+}
+
 function renderizarCotizaciones(cotizaciones) {
   tablaCotizaciones.innerHTML = cotizaciones.map((c) => `
     <tr class="fila-clicable${c.etapa === 'Ganada' ? ' fila-ganada' : ''}" data-id="${escaparHtml(c.id_cotizacion)}">
       <td>${escaparHtml(c.id_cotizacion)}</td>
+      <td>${celdaSolicitudProveedorCotizacion(c.solicitud_proveedor_estatus)}</td>
       <td>${escaparHtml(c.fecha_creacion || '')}</td>
       <td>${escaparHtml(c.nombre)}</td>
       <td>${escaparHtml(c.negocio_nombre || '')}</td>

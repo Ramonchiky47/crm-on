@@ -2418,7 +2418,23 @@ app.get('/api/cotizaciones', requirePermiso('catalogos', 'ver'), ar(async (req, 
   }
   const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
   const filas = await db.prepare(`${SELECT_COTIZACIONES} ${where} ORDER BY q.creado_en DESC`).all(...parametros);
-  res.json(filas.map(conEstatus));
+
+  // Un solo query agregado (no una consulta por cotizacion) para saber si cada una tiene alguna
+  // solicitud a proveedor todavia Pendiente, y mostrarlo en el listado sin ir cotizacion por
+  // cotizacion a preguntarlo.
+  const solicitudesPorCotizacion = await db.prepare(`
+    SELECT cotizacion_id, bool_or(estatus = 'Pendiente') AS tiene_pendiente
+    FROM solicitudes_proveedor
+    GROUP BY cotizacion_id
+  `).all();
+  const mapaSolicitudes = new Map(solicitudesPorCotizacion.map((s) => [s.cotizacion_id, s.tiene_pendiente]));
+
+  res.json(filas.map(conEstatus).map((c) => ({
+    ...c,
+    solicitud_proveedor_estatus: mapaSolicitudes.has(c.id_cotizacion)
+      ? (mapaSolicitudes.get(c.id_cotizacion) ? 'Pendiente' : 'OK')
+      : null,
+  })));
 }));
 
 app.get('/api/cotizaciones/:id', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {

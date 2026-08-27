@@ -1599,10 +1599,23 @@ async function cargarSolicitudesProveedor() {
       <div class="acciones-form" style="margin-top: 0.4rem;">
         <button type="button" class="btn-mini btn-copiar-liga-solicitud" data-token="${escaparHtml(s.token_publico)}" title="Liga única de esta solicitud, sin necesidad de iniciar sesión">Copiar liga</button>
         ${s.estatus === 'Respondida' ? `<button type="button" class="btn-mini btn-copiar-solicitud-a-cotizacion" data-id="${escaparHtml(s.id_solicitud)}">Copiar a la cotización</button>` : ''}
+        ${permisosCatalogos.borrar ? `<button type="button" class="btn-mini btn-borrar-solicitud-proveedor" data-id="${escaparHtml(s.id_solicitud)}">Borrar</button>` : ''}
       </div>
     </div>
   `).join('');
   renderizarPartidas();
+}
+
+// Compartida entre el panel de una cotizacion y el catalogo global de solicitudes.
+async function eliminarSolicitudProveedor(id, alExito) {
+  if (!confirmarDoble('¿Borrar esta solicitud a proveedor? No se puede deshacer.')) return;
+  const res = await fetch(`/api/solicitudes-proveedor/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
+    return;
+  }
+  alExito();
 }
 
 listaSolicitudesProveedor.addEventListener('click', async (e) => {
@@ -1617,6 +1630,10 @@ listaSolicitudesProveedor.addEventListener('click', async (e) => {
     const textoOriginal = e.target.textContent;
     e.target.textContent = 'Copiada';
     setTimeout(() => { e.target.textContent = textoOriginal; }, 1500);
+    return;
+  }
+  if (e.target.classList.contains('btn-borrar-solicitud-proveedor')) {
+    await eliminarSolicitudProveedor(e.target.dataset.id, cargarSolicitudesProveedor);
     return;
   }
   if (!e.target.classList.contains('btn-copiar-solicitud-a-cotizacion')) return;
@@ -1663,6 +1680,7 @@ function renderizarSolicitudesProveedorGlobal(lista) {
       <td>${s.tiempo_respuesta ? escaparHtml(s.tiempo_respuesta.texto) : ''}</td>
       <td class="acciones">
         <button type="button" class="btn-mini btn-copiar-liga-solicitud" data-token="${escaparHtml(s.token_publico)}" title="Liga única de esta solicitud, sin necesidad de iniciar sesión">Copiar liga</button>
+        ${permisosCatalogos.borrar ? `<button type="button" class="btn-mini btn-borrar-solicitud-proveedor" data-id="${escaparHtml(s.id_solicitud)}">Borrar</button>` : ''}
       </td>
     </tr>
   `).join('');
@@ -1701,6 +1719,10 @@ tablaSolicitudesProveedorGlobal.addEventListener('click', async (e) => {
     const textoOriginal = e.target.textContent;
     e.target.textContent = 'Copiada';
     setTimeout(() => { e.target.textContent = textoOriginal; }, 1500);
+    return;
+  }
+  if (e.target.classList.contains('btn-borrar-solicitud-proveedor')) {
+    await eliminarSolicitudProveedor(e.target.dataset.id, cargarSolicitudesProveedorGlobal);
     return;
   }
   if (e.target.closest('button')) return;

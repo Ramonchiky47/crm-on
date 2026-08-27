@@ -3962,6 +3962,16 @@ app.get('/api/solicitudes-proveedor', requirePermiso('catalogos', 'ver'), ar(asy
   res.json(conItems);
 }));
 
+// Borra una solicitud a proveedor (ej. una que se mando de mas por error). No afecta la
+// cotizacion ni el proveedor, solo esa solicitud y sus items (ON DELETE CASCADE); no se puede
+// deshacer, pero no hay problema en volver a generar otra si hiciera falta.
+app.delete('/api/solicitudes-proveedor/:id', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {
+  const solicitud = await db.prepare('SELECT * FROM solicitudes_proveedor WHERE id_solicitud = ?').get(req.params.id);
+  if (!solicitud || !esDueno(solicitud, req)) return res.status(404).json({ error: 'Solicitud no encontrada' });
+  await db.prepare('DELETE FROM solicitudes_proveedor WHERE id_solicitud = ?').run(req.params.id);
+  res.status(204).end();
+}));
+
 // Solicitudes ya mandadas para esta cotizacion (para mostrar su estatus/respuesta en la pantalla).
 app.get('/api/cotizaciones/:id/solicitudes-proveedor', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);

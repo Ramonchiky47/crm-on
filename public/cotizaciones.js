@@ -1314,38 +1314,46 @@ tablaPartidas.addEventListener('click', (e) => {
 });
 
 // Si el codigo que se escribio no existe en el catalogo de Productos: manda a crearlo alli
-// mismo y guarda en sessionStorage a que cotizacion regresar (con el codigo pendiente), para
-// retomar exactamente donde se quedo en cuanto vuelva. Requiere que la cotizacion ya este
-// guardada (si no, no hay a donde "regresar" todavia).
+// mismo y guarda en sessionStorage a que cotizacion regresar, para retomar exactamente donde se
+// quedo en cuanto vuelva. Si la cotizacion ya esta guardada basta con su ID (se vuelve a pedir
+// fresca al servidor); si es una cotizacion nueva que aun no se guarda, se guarda tambien un
+// borrador de todos los campos capturados hasta el momento para poder reconstruirla localmente.
 function irACrearProductoYVolver(partida) {
-  if (!cotizacionId.value) {
-    alert('Guarda la cotización primero para poder regresar a ella después de crear el producto.');
-    return;
-  }
+  const datosGenerales = cotizacionId.value ? null : {
+    nombre: cotizacionNombre.value,
+    negocio_id: cotizacionNegocio.value,
+    contacto_id: cotizacionContacto.value,
+    destino_ids: valoresSeleccionados(cotizacionDestino),
+    representante_id: cotizacionRepresentante.value,
+    moneda: cotizacionMoneda.value,
+    etapa: cotizacionEtapa.value,
+    descuento_tipo: cotizacionDescuentoTipo.value,
+    descuento_valor: cotizacionDescuento.value,
+    mostrar_totales: cotizacionMostrarTotales.checked,
+    vencimiento_opcion: cotizacionVencimientoOpcion.value,
+    fecha_vencimiento: cotizacionVencimientoFecha.value,
+    metodo_pago: cotizacionMetodoPago.value,
+    lugar_entrega: cotizacionLugarEntrega.value,
+    tiempo_entrega: cotizacionTiempoEntrega.value,
+    fecha_seguimiento: cotizacionFechaSeguimiento.value,
+    observaciones: cotizacionObservaciones.value,
+    partidas: partidas.slice(),
+  };
   sessionStorage.setItem('cotizacionPendienteProducto', JSON.stringify({
-    cotizacionId: cotizacionId.value,
+    cotizacionId: cotizacionId.value || null,
     codigo: partida.producto_item,
     cantidad: partida.cantidad,
+    datosGenerales,
   }));
   window.location.href = `catalogos.html?tab=productos&codigo=${encodeURIComponent(partida.producto_item)}&volver=cotizacion`;
 }
 
-async function restaurarCotizacionPendienteProducto() {
-  const guardado = sessionStorage.getItem('cotizacionPendienteProducto');
-  if (!guardado) return;
-  sessionStorage.removeItem('cotizacionPendienteProducto');
-
-  const pendiente = JSON.parse(guardado);
-  const res = await fetch(`/api/cotizaciones/${encodeURIComponent(pendiente.cotizacionId)}`);
-  if (!res.ok) return;
-  const c = await res.json();
-
-  activarSubtab('captura');
-  cargarCotizacionEnFormulario(c);
-
+// Agrega el codigo pendiente a `partidas` (si no quedo ya capturado por otro medio) con un
+// precio sugerido segun el catalogo, y refresca la tabla/resumen.
+function agregarPendienteAPartidas(pendiente, moneda) {
   if (pendiente.codigo && !partidas.some((p) => p.producto_item === pendiente.codigo)) {
     const producto = productosCache.find((p) => p.item === pendiente.codigo);
-    const sugerido = producto ? (c.moneda === 'USD' ? producto.precio_usd : producto.precio_mxn) : null;
+    const sugerido = producto ? (moneda === 'USD' ? producto.precio_usd : producto.precio_mxn) : null;
     partidas.push({
       producto_item: pendiente.codigo,
       cantidad: pendiente.cantidad || 1,
@@ -1355,6 +1363,54 @@ async function restaurarCotizacionPendienteProducto() {
   }
   renderizarPartidas();
   actualizarResumen();
+}
+
+async function restaurarCotizacionPendienteProducto() {
+  const guardado = sessionStorage.getItem('cotizacionPendienteProducto');
+  if (!guardado) return;
+  sessionStorage.removeItem('cotizacionPendienteProducto');
+
+  const pendiente = JSON.parse(guardado);
+  activarSubtab('captura');
+
+  if (pendiente.cotizacionId) {
+    const res = await fetch(`/api/cotizaciones/${encodeURIComponent(pendiente.cotizacionId)}`);
+    if (!res.ok) return;
+    const c = await res.json();
+    cargarCotizacionEnFormulario(c);
+    agregarPendienteAPartidas(pendiente, c.moneda);
+  } else {
+    // Cotizacion nueva que todavia no se guardaba: reconstruye el borrador localmente, no hay
+    // nada que pedirle al servidor.
+    const d = pendiente.datosGenerales || {};
+    limpiarFormCotizacion();
+    abrirFormCotizacion();
+    cotizacionNombre.value = d.nombre || '';
+    cotizacionNegocio.value = d.negocio_id || '';
+    cotizacionContacto.value = d.contacto_id || '';
+    poblarSelectMultiple(cotizacionDestino, destinosCache, 'id_destino', 'destino');
+    marcarSeleccionMultiple(cotizacionDestino, new Set((d.destino_ids || []).map(String)));
+    cotizacionRepresentante.value = d.representante_id || '';
+    cotizacionMoneda.value = d.moneda || '';
+    cotizacionEtapa.value = d.etapa || 'Pendiente';
+    cotizacionDescuentoTipo.value = d.descuento_tipo || 'porcentaje';
+    actualizarLimiteDescuento();
+    cotizacionDescuento.value = d.descuento_valor ?? 0;
+    cotizacionMostrarTotales.checked = d.mostrar_totales !== false;
+    cotizacionVencimientoOpcion.value = d.vencimiento_opcion || '30';
+    actualizarVencimientoPorOpcion();
+    if (d.vencimiento_opcion === 'personalizada') cotizacionVencimientoFecha.value = d.fecha_vencimiento || '';
+    cotizacionMetodoPago.value = d.metodo_pago || '';
+    cotizacionLugarEntrega.value = d.lugar_entrega || '';
+    cotizacionTiempoEntrega.value = d.tiempo_entrega || '';
+    cotizacionFechaSeguimiento.value = d.fecha_seguimiento || '';
+    cotizacionObservaciones.value = d.observaciones || '';
+
+    partidas = (d.partidas || []).slice();
+    agregarPendienteAPartidas(pendiente, d.moneda);
+    actualizarCamposVaciosCotizacion();
+  }
+
   mostrarPasoProductosCotizacion();
 }
 
@@ -1659,7 +1715,20 @@ function mostrarPasoProductosCotizacion() {
 }
 
 btnSiguienteProductosCotizacion.addEventListener('click', () => {
-  if (!formCotizacion.reportValidity()) return;
+  // Si falta un campo requerido (Nombre, Moneda), el modal es alto y con scroll propio: si el
+  // campo invalido quedo fuera de la parte visible, el navegador podia intentar mostrar su
+  // globo de validacion sobre un elemento no visible y el clic parecia no hacer nada ("se queda
+  // en blanco"). Se hace scroll + foco al campo invalido ANTES de pedirle al navegador que
+  // reporte la validez, para que el aviso siempre aparezca sobre algo visible.
+  const primerInvalido = formCotizacion.querySelector(':invalid');
+  if (primerInvalido) {
+    // Scroll instantaneo (no 'smooth'): reportValidity() se llama justo despues y necesita que
+    // el campo ya este en su posicion final, no a medio animar.
+    primerInvalido.scrollIntoView({ behavior: 'auto', block: 'center' });
+    primerInvalido.focus({ preventScroll: true });
+    formCotizacion.reportValidity();
+    return;
+  }
   mostrarPasoProductosCotizacion();
 });
 

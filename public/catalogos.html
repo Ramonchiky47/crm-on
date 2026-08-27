@@ -19,6 +19,7 @@
       <button type="button" class="tab-catalogo" data-tab="productos">Productos</button>
       <button type="button" class="tab-catalogo" data-tab="etapa-negocio">Etapa del Negocio</button>
       <button type="button" class="tab-catalogo" data-tab="actividades">Actividades</button>
+      <button type="button" class="tab-catalogo" data-tab="proveedores">Proveedores</button>
       <button type="button" class="tab-catalogo" data-tab="almacenamiento" id="tab-almacenamiento">Almacenamiento</button>
     </div>
 
@@ -531,6 +532,24 @@
       <table>
         <thead><tr><th>Actividad</th><th>Acciones</th></tr></thead>
         <tbody id="tabla-actividades"></tbody>
+      </table>
+    </section>
+
+    <section data-panel="proveedores" hidden>
+      <h2>Proveedores</h2>
+      <p class="pista">Quien le vende a Gonpal (no el cliente): a quien se le manda una Solicitud de cotización desde un producto de una cotización.</p>
+      <form id="form-proveedor" class="form-catalogo">
+        <input type="hidden" id="proveedor-id" />
+        <input type="text" id="proveedor-nombre" placeholder="Nombre" required />
+        <input type="text" id="proveedor-empresa" placeholder="Empresa" />
+        <input type="email" id="proveedor-correo" placeholder="Correo electrónico" />
+        <input type="text" id="proveedor-telefono" placeholder="Teléfono" />
+        <button type="submit">Agregar</button>
+        <button type="button" id="btn-cancelar-proveedor" hidden>Cancelar</button>
+      </form>
+      <table>
+        <thead><tr><th>Nombre</th><th>Empresa</th><th>Correo</th><th>Teléfono</th><th>Acciones</th></tr></thead>
+        <tbody id="tabla-proveedores"></tbody>
       </table>
     </section>
 

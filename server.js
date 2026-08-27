@@ -3762,6 +3762,212 @@ app.delete('/api/actividades/:id', requirePermiso('catalogos', 'borrar'), ar(asy
   res.status(204).end();
 }));
 
+// ---------- Proveedores (quien le vende a Gonpal, no el cliente) ----------
+// Catalogo simple, mismo patron que Actividades, para poder mandarles una Solicitud de
+// cotizacion (ver mas abajo) desde un producto de una cotizacion.
+
+app.get('/api/proveedores', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const proveedores = req.session.esAdmin
+    ? await db.prepare('SELECT * FROM proveedores ORDER BY nombre').all()
+    : await db.prepare('SELECT * FROM proveedores WHERE usuario_id = ? ORDER BY nombre').all(req.session.usuarioId);
+  res.json(proveedores);
+}));
+
+app.post('/api/proveedores', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const nombre = quitarAcentos((req.body.nombre || '').trim());
+  if (!nombre) return res.status(400).json({ errores: ['nombre es requerido'] });
+
+  const info = await db.prepare(`
+    INSERT INTO proveedores (nombre, empresa, correo_electronico, telefono, usuario_id, creado_en)
+    VALUES (?, ?, ?, ?, ?, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))
+  `).run(
+    nombre,
+    quitarAcentos((req.body.empresa || '').trim()) || null,
+    (req.body.correo_electronico || '').trim() || null,
+    (req.body.telefono || '').trim() || null,
+    req.session.usuarioId
+  );
+  res.status(201).json(await db.prepare('SELECT * FROM proveedores WHERE id_proveedor = ?').get(info.lastInsertRowid));
+}));
+
+app.put('/api/proveedores/:id', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const existente = await db.prepare('SELECT * FROM proveedores WHERE id_proveedor = ?').get(req.params.id);
+  if (!existente || !esDueno(existente, req)) return res.status(404).json({ error: 'Proveedor no encontrado' });
+
+  const nombre = quitarAcentos((req.body.nombre || '').trim());
+  if (!nombre) return res.status(400).json({ errores: ['nombre es requerido'] });
+
+  await db.prepare(`
+    UPDATE proveedores SET nombre = ?, empresa = ?, correo_electronico = ?, telefono = ? WHERE id_proveedor = ?
+  `).run(
+    nombre,
+    quitarAcentos((req.body.empresa || '').trim()) || null,
+    (req.body.correo_electronico || '').trim() || null,
+    (req.body.telefono || '').trim() || null,
+    req.params.id
+  );
+  res.json(await db.prepare('SELECT * FROM proveedores WHERE id_proveedor = ?').get(req.params.id));
+}));
+
+app.delete('/api/proveedores/:id', requirePermiso('catalogos', 'borrar'), ar(async (req, res) => {
+  const existente = await db.prepare('SELECT * FROM proveedores WHERE id_proveedor = ?').get(req.params.id);
+  if (!existente || !esDueno(existente, req)) return res.status(404).json({ error: 'Proveedor no encontrado' });
+  const enUso = await db.prepare('SELECT COUNT(*) c FROM solicitudes_proveedor WHERE proveedor_id = ?').get(req.params.id);
+  if (Number(enUso.c) > 0) {
+    return res.status(400).json({ errores: [`No se puede borrar: tiene ${enUso.c} solicitud(es) de cotización.`] });
+  }
+  await db.prepare('DELETE FROM proveedores WHERE id_proveedor = ?').run(req.params.id);
+  res.status(204).end();
+}));
+
+// ---------- Solicitudes de cotizacion a Proveedor ----------
+// Al capturar una cotizacion para un hotel, a veces no se sabe el costo de un producto todavia:
+// esto genera una liga publica (sin login) para que el proveedor responda precio y tiempo de
+// entrega, sin exponerle nada de la cotizacion real (ni el precio de venta al hotel).
+
+async function generarIdSolicitudProveedor() {
+  let id;
+  do {
+    id = 'SOL-' + Array.from({ length: 12 }, () => crypto.randomInt(0, 10)).join('');
+  } while (await db.prepare('SELECT 1 FROM solicitudes_proveedor WHERE id_solicitud = ?').get(id));
+  return id;
+}
+
+const SELECT_SOLICITUDES_PROVEEDOR = `
+  SELECT s.*, p.nombre AS proveedor_nombre, p.empresa AS proveedor_empresa,
+    p.correo_electronico AS proveedor_correo, p.telefono AS proveedor_telefono,
+    d.destino AS destino_nombre, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre
+  FROM solicitudes_proveedor s
+  LEFT JOIN proveedores p ON p.id_proveedor = s.proveedor_id
+  LEFT JOIN destinos d ON d.id_destino = s.destino_id
+  LEFT JOIN contactos c ON c.id_contacto = s.contacto_id
+`;
+
+async function itemsDeSolicitudProveedor(solicitudId) {
+  return db.prepare('SELECT * FROM solicitud_proveedor_items WHERE solicitud_id = ? ORDER BY id').all(solicitudId);
+}
+
+async function solicitudProveedorConDetalle(id) {
+  const cabecera = await db.prepare(`${SELECT_SOLICITUDES_PROVEEDOR} WHERE s.id_solicitud = ?`).get(id);
+  if (!cabecera) return null;
+  return { ...cabecera, items: await itemsDeSolicitudProveedor(id) };
+}
+
+// Solicitudes ya mandadas para esta cotizacion (para mostrar su estatus/respuesta en la pantalla).
+app.get('/api/cotizaciones/:id/solicitudes-proveedor', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
+  if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
+
+  const filas = await db.prepare(`${SELECT_SOLICITUDES_PROVEEDOR} WHERE s.cotizacion_id = ? ORDER BY s.fecha_creacion DESC`).all(req.params.id);
+  const conItems = await Promise.all(filas.map(async (f) => ({ ...f, items: await itemsDeSolicitudProveedor(f.id_solicitud) })));
+  res.json(conItems);
+}));
+
+// Genera una nueva solicitud (y su liga publica) para un producto de esta cotizacion. Hotel y
+// Contacto se toman de la cotizacion por default, pero se pueden mandar distintos si el lugar de
+// entrega real es otro.
+app.post('/api/cotizaciones/:id/solicitudes-proveedor', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
+  if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
+
+  const proveedor = await db.prepare('SELECT * FROM proveedores WHERE id_proveedor = ?').get(req.body.proveedor_id);
+  if (!proveedor || !esDueno(proveedor, req)) return res.status(400).json({ errores: ['El proveedor seleccionado no existe'] });
+
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ errores: ['Agrega al menos un producto'] });
+  for (const it of items) {
+    if (!(it.codigo || '').trim() || !(Number(it.cantidad) > 0)) {
+      return res.status(400).json({ errores: ['Cada producto necesita código y cantidad mayor a 0'] });
+    }
+  }
+
+  const id = await generarIdSolicitudProveedor();
+  const token = crypto.randomBytes(24).toString('hex');
+
+  await transaction(async (db) => {
+    await db.prepare(`
+      INSERT INTO solicitudes_proveedor (
+        id_solicitud, cotizacion_id, proveedor_id, destino_id, contacto_id, lugar_entrega,
+        token_publico, estatus, fecha_creacion, usuario_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Pendiente', to_char(now(), 'YYYY-MM-DD HH24:MI:SS'), ?)
+    `).run(
+      id, req.params.id, req.body.proveedor_id,
+      req.body.destino_id || cotizacion.destino_id || null,
+      req.body.contacto_id || cotizacion.contacto_id || null,
+      (req.body.lugar_entrega || '').trim() || null,
+      token, req.session.usuarioId
+    );
+    for (const it of items) {
+      await db.prepare(`
+        INSERT INTO solicitud_proveedor_items (solicitud_id, cantidad, codigo, descripcion, marca)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(id, Number(it.cantidad), it.codigo.trim(), (it.descripcion || '').trim() || null, (it.marca || '').trim() || null);
+    }
+  });
+
+  res.status(201).json(await solicitudProveedorConDetalle(id));
+}));
+
+// Copia el precio_venta que respondio el proveedor a la partida de la cotizacion cuyo
+// producto_item coincida con el codigo solicitado (si no hay una partida con ese codigo en la
+// cotizacion, ese renglon simplemente no se toca).
+app.put('/api/cotizaciones/:cotId/solicitudes-proveedor/:id/aplicar', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
+  const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.cotId);
+  if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
+  const solicitud = await db.prepare('SELECT * FROM solicitudes_proveedor WHERE id_solicitud = ? AND cotizacion_id = ?')
+    .get(req.params.id, req.params.cotId);
+  if (!solicitud) return res.status(404).json({ error: 'Solicitud no encontrada' });
+
+  const items = await itemsDeSolicitudProveedor(req.params.id);
+  let actualizados = 0;
+  for (const it of items) {
+    if (it.precio_venta === null || it.precio_venta === undefined) continue;
+    const info = await db.prepare('UPDATE cotizacion_items SET precio_unitario = ? WHERE cotizacion_id = ? AND producto_item = ?')
+      .run(it.precio_venta, req.params.cotId, it.codigo);
+    actualizados += info.changes;
+  }
+  res.json({ actualizados, cotizacion: await cotizacionConDetalle(req.params.cotId) });
+}));
+
+// ---- Liga publica (sin login): la abre el Proveedor para responder ----
+
+app.get('/api/rfq/:token', ar(async (req, res) => {
+  const solicitud = await db.prepare(`${SELECT_SOLICITUDES_PROVEEDOR} WHERE s.token_publico = ?`).get(req.params.token);
+  if (!solicitud) return res.status(404).json({ error: 'Solicitud no encontrada' });
+  const items = await itemsDeSolicitudProveedor(solicitud.id_solicitud);
+  // No se expone nada de la cotizacion real (precio de venta al hotel, negocio, etc.), solo lo
+  // que el proveedor necesita ver para cotizar.
+  res.json({
+    id_solicitud: solicitud.id_solicitud,
+    proveedor_nombre: solicitud.proveedor_nombre,
+    destino_nombre: solicitud.destino_nombre,
+    contacto_nombre: solicitud.contacto_nombre,
+    lugar_entrega: solicitud.lugar_entrega,
+    estatus: solicitud.estatus,
+    fecha_creacion: solicitud.fecha_creacion,
+    items: items.map((it) => ({
+      id: it.id, cantidad: it.cantidad, codigo: it.codigo, descripcion: it.descripcion, marca: it.marca,
+      precio_venta: it.precio_venta, tiempo_entrega: it.tiempo_entrega,
+    })),
+  });
+}));
+
+app.post('/api/rfq/:token/responder', ar(async (req, res) => {
+  const solicitud = await db.prepare('SELECT * FROM solicitudes_proveedor WHERE token_publico = ?').get(req.params.token);
+  if (!solicitud) return res.status(404).json({ error: 'Solicitud no encontrada' });
+
+  const respuestas = Array.isArray(req.body.items) ? req.body.items : [];
+  for (const r of respuestas) {
+    if (!r.id) continue;
+    await db.prepare('UPDATE solicitud_proveedor_items SET precio_venta = ?, tiempo_entrega = ? WHERE id = ? AND solicitud_id = ?')
+      .run(numeroOpcional(r.precio_venta), (r.tiempo_entrega || '').trim() || null, r.id, solicitud.id_solicitud);
+  }
+  await db.prepare("UPDATE solicitudes_proveedor SET estatus = 'Respondida', fecha_respuesta = to_char(now(), 'YYYY-MM-DD HH24:MI:SS') WHERE id_solicitud = ?")
+    .run(solicitud.id_solicitud);
+
+  res.json({ ok: true });
+}));
+
 async function actividadesDePendiente(pendienteId) {
   return db.prepare(`
     SELECT a.id_actividad, a.actividad FROM pendiente_actividades pa

@@ -2422,6 +2422,88 @@ tablaActividades.addEventListener('click', async (e) => {
   }
 });
 
+// ---------- Proveedores (quien le vende a Gonpal, no el cliente) ----------
+
+const formProveedor = document.getElementById('form-proveedor');
+const proveedorId = document.getElementById('proveedor-id');
+const proveedorNombre = document.getElementById('proveedor-nombre');
+const proveedorEmpresa = document.getElementById('proveedor-empresa');
+const proveedorCorreo = document.getElementById('proveedor-correo');
+const proveedorTelefono = document.getElementById('proveedor-telefono');
+const btnCancelarProveedor = document.getElementById('btn-cancelar-proveedor');
+const tablaProveedores = document.getElementById('tabla-proveedores');
+let proveedoresCache = [];
+
+async function cargarProveedores() {
+  const res = await fetch('/api/proveedores');
+  proveedoresCache = await res.json();
+  tablaProveedores.innerHTML = proveedoresCache.map((p) => `
+    <tr>
+      <td>${escaparHtml(p.nombre)}</td>
+      <td>${escaparHtml(p.empresa || '')}</td>
+      <td>${escaparHtml(p.correo_electronico || '')}</td>
+      <td>${escaparHtml(p.telefono || '')}</td>
+      <td class="acciones">
+        ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${p.id_proveedor}">Editar</button>` : ''}
+        ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${p.id_proveedor}">Borrar</button>` : ''}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function limpiarFormProveedor() {
+  proveedorId.value = '';
+  formProveedor.reset();
+  btnCancelarProveedor.hidden = true;
+}
+
+formProveedor.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = {
+    nombre: proveedorNombre.value.trim(),
+    empresa: proveedorEmpresa.value.trim(),
+    correo_electronico: proveedorCorreo.value.trim(),
+    telefono: proveedorTelefono.value.trim(),
+  };
+  const id = proveedorId.value;
+  const res = await fetch(id ? `/api/proveedores/${id}` : '/api/proveedores', {
+    method: id ? 'PUT' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  limpiarFormProveedor();
+  cargarProveedores();
+});
+
+btnCancelarProveedor.addEventListener('click', limpiarFormProveedor);
+
+tablaProveedores.addEventListener('click', async (e) => {
+  const id = e.target.dataset.id;
+  if (!id) return;
+
+  if (e.target.classList.contains('btn-borrar')) {
+    if (!confirmarDoble('¿Borrar este proveedor?')) return;
+    await eliminarYRecargar(`/api/proveedores/${id}`, cargarProveedores);
+  }
+
+  if (e.target.classList.contains('btn-editar')) {
+    const p = proveedoresCache.find((x) => String(x.id_proveedor) === id);
+    if (!p) return;
+    proveedorId.value = p.id_proveedor;
+    proveedorNombre.value = p.nombre;
+    proveedorEmpresa.value = p.empresa || '';
+    proveedorCorreo.value = p.correo_electronico || '';
+    proveedorTelefono.value = p.telefono || '';
+    btnCancelarProveedor.hidden = false;
+    proveedorNombre.focus();
+  }
+});
+
 // ---------- Almacenamiento de la base de datos (solo admin) ----------
 
 const tabAlmacenamiento = document.getElementById('tab-almacenamiento');
@@ -2498,6 +2580,7 @@ promesaAuth.then((sesion) => {
   cargarProductos();
   cargarEtapasNegocio();
   cargarActividades();
+  cargarProveedores();
 
   if (sesion.esAdmin) {
     cargarUsuarios();
@@ -2524,6 +2607,7 @@ promesaAuth.then((sesion) => {
   suscribirTiempoReal(['productos'], () => cargarProductos(productosBuscador.value.trim()));
   suscribirTiempoReal(['etapas_negocio'], cargarEtapasNegocio);
   suscribirTiempoReal(['actividades'], cargarActividades);
+  suscribirTiempoReal(['proveedores'], cargarProveedores);
   if (sesion.esAdmin) {
     suscribirTiempoReal(['representantes'], cargarRepresentantes);
   }

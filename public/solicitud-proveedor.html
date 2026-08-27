@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solicitud de cotización · GONPAL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="contenedor" style="max-width: 720px;">
+    <div class="detalle-cotizacion" id="vista-cargando">
+      <p class="pista">Cargando…</p>
+    </div>
+
+    <div class="detalle-cotizacion" id="vista-no-encontrada" hidden>
+      <p class="eyebrow-cot">GONPAL</p>
+      <h2>Solicitud no encontrada</h2>
+      <p class="pista">La liga que abriste no es válida o ya no está disponible. Contacta a quien te la envió.</p>
+    </div>
+
+    <div class="detalle-cotizacion" id="vista-solicitud" hidden>
+      <p class="eyebrow-cot">GONPAL · Solicitud de cotización</p>
+      <h2 id="solicitud-titulo"></h2>
+      <span class="pill-estatus pill-neutro" id="solicitud-pill-estatus"></span>
+
+      <div class="tarjeta" style="margin-top: 1.1rem;">
+        <h3>Datos generales</h3>
+        <div class="campo-cot">
+          <span class="etiqueta-cot">Hotel / Local</span>
+          <p class="valor-cot" id="solicitud-destino"></p>
+        </div>
+        <div class="campo-cot">
+          <span class="etiqueta-cot">Contacto</span>
+          <p class="valor-cot" id="solicitud-contacto"></p>
+        </div>
+        <div class="campo-cot">
+          <span class="etiqueta-cot">Lugar de entrega</span>
+          <p class="valor-cot" id="solicitud-lugar-entrega"></p>
+        </div>
+        <div class="campo-cot">
+          <span class="etiqueta-cot">Fecha</span>
+          <p class="valor-cot" id="solicitud-fecha"></p>
+        </div>
+      </div>
+
+      <form id="form-respuesta-proveedor">
+        <div class="tarjeta-productos-cot" style="margin-top: 1.1rem;">
+          <div class="tarjeta-articulos-encabezado">
+            <h3>Producto solicitado</h3>
+          </div>
+          <div class="tabla-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Código</th><th>Descripción</th><th>Marca</th><th>Cantidad</th>
+                  <th>Precio de venta</th><th>Tiempo de entrega</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-items-solicitud"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="acciones-form" style="margin-top: 1.1rem;">
+          <button type="submit" class="btn-marca" id="btn-enviar-respuesta">Enviar cotización</button>
+        </div>
+      </form>
+
+      <p class="pista" id="solicitud-ya-respondida" hidden>Ya enviaste tu respuesta para esta solicitud. Gracias.</p>
+    </div>
+  </div>
+
+  <script src="solicitud-proveedor.js"></script>
+</body>
+</html>

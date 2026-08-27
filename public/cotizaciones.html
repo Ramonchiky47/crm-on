@@ -318,7 +318,7 @@
                   <table>
                     <thead>
                       <tr>
-                        <th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th title="Si se desmarca, esta partida no suma IVA">Causa impuesto</th><th>Total</th><th></th>
+                        <th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th title="Si se desmarca, esta partida no suma IVA">Causa impuesto</th><th>Total</th><th></th><th></th>
                       </tr>
                     </thead>
                     <tbody id="tabla-partidas"></tbody>
@@ -340,6 +340,11 @@
                   <div><span>Descuento</span><p id="resumen-descuento">0.00</p></div>
                   <div><span>IVA (16%)</span><p id="resumen-iva">0.00</p></div>
                   <div><span>Gran Total</span><p id="resumen-gran-total">0.00</p></div>
+                </div>
+
+                <div class="tarjeta" id="tarjeta-solicitudes-proveedor" hidden>
+                  <h3>Solicitudes a proveedor</h3>
+                  <div id="lista-solicitudes-proveedor"></div>
                 </div>
               </div>
 
@@ -501,6 +506,70 @@
         </label>
         <div class="acciones-form">
           <button type="submit">Asociar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="modal-solicitud-proveedor-overlay" class="modal-overlay" hidden>
+    <div class="modal-caja" role="dialog" aria-modal="true">
+      <button type="button" id="modal-solicitud-proveedor-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
+      <h3>Solicitar cotización a proveedor</h3>
+
+      <form id="form-solicitud-proveedor">
+        <div class="ficha-detalle">
+          <div><span>Código</span><p id="solicitud-producto-codigo"></p></div>
+          <div><span>Descripción</span><p id="solicitud-producto-descripcion"></p></div>
+          <div><span>Cantidad</span><p id="solicitud-producto-cantidad"></p></div>
+        </div>
+        <label>
+          Marca
+          <input type="text" id="solicitud-marca" />
+        </label>
+        <label>
+          Proveedor
+          <span class="campo-con-boton">
+            <select id="solicitud-proveedor" required><option value="">-- Selecciona --</option></select>
+            <button type="button" id="btn-nuevo-proveedor-solicitud" class="btn-mini" title="Agregar proveedor nuevo">+</button>
+          </span>
+        </label>
+        <label>
+          Lugar de entrega
+          <input type="text" id="solicitud-lugar-entrega" />
+        </label>
+        <div class="acciones-form">
+          <button type="submit">Generar liga</button>
+        </div>
+      </form>
+
+      <div id="solicitud-proveedor-resultado" hidden>
+        <p class="pista">Comparte esta liga con el proveedor para que responda precio y tiempo de entrega:</p>
+        <div class="campo-con-boton">
+          <input type="text" id="solicitud-liga-generada" readonly />
+          <button type="button" id="btn-copiar-liga-solicitud" class="btn-mini">Copiar</button>
+        </div>
+        <div class="acciones-form">
+          <button type="button" id="btn-cerrar-solicitud-proveedor">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-rapido-proveedor-overlay" class="modal-overlay" hidden>
+    <div class="modal-caja modal-caja-chica" role="dialog" aria-modal="true">
+      <button type="button" id="modal-rapido-proveedor-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
+      <h3>Nuevo proveedor</h3>
+      <form id="form-rapido-proveedor">
+        <label>
+          Nombre
+          <input type="text" id="modal-rapido-proveedor-nombre" required autofocus />
+        </label>
+        <label>
+          Empresa
+          <input type="text" id="modal-rapido-proveedor-empresa" />
+        </label>
+        <div class="acciones-form">
+          <button type="submit">Guardar</button>
         </div>
       </form>
     </div>

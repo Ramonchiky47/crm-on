@@ -1179,6 +1179,9 @@ function renderizarPartidas() {
       <td><input type="number" class="partida-precio" step="0.01" min="0" value="${it.precio_unitario || ''}" /></td>
       <td class="celda-check"><input type="checkbox" class="partida-causa-impuesto" ${it.causa_impuesto !== false ? 'checked' : ''} title="Si se desmarca, esta partida no suma IVA" /></td>
       <td class="partida-total">${formatoImporte((it.cantidad || 0) * (it.precio_unitario || 0))}</td>
+      <td>
+        ${cotizacionId.value ? `<button type="button" class="btn-mini btn-solicitar-proveedor" data-index="${i}" title="Pedir precio y tiempo de entrega a un proveedor">Solicitar cotización</button>` : ''}
+      </td>
       <td><button type="button" class="btn-quitar-partida" title="Quitar">✕</button></td>
     </tr>
   `).join('');
@@ -1273,14 +1276,211 @@ tablaPartidas.addEventListener('input', (e) => {
 });
 
 tablaPartidas.addEventListener('click', (e) => {
-  if (!e.target.classList.contains('btn-quitar-partida')) return;
-  const i = Number(e.target.closest('tr').dataset.index);
-  partidas.splice(i, 1);
-  renderizarPartidas();
-  actualizarResumen();
+  if (e.target.classList.contains('btn-quitar-partida')) {
+    const i = Number(e.target.closest('tr').dataset.index);
+    partidas.splice(i, 1);
+    renderizarPartidas();
+    actualizarResumen();
+    return;
+  }
+  if (e.target.classList.contains('btn-solicitar-proveedor')) {
+    const i = Number(e.target.dataset.index);
+    abrirModalSolicitudProveedor(partidas[i]);
+  }
 });
 
 cotizacionDescuento.addEventListener('input', actualizarResumen);
+
+// ---------- Solicitar cotizacion a un Proveedor (por producto) ----------
+// Cuando no se sabe el costo de un producto todavia: genera una liga publica (sin login) para
+// que el Proveedor responda precio de venta y tiempo de entrega, sin exponerle nada de la
+// cotizacion real. Requiere que la cotizacion ya este guardada (necesita su id).
+
+const modalSolicitudProveedorOverlay = document.getElementById('modal-solicitud-proveedor-overlay');
+const modalSolicitudProveedorCerrar = document.getElementById('modal-solicitud-proveedor-cerrar');
+const formSolicitudProveedor = document.getElementById('form-solicitud-proveedor');
+const solicitudProductoCodigo = document.getElementById('solicitud-producto-codigo');
+const solicitudProductoDescripcion = document.getElementById('solicitud-producto-descripcion');
+const solicitudProductoCantidad = document.getElementById('solicitud-producto-cantidad');
+const solicitudMarca = document.getElementById('solicitud-marca');
+const solicitudProveedorSelect = document.getElementById('solicitud-proveedor');
+const solicitudLugarEntrega = document.getElementById('solicitud-lugar-entrega');
+const solicitudProveedorResultado = document.getElementById('solicitud-proveedor-resultado');
+const solicitudLigaGenerada = document.getElementById('solicitud-liga-generada');
+const btnCopiarLigaSolicitud = document.getElementById('btn-copiar-liga-solicitud');
+const btnCerrarSolicitudProveedor = document.getElementById('btn-cerrar-solicitud-proveedor');
+
+let proveedoresCacheCot = [];
+let partidaParaSolicitud = null;
+
+async function cargarProveedoresCotizacion() {
+  const res = await fetch('/api/proveedores');
+  proveedoresCacheCot = res.ok ? await res.json() : [];
+  poblarSelect(solicitudProveedorSelect, proveedoresCacheCot, 'id_proveedor', 'nombre');
+}
+
+function abrirModalSolicitudProveedor(partida) {
+  partidaParaSolicitud = partida;
+  const producto = productosCache.find((p) => p.item === partida.producto_item);
+  solicitudProductoCodigo.textContent = partida.producto_item || '';
+  solicitudProductoDescripcion.textContent = (producto && producto.descripcion) || '';
+  solicitudProductoCantidad.textContent = partida.cantidad;
+  solicitudMarca.value = '';
+  solicitudProveedorSelect.value = '';
+  solicitudLugarEntrega.value = cotizacionLugarEntrega.value || '';
+  formSolicitudProveedor.hidden = false;
+  solicitudProveedorResultado.hidden = true;
+  modalSolicitudProveedorOverlay.hidden = false;
+}
+
+function cerrarModalSolicitudProveedor() {
+  modalSolicitudProveedorOverlay.hidden = true;
+  formSolicitudProveedor.reset();
+  partidaParaSolicitud = null;
+}
+
+modalSolicitudProveedorCerrar.addEventListener('click', cerrarModalSolicitudProveedor);
+modalSolicitudProveedorOverlay.addEventListener('click', (e) => {
+  if (e.target === modalSolicitudProveedorOverlay) cerrarModalSolicitudProveedor();
+});
+btnCerrarSolicitudProveedor.addEventListener('click', cerrarModalSolicitudProveedor);
+
+formSolicitudProveedor.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!partidaParaSolicitud) return;
+
+  const res = await fetch(`/api/cotizaciones/${encodeURIComponent(cotizacionId.value)}/solicitudes-proveedor`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      proveedor_id: solicitudProveedorSelect.value,
+      lugar_entrega: solicitudLugarEntrega.value.trim(),
+      items: [{
+        cantidad: partidaParaSolicitud.cantidad,
+        codigo: partidaParaSolicitud.producto_item,
+        descripcion: solicitudProductoDescripcion.textContent,
+        marca: solicitudMarca.value.trim(),
+      }],
+    }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  const creado = await res.json();
+  solicitudLigaGenerada.value = `${window.location.origin}/solicitud-proveedor.html?token=${creado.token_publico}`;
+  formSolicitudProveedor.hidden = true;
+  solicitudProveedorResultado.hidden = false;
+  cargarSolicitudesProveedor();
+});
+
+btnCopiarLigaSolicitud.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(solicitudLigaGenerada.value);
+    btnCopiarLigaSolicitud.textContent = 'Copiado';
+    setTimeout(() => { btnCopiarLigaSolicitud.textContent = 'Copiar'; }, 1500);
+  } catch {
+    solicitudLigaGenerada.select();
+  }
+});
+
+// ---- Alta rapida de Proveedor (desde el modal de Solicitud) ----
+
+const btnNuevoProveedorSolicitud = document.getElementById('btn-nuevo-proveedor-solicitud');
+const modalRapidoProveedorOverlay = document.getElementById('modal-rapido-proveedor-overlay');
+const modalRapidoProveedorCerrar = document.getElementById('modal-rapido-proveedor-cerrar');
+const modalRapidoProveedorNombre = document.getElementById('modal-rapido-proveedor-nombre');
+const modalRapidoProveedorEmpresa = document.getElementById('modal-rapido-proveedor-empresa');
+const formRapidoProveedor = document.getElementById('form-rapido-proveedor');
+
+btnNuevoProveedorSolicitud.addEventListener('click', () => {
+  formRapidoProveedor.reset();
+  modalRapidoProveedorOverlay.hidden = false;
+  modalRapidoProveedorNombre.focus();
+});
+modalRapidoProveedorCerrar.addEventListener('click', () => { modalRapidoProveedorOverlay.hidden = true; });
+modalRapidoProveedorOverlay.addEventListener('click', (e) => {
+  if (e.target === modalRapidoProveedorOverlay) modalRapidoProveedorOverlay.hidden = true;
+});
+
+formRapidoProveedor.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = modalRapidoProveedorNombre.value.trim();
+  if (!nombre) return;
+  const res = await fetch('/api/proveedores', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre, empresa: modalRapidoProveedorEmpresa.value.trim() }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  const creado = await res.json();
+  await cargarProveedoresCotizacion();
+  solicitudProveedorSelect.value = creado.id_proveedor;
+  modalRapidoProveedorOverlay.hidden = true;
+});
+
+// ---- Lista de solicitudes ya mandadas para esta cotizacion ----
+
+const tarjetaSolicitudesProveedor = document.getElementById('tarjeta-solicitudes-proveedor');
+const listaSolicitudesProveedor = document.getElementById('lista-solicitudes-proveedor');
+
+function pillEstatusSolicitud(estatus) {
+  const clase = estatus === 'Respondida' ? 'estatus-vigente' : 'pill-neutro';
+  return `<span class="pill-estatus ${clase}">${escaparHtml(estatus)}</span>`;
+}
+
+async function cargarSolicitudesProveedor() {
+  if (!cotizacionId.value) {
+    tarjetaSolicitudesProveedor.hidden = true;
+    return;
+  }
+  const res = await fetch(`/api/cotizaciones/${encodeURIComponent(cotizacionId.value)}/solicitudes-proveedor`);
+  const solicitudes = res.ok ? await res.json() : [];
+  tarjetaSolicitudesProveedor.hidden = solicitudes.length === 0;
+  listaSolicitudesProveedor.innerHTML = solicitudes.map((s) => `
+    <div class="panel-form" data-id="${escaparHtml(s.id_solicitud)}">
+      <div>
+        <strong>${escaparHtml(s.proveedor_nombre || '')}</strong>
+        — ${escaparHtml((s.items || []).map((it) => `${it.codigo} (x${it.cantidad})`).join(', '))}
+        ${pillEstatusSolicitud(s.estatus)}
+      </div>
+      ${s.estatus === 'Respondida' ? `
+        <div class="pista">
+          ${(s.items || []).map((it) => `${escaparHtml(it.codigo)}: ${it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio'} — ${escaparHtml(it.tiempo_entrega || 'sin tiempo de entrega')}`).join('<br>')}
+        </div>
+        <button type="button" class="btn-mini btn-copiar-solicitud-a-cotizacion" data-id="${escaparHtml(s.id_solicitud)}">Copiar a la cotización</button>
+      ` : ''}
+    </div>
+  `).join('');
+}
+
+listaSolicitudesProveedor.addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('btn-copiar-solicitud-a-cotizacion')) return;
+  const id = e.target.dataset.id;
+  const res = await fetch(`/api/cotizaciones/${encodeURIComponent(cotizacionId.value)}/solicitudes-proveedor/${encodeURIComponent(id)}/aplicar`, {
+    method: 'PUT',
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
+    return;
+  }
+  const data = await res.json();
+  partidas = data.cotizacion.items.map((it) => ({
+    producto_item: it.producto_item,
+    cantidad: it.cantidad,
+    precio_unitario: it.precio_unitario,
+    causa_impuesto: it.causa_impuesto !== false,
+  }));
+  renderizarPartidas();
+  actualizarResumen();
+  alert(`Se actualizó el precio de ${data.actualizados} producto(s) en la cotización.`);
+});
 
 // ---- Alta / edicion de la cotizacion ----
 
@@ -1328,6 +1528,7 @@ function limpiarFormCotizacion() {
   partidas = [];
   renderizarPartidas();
   actualizarResumen();
+  cargarSolicitudesProveedor();
   btnGuardarCotizacion.textContent = 'Guardar cotización';
   btnEnviarTareasSeguimiento.hidden = true;
   cotizacionAccionesEdicion.hidden = true;
@@ -1539,6 +1740,7 @@ function cargarCotizacionEnFormulario(c) {
   renderizarPartidas();
   cotizacionMostrarTotales.checked = c.mostrar_totales !== false;
   actualizarResumen();
+  cargarSolicitudesProveedor();
 
   cotizacionFechaCreacion.value = c.fecha_creacion || '';
   cotizacionVencimientoOpcion.value = detectarOpcionVencimiento(c.fecha_creacion, c.fecha_vencimiento);
@@ -2470,6 +2672,7 @@ promesaAuth.then(async (sesion) => {
 
   poblarSelectsNegocio().then(cargarNegocios);
   poblarSelectsCotizacion().then(cargarCotizaciones);
+  cargarProveedoresCotizacion();
 
   const parametros = new URLSearchParams(window.location.search);
 

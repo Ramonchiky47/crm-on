@@ -1069,7 +1069,6 @@ function renderizarCotizaciones(cotizaciones) {
       <td>${celdaSolicitudProveedorCotizacion(c.solicitud_proveedor_estatus)}</td>
       <td>${escaparHtml(c.fecha_creacion || '')}</td>
       <td>${escaparHtml(c.nombre)}</td>
-      <td>${escaparHtml(c.negocio_nombre || '')}</td>
       <td>${escaparHtml(c.contacto_nombre || '')}</td>
       <td>${escaparHtml(c.destino_nombre || '')}</td>
       <td>${escaparHtml(c.moneda)}</td>

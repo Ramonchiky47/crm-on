@@ -647,7 +647,7 @@ btnFormDescargarPdfCotizacion.addEventListener('click', () => descargarPDFCotiza
 btnFormClonarCotizacion.addEventListener('click', () => clonarCotizacion(cotizacionId.value));
 
 btnFormMostrarMarcarGanada.addEventListener('click', async () => {
-  const nombreDestino = cotizacionDestino.options[cotizacionDestino.selectedIndex]?.textContent || 'este Hotel/Local';
+  const nombreDestino = [...cotizacionDestino.selectedOptions].map((o) => o.textContent).join(', ') || 'este Hotel/Local';
   cotizacionMarcarGanadaPista.textContent =
     `Órdenes de ${nombreDestino} con fecha igual o posterior a la cotización (${cotizacionFechaCreacion.value}). Selecciona las que correspondan (opcional):`;
   cotizacionPanelMarcarGanada.hidden = false;
@@ -796,6 +796,23 @@ function filtrarSelectAsociado(select, opcionesCompletas, campoValor, campoTexto
   poblarSelect(select, opciones, campoValor, campoTexto);
 }
 
+// ---------- Hotel(es)/Local(es): un <select multiple> (una cotizacion puede aplicar a varias
+// propiedades del mismo contacto, ej. una cadena renovando el mismo equipo en varios hoteles a
+// la vez). Sin placeholder "-- Selecciona --" (no aplica a un multiple), asi que estas funciones
+// son propias en vez de reusar poblarSelect/filtrarSelectAsociado (pensadas para un solo valor).
+
+function poblarSelectMultiple(select, lista, campoValor, campoTexto) {
+  select.innerHTML = lista.map((item) => `<option value="${item[campoValor]}">${escaparHtml(item[campoTexto])}</option>`).join('');
+}
+
+function valoresSeleccionados(select) {
+  return [...select.selectedOptions].map((o) => o.value);
+}
+
+function marcarSeleccionMultiple(select, valoresSet) {
+  [...select.options].forEach((o) => { o.selected = valoresSet.has(o.value); });
+}
+
 // Si se llega desde una Tarea con la actividad "Cotizacion" (Tareas -> clic en la fila), se
 // guarda aqui su ID: al guardar la cotizacion nueva, esa tarea se borra automaticamente.
 let pendienteOrigenId = null;
@@ -810,7 +827,7 @@ async function poblarSelectsCotizacion() {
   ]);
   poblarSelect(cotizacionNegocio, negocios, 'id_negocio', 'negocio');
   poblarSelect(cotizacionContacto, contactos, 'id_contacto', 'nombre_completo_correo');
-  poblarSelect(cotizacionDestino, destinos, 'id_destino', 'destino');
+  poblarSelectMultiple(cotizacionDestino, destinos, 'id_destino', 'destino');
   poblarSelect(cotizacionRepresentante, representantes, 'id_representante', 'representante');
   poblarOpcionesFiltroCotRepresentante(representantes);
   negociosCache = negocios;
@@ -823,15 +840,24 @@ async function poblarSelectsCotizacion() {
 
 function filtrarDestinosPorContacto() {
   const cid = cotizacionContacto.value;
-  filtrarSelectAsociado(cotizacionDestino, destinosCache, 'id_destino', 'destino',
-    cid ? (destinosPorContacto.get(cid) || new Set()) : null);
+  const idsPermitidos = cid ? (destinosPorContacto.get(cid) || new Set()) : null;
+  const seleccionActual = new Set(valoresSeleccionados(cotizacionDestino));
+  const opciones = idsPermitidos === null
+    ? destinosCache
+    : destinosCache.filter((d) => idsPermitidos.has(String(d.id_destino)));
+  poblarSelectMultiple(cotizacionDestino, opciones, 'id_destino', 'destino');
+  marcarSeleccionMultiple(cotizacionDestino, seleccionActual);
   actualizarPistaAsociar();
 }
 
 function filtrarContactosPorDestino() {
-  const did = cotizacionDestino.value;
-  filtrarSelectAsociado(cotizacionContacto, contactosCache, 'id_contacto', 'nombre_completo_correo',
-    did ? (contactosPorDestino.get(did) || new Set()) : null);
+  const destinoIds = valoresSeleccionados(cotizacionDestino);
+  let idsPermitidos = null;
+  if (destinoIds.length) {
+    idsPermitidos = new Set();
+    destinoIds.forEach((did) => (contactosPorDestino.get(did) || new Set()).forEach((cid) => idsPermitidos.add(cid)));
+  }
+  filtrarSelectAsociado(cotizacionContacto, contactosCache, 'id_contacto', 'nombre_completo_correo', idsPermitidos);
   actualizarPistaAsociar();
 }
 
@@ -844,9 +870,9 @@ const pistaAsociar = document.getElementById('pista-asociar-contacto-destino');
 
 function actualizarPistaAsociar() {
   const contactoId = cotizacionContacto.value;
-  const destinoId = cotizacionDestino.value;
-  const destinoBloqueado = contactoId && cotizacionDestino.options.length <= 1;
-  const contactoBloqueado = destinoId && cotizacionContacto.options.length <= 1;
+  const destinosElegidos = valoresSeleccionados(cotizacionDestino);
+  const destinoBloqueado = contactoId && cotizacionDestino.options.length === 0;
+  const contactoBloqueado = destinosElegidos.length > 0 && cotizacionContacto.options.length <= 1;
 
   if (destinoBloqueado) {
     const nombre = cotizacionContacto.options[cotizacionContacto.selectedIndex]?.textContent || 'Este contacto';
@@ -854,8 +880,8 @@ function actualizarPistaAsociar() {
     pistaAsociar.dataset.modo = 'destino';
     pistaAsociar.hidden = false;
   } else if (contactoBloqueado) {
-    const nombre = cotizacionDestino.options[cotizacionDestino.selectedIndex]?.textContent || 'Este Hotel/Local';
-    pistaAsociar.innerHTML = `${escaparHtml(nombre)} no tiene Contacto asociado. <button type="button" id="btn-asociar-existente" class="btn-mini">Asociar uno existente</button>`;
+    const nombres = [...cotizacionDestino.selectedOptions].map((o) => o.textContent).join(', ') || 'Este Hotel/Local';
+    pistaAsociar.innerHTML = `${escaparHtml(nombres)} no tiene Contacto asociado. <button type="button" id="btn-asociar-existente" class="btn-mini">Asociar uno existente</button>`;
     pistaAsociar.dataset.modo = 'contacto';
     pistaAsociar.hidden = false;
   } else {
@@ -913,14 +939,7 @@ async function refrescarAsociaciones() {
   indexarContactoDestinos(contactos);
 }
 
-formAsociar.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const elegidoId = modalAsociarSelect.value;
-  if (!elegidoId) return;
-
-  const destinoId = modoAsociar === 'destino' ? elegidoId : cotizacionDestino.value;
-  const contactoId = modoAsociar === 'contacto' ? elegidoId : cotizacionContacto.value;
-
+async function asociarDestinoContacto(destinoId, contactoId) {
   const res = await fetch(`/api/destinos/${encodeURIComponent(destinoId)}/contactos`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -929,13 +948,32 @@ formAsociar.addEventListener('submit', async (e) => {
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
     alert('Error: ' + (error.errores ? error.errores.join(', ') : res.statusText));
-    return;
+    return false;
+  }
+  return true;
+}
+
+formAsociar.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const elegidoId = modalAsociarSelect.value;
+  if (!elegidoId) return;
+
+  if (modoAsociar === 'destino') {
+    // Falta Hotel/Local para el contacto ya elegido: se asocia ese unico destino.
+    if (!(await asociarDestinoContacto(elegidoId, cotizacionContacto.value))) return;
+  } else {
+    // Falta Contacto para el/los Hotel(es) ya elegidos: se asocia a TODOS los seleccionados,
+    // no solo al primero, para que ninguno se quede sin contacto.
+    for (const destinoId of valoresSeleccionados(cotizacionDestino)) {
+      if (!(await asociarDestinoContacto(destinoId, elegidoId))) return;
+    }
   }
 
   await refrescarAsociaciones();
   if (modoAsociar === 'destino') {
     filtrarDestinosPorContacto();
-    cotizacionDestino.value = elegidoId;
+    const opt = [...cotizacionDestino.options].find((o) => o.value === elegidoId);
+    if (opt) opt.selected = true;
   } else {
     filtrarContactosPorDestino();
     cotizacionContacto.value = elegidoId;
@@ -945,16 +983,21 @@ formAsociar.addEventListener('submit', async (e) => {
 });
 
 // Al capturar una cotizacion a partir de un negocio, se replican el Contacto del negocio y,
-// si ese contacto tiene destinos asociados en su catalogo, el primero de ellos como Destino.
+// si ese contacto tiene destinos asociados en su catalogo, el primero de ellos como Destino
+// (el usuario puede marcar mas si la cotizacion aplica a varios).
 function replicarContactoYDestinoDeNegocio(negocioId) {
   const negocio = negociosCache.find((n) => n.id_negocio === negocioId);
   if (!negocio) return;
 
   cotizacionContacto.value = negocio.contacto_id || '';
+  filtrarDestinosPorContacto();
 
   const contacto = contactosCache.find((c) => String(c.id_contacto) === String(negocio.contacto_id));
   const destinos = (contacto && contacto.destinos) || [];
-  cotizacionDestino.value = destinos.length ? destinos[0].id_destino : '';
+  if (destinos.length) {
+    const opt = [...cotizacionDestino.options].find((o) => o.value === String(destinos[0].id_destino));
+    if (opt) opt.selected = true;
+  }
 }
 
 function activarFiltroNegocio(id, nombre) {
@@ -1385,7 +1428,7 @@ formCotizacion.addEventListener('submit', async (e) => {
     nombre: cotizacionNombre.value.trim(),
     negocio_id: cotizacionNegocio.value || null,
     contacto_id: cotizacionContacto.value || null,
-    destino_id: cotizacionDestino.value || null,
+    destino_ids: valoresSeleccionados(cotizacionDestino).map(Number),
     representante_id: cotizacionRepresentante.value || null,
     moneda: cotizacionMoneda.value,
     etapa: cotizacionEtapa.value,
@@ -1467,7 +1510,8 @@ function cargarCotizacionEnFormulario(c) {
   cotizacionNombre.value = c.nombre;
   cotizacionNegocio.value = c.negocio_id || '';
   cotizacionContacto.value = c.contacto_id || '';
-  cotizacionDestino.value = c.destino_id || '';
+  poblarSelectMultiple(cotizacionDestino, destinosCache, 'id_destino', 'destino');
+  marcarSeleccionMultiple(cotizacionDestino, new Set((c.destinos || []).map((d) => String(d.id_destino))));
   cotizacionRepresentante.value = c.representante_id || '';
   cotizacionMoneda.value = c.moneda;
   cotizacionEtapa.value = c.etapa || 'Negociacion';
@@ -1532,7 +1576,8 @@ async function clonarCotizacion(id) {
   cotizacionNombre.value = `${c.nombre} (copia)`;
   cotizacionNegocio.value = c.negocio_id || '';
   cotizacionContacto.value = c.contacto_id || '';
-  cotizacionDestino.value = c.destino_id || '';
+  poblarSelectMultiple(cotizacionDestino, destinosCache, 'id_destino', 'destino');
+  marcarSeleccionMultiple(cotizacionDestino, new Set((c.destinos || []).map((d) => String(d.id_destino))));
   cotizacionRepresentante.value = c.representante_id || '';
   cotizacionMoneda.value = c.moneda;
   cotizacionDescuentoTipo.value = c.descuento_tipo === 'monto' ? 'monto' : 'porcentaje';
@@ -1696,7 +1741,7 @@ async function abrirDetalleCotizacion(id) {
     </div>
     ${permisosCatalogos.editar && c.etapa === 'Negociacion' ? `
       <div id="panel-marcar-ganada" class="panel-form" hidden>
-        <p class="pista">Órdenes de ${escaparHtml(c.destino_nombre || 'este Hotel/Local')} con fecha igual o posterior a la cotización (${escaparHtml(c.fecha_creacion)}). Selecciona las que correspondan (opcional):</p>
+        <p class="pista">Órdenes de ${escaparHtml((c.destinos || []).map((d) => d.destino).join(', ') || 'este Hotel/Local')} con fecha igual o posterior a la cotización (${escaparHtml(c.fecha_creacion)}). Selecciona las que correspondan (opcional):</p>
         <div id="lista-ordenes-candidatas-ganada"></div>
         <div class="acciones-form">
           <button type="button" id="btn-confirmar-marcar-ganada" class="btn-mini">Confirmar como ganada</button>
@@ -1722,7 +1767,7 @@ async function abrirDetalleCotizacion(id) {
     ` : ''}
     ${permisosCatalogos.editar && c.etapa === 'Ganada' ? `
       <div id="panel-asociar-ordenes" class="panel-form" hidden>
-        <p class="pista">Órdenes de ${escaparHtml(c.destino_nombre || 'este Hotel/Local')} con fecha posterior a la cotización (${escaparHtml(c.fecha_creacion)}):</p>
+        <p class="pista">Órdenes de ${escaparHtml((c.destinos || []).map((d) => d.destino).join(', ') || 'este Hotel/Local')} con fecha posterior a la cotización (${escaparHtml(c.fecha_creacion)}):</p>
         <div id="lista-ordenes-candidatas"></div>
         <div class="acciones-form">
           <button type="button" id="btn-guardar-asociar-ordenes" class="btn-mini">Guardar asociación</button>
@@ -1742,7 +1787,7 @@ async function abrirDetalleCotizacion(id) {
           <h3>Cliente y destino</h3>
           ${campoCot('Negocio', c.negocio_nombre)}
           ${campoCot('Contacto', c.contacto_nombre)}
-          ${campoCot('Hotel / Local', c.destino_nombre)}
+          ${campoCot('Hotel(es) / Local(es)', (c.destinos || []).map((d) => d.destino).join(', ') || c.destino_nombre)}
           ${campoCot('Representante de ventas', c.representante_nombre)}
           ${campoCot('Moneda', c.moneda)}
         </div>
@@ -2078,8 +2123,9 @@ formRapidoContacto.addEventListener('submit', async (e) => {
   const nombre = modalRapidoContactoNombre.value.trim();
   if (!nombre) return;
 
-  // Si ya hay un Hotel/Local elegido en la cotizacion, el contacto nuevo nace asociado a el
-  // (misma asociacion que se administra desde Contactos o desde el Hotel/Local).
+  // Si ya hay Hotel(es)/Local(es) elegidos en la cotizacion, el contacto nuevo nace asociado a
+  // todos ellos (misma asociacion que se administra desde Contactos o desde el Hotel/Local).
+  const destinosElegidos = valoresSeleccionados(cotizacionDestino);
   const res = await fetch('/api/contactos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2089,7 +2135,7 @@ formRapidoContacto.addEventListener('submit', async (e) => {
       correo_electronico: modalRapidoContactoCorreo.value.trim(),
       telefono_local: modalRapidoContactoTelLocal.value.trim(),
       telefono_celular: modalRapidoContactoTelCelular.value.trim(),
-      destinos: cotizacionDestino.value ? [Number(cotizacionDestino.value)] : [],
+      destinos: destinosElegidos.map(Number),
     }),
   });
 
@@ -2100,9 +2146,11 @@ formRapidoContacto.addEventListener('submit', async (e) => {
   }
 
   const creado = await res.json();
+  const seleccionPrevia = new Set(destinosElegidos);
   await poblarSelectsCotizacion();
   await poblarSelectsNegocio();
   cotizacionContacto.value = creado.id_contacto;
+  marcarSeleccionMultiple(cotizacionDestino, seleccionPrevia);
   actualizarCampoVacio(cotizacionContacto);
 
   cerrarModalRapidoContacto();
@@ -2161,8 +2209,11 @@ formRapidoDestino.addEventListener('submit', async (e) => {
     }).catch(() => {});
   }
 
+  const seleccionPrevia = new Set(valoresSeleccionados(cotizacionDestino));
   await poblarSelectsCotizacion();
-  cotizacionDestino.value = creado.id_destino;
+  filtrarDestinosPorContacto();
+  seleccionPrevia.add(String(creado.id_destino));
+  marcarSeleccionMultiple(cotizacionDestino, seleccionPrevia);
   actualizarCampoVacio(cotizacionDestino);
 
   cerrarModalRapidoDestino();
@@ -2286,7 +2337,7 @@ function generarHtmlCotizacionPDF(c) {
     <div class="info-grid">
       <div class="info-izq">
         <div><strong>${escaparHtml(c.negocio_nombre || '')}</strong></div>
-        <div>${escaparHtml(c.destino_nombre || '')}</div>
+        <div>${escaparHtml((c.destinos || []).map((d) => d.destino).join(', ') || c.destino_nombre || '')}</div>
         <div>&nbsp;</div>
         <div><strong>${escaparHtml(c.contacto_nombre || '')}</strong></div>
         ${c.contacto_correo ? `<div>${escaparHtml(c.contacto_correo)}</div>` : ''}
@@ -2447,8 +2498,12 @@ promesaAuth.then(async (sesion) => {
       replicarContactoYDestinoDeNegocio(negocioIdUrl);
     } else if (contactoIdUrl) {
       cotizacionContacto.value = contactoIdUrl;
+      filtrarDestinosPorContacto();
     }
-    if (destinoIdUrl) cotizacionDestino.value = destinoIdUrl;
+    if (destinoIdUrl) {
+      const opt = [...cotizacionDestino.options].find((o) => o.value === String(destinoIdUrl));
+      if (opt) opt.selected = true;
+    }
   }
 
   suscribirTiempoReal(['negocios'], () => { poblarSelectsNegocio(); cargarNegocios(); });

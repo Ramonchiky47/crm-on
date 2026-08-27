@@ -1032,6 +1032,12 @@ th.num, td.num {
   text-overflow: ellipsis;
 }
 
+/* Hotel(es)/Local(es) de Cotizaciones: select multiple, mas alto que el boton "+" de al lado;
+   sin esto align-items:stretch lo estiraria a la misma altura, viendose raro. */
+.campo-con-boton-arriba {
+  align-items: flex-start;
+}
+
 .select-descuento-tipo {
   flex: 0 0 4.5rem;
 }
@@ -1050,6 +1056,14 @@ th.num, td.num {
   color: #757575;
   font-size: 0.85rem;
   margin-top: 0.3rem;
+}
+
+.pista-inline {
+  color: #9b9b9b;
+  font-size: 0.72rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 /* Pista "falta asociar Contacto/Hotel-Local" (Ordenes y Cotizaciones): a diferencia de una

@@ -769,7 +769,7 @@ app.get('/api/destinos/:id/asociados', requirePermiso('catalogos', 'ver'), ar(as
   if (!destino || !esDueno(destino, req)) return res.status(404).json({ error: 'Hotel/local no encontrado' });
 
   const [cotizaciones, ordenes, tareas, contactos] = await Promise.all([
-    db.prepare(`${SELECT_COTIZACIONES} WHERE q.destino_id = ? ORDER BY q.creado_en DESC`).all(req.params.id),
+    db.prepare(`${SELECT_COTIZACIONES} WHERE q.id_cotizacion IN (SELECT cotizacion_id FROM cotizacion_destinos WHERE destino_id = ?) ORDER BY q.creado_en DESC`).all(req.params.id),
     db.prepare(`${SELECT_ORDENES} WHERE o.destino_id = ? ORDER BY o.creado_en DESC`).all(req.params.id),
     db.prepare(`
       SELECT DISTINCT p.* FROM pendientes p
@@ -820,7 +820,7 @@ async function asociadosDeGrupoCatalogo(tablaJoin, columnaId, id) {
   const enGrupo = `SELECT destino_id FROM ${tablaJoin} WHERE ${columnaId} = ?`;
   const [destinos, cotizaciones, ordenes, tareas] = await Promise.all([
     db.prepare(`SELECT id_destino, destino FROM destinos WHERE id_destino IN (${enGrupo}) ORDER BY destino`).all(id),
-    db.prepare(`${SELECT_COTIZACIONES} WHERE q.destino_id IN (${enGrupo}) ORDER BY q.creado_en DESC`).all(id),
+    db.prepare(`${SELECT_COTIZACIONES} WHERE q.id_cotizacion IN (SELECT cotizacion_id FROM cotizacion_destinos WHERE destino_id IN (${enGrupo})) ORDER BY q.creado_en DESC`).all(id),
     db.prepare(`${SELECT_ORDENES} WHERE o.destino_id IN (${enGrupo}) ORDER BY o.creado_en DESC`).all(id),
     db.prepare(`
       SELECT DISTINCT p.* FROM pendientes p
@@ -2312,7 +2312,12 @@ async function itemsDeCotizacion(cotizacionId) {
 async function cotizacionConDetalle(id) {
   const cabecera = await db.prepare(`${SELECT_COTIZACIONES} WHERE q.id_cotizacion = ?`).get(id);
   if (!cabecera) return null;
-  return { ...conEstatus(cabecera), items: await itemsDeCotizacion(id), ordenes: await ordenesDeCotizacion(id) };
+  return {
+    ...conEstatus(cabecera),
+    items: await itemsDeCotizacion(id),
+    ordenes: await ordenesDeCotizacion(id),
+    destinos: await destinosDeCotizacion(id),
+  };
 }
 
 // Ordenes ya asociadas a una cotizacion (ordenes.cotizacion_id), tipicamente al marcarla como
@@ -2365,6 +2370,28 @@ async function avanzarNegocioSiTodoPerdido(db, negocioId) {
 
   await db.prepare('UPDATE negocios SET etapa_id = ? WHERE id_negocio = ? AND etapa_id IS DISTINCT FROM ?')
     .run(etapaPerdida.id_etapa, negocioId, etapaPerdida.id_etapa);
+}
+
+// Una cotizacion puede aplicar a varios Hoteles/Locales del mismo contacto (mismos productos y
+// precio, ej. una cadena renovando pantallas en varias propiedades a la vez). cotizacion_destinos
+// es la fuente de verdad para "a que hoteles aplica"; destino_id en cotizaciones se mantiene como
+// el primero de la lista, por compatibilidad con lo que ya lo usa como valor unico (PDF, filtros
+// simples, datos historicos).
+async function destinosDeCotizacion(cotizacionId) {
+  return db.prepare(`
+    SELECT d.id_destino, d.destino FROM cotizacion_destinos cd
+    JOIN destinos d ON d.id_destino = cd.destino_id
+    WHERE cd.cotizacion_id = ?
+    ORDER BY d.destino
+  `).all(cotizacionId);
+}
+
+async function reemplazarDestinosCotizacion(db, cotizacionId, destinoIds) {
+  await db.prepare('DELETE FROM cotizacion_destinos WHERE cotizacion_id = ?').run(cotizacionId);
+  for (const destinoId of destinoIds || []) {
+    await db.prepare('INSERT INTO cotizacion_destinos (cotizacion_id, destino_id) VALUES (?, ?) ON CONFLICT (cotizacion_id, destino_id) DO NOTHING')
+      .run(cotizacionId, destinoId);
+  }
 }
 
 async function guardarItems(db, cotizacionId, items) {
@@ -2441,9 +2468,19 @@ app.post('/api/cotizaciones', requirePermiso('catalogos', 'editar'), ar(async (r
     const negocio = await db.prepare('SELECT * FROM negocios WHERE id_negocio = ?').get(req.body.negocio_id);
     if (!negocio || !esDueno(negocio, req)) return res.status(400).json({ errores: ['El negocio seleccionado no existe'] });
   }
-  if (!(await referenciaPropia('contactos', 'id_contacto', req.body.contacto_id, req))
-    || !(await referenciaPropia('destinos', 'id_destino', req.body.destino_id, req))) {
-    return res.status(400).json({ errores: ['El contacto o el hotel/local seleccionado no existe'] });
+  if (!(await referenciaPropia('contactos', 'id_contacto', req.body.contacto_id, req))) {
+    return res.status(400).json({ errores: ['El contacto seleccionado no existe'] });
+  }
+
+  // Una cotizacion puede aplicar a varios Hoteles/Locales (destino_ids); se acepta tambien el
+  // singular destino_id por compatibilidad con quien lo siga mandando asi.
+  const destinoIds = Array.isArray(req.body.destino_ids)
+    ? [...new Set(req.body.destino_ids.map(Number).filter((n) => Number.isInteger(n) && n > 0))]
+    : (req.body.destino_id ? [Number(req.body.destino_id)] : []);
+  for (const destinoId of destinoIds) {
+    if (!(await referenciaPropia('destinos', 'id_destino', destinoId, req))) {
+      return res.status(400).json({ errores: ['Uno de los hoteles/locales seleccionados no existe'] });
+    }
   }
 
   const erroresItems = await validarItems(req.body.items);
@@ -2474,7 +2511,7 @@ app.post('/api/cotizaciones', requirePermiso('catalogos', 'editar'), ar(async (r
         usuario_id, representante_id, mostrar_totales, fecha_cierre
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (CURRENT_DATE)::text, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${fechaCierreInicial ? '(CURRENT_DATE)::text' : 'NULL'})
     `).run(
-      id, req.body.negocio_id, nombre, req.body.contacto_id || null, req.body.destino_id || null, req.body.moneda, etapa,
+      id, req.body.negocio_id, nombre, req.body.contacto_id || null, destinoIds[0] || null, req.body.moneda, etapa,
       descuentoTipo, descuentoPorcentajeGuardado, subtotal, descuentoMonto, iva, granTotal,
       req.body.fecha_vencimiento || null,
       req.body.fecha_seguimiento || null,
@@ -2487,6 +2524,7 @@ app.post('/api/cotizaciones', requirePermiso('catalogos', 'editar'), ar(async (r
       req.body.mostrar_totales !== false
     );
     await guardarItems(db, id, req.body.items);
+    await reemplazarDestinosCotizacion(db, id, destinoIds);
     await avanzarNegocioSiTodoGanado(db, req.body.negocio_id);
     await avanzarNegocioSiTodoPerdido(db, req.body.negocio_id);
   });
@@ -2511,9 +2549,17 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
     const negocio = await db.prepare('SELECT * FROM negocios WHERE id_negocio = ?').get(req.body.negocio_id);
     if (!negocio || !esDueno(negocio, req)) return res.status(400).json({ errores: ['El negocio seleccionado no existe'] });
   }
-  if (!(await referenciaPropia('contactos', 'id_contacto', req.body.contacto_id, req))
-    || !(await referenciaPropia('destinos', 'id_destino', req.body.destino_id, req))) {
-    return res.status(400).json({ errores: ['El contacto o el hotel/local seleccionado no existe'] });
+  if (!(await referenciaPropia('contactos', 'id_contacto', req.body.contacto_id, req))) {
+    return res.status(400).json({ errores: ['El contacto seleccionado no existe'] });
+  }
+
+  const destinoIds = Array.isArray(req.body.destino_ids)
+    ? [...new Set(req.body.destino_ids.map(Number).filter((n) => Number.isInteger(n) && n > 0))]
+    : (req.body.destino_id ? [Number(req.body.destino_id)] : []);
+  for (const destinoId of destinoIds) {
+    if (!(await referenciaPropia('destinos', 'id_destino', destinoId, req))) {
+      return res.status(400).json({ errores: ['Uno de los hoteles/locales seleccionados no existe'] });
+    }
   }
 
   const erroresItems = await validarItems(req.body.items);
@@ -2544,7 +2590,7 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
         tiempo_entrega = ?, observaciones = ?, representante_id = ?, mostrar_totales = ?, fecha_cierre = ${fechaCierreSql}
       WHERE id_cotizacion = ?
     `).run(
-      req.body.negocio_id, nombre, req.body.contacto_id || null, req.body.destino_id || null, req.body.moneda, etapa,
+      req.body.negocio_id, nombre, req.body.contacto_id || null, destinoIds[0] || null, req.body.moneda, etapa,
       descuentoTipo, descuentoPorcentajeGuardado, subtotal, descuentoMonto, iva, granTotal,
       req.body.fecha_vencimiento || null,
       req.body.fecha_seguimiento || null,
@@ -2557,6 +2603,7 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
       req.params.id
     );
     await guardarItems(db, req.params.id, req.body.items);
+    await reemplazarDestinosCotizacion(db, req.params.id, destinoIds);
     await avanzarNegocioSiTodoGanado(db, req.body.negocio_id);
     await avanzarNegocioSiTodoPerdido(db, req.body.negocio_id);
   });
@@ -2625,23 +2672,23 @@ app.delete('/api/cotizaciones/:id', requirePermiso('catalogos', 'borrar'), ar(as
 app.get('/api/cotizaciones/:id/ordenes-candidatas', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
   const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
   if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
-  if (!cotizacion.destino_id) return res.json([]);
 
   const ordenes = await db.prepare(`
     ${SELECT_ORDENES}
-    WHERE o.destino_id = ? AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
+    WHERE o.destino_id IN (SELECT destino_id FROM cotizacion_destinos WHERE cotizacion_id = ?)
+      AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
       AND (ec.estatus IS NULL OR ec.estatus != 'Cancelado')
     ORDER BY o.fecha
-  `).all(cotizacion.destino_id, cotizacion.fecha_creacion, req.params.id);
+  `).all(req.params.id, cotizacion.fecha_creacion, req.params.id);
 
   res.json(ordenes);
 }));
 
 // Guarda que ordenes quedan asociadas a esta cotizacion (el pedido real generado a partir de
 // ella): las que vienen en orden_ids se marcan, y las que ya estaban asociadas pero ya no
-// vienen en la lista se desasocian. Solo toca ordenes que son candidatas validas (mismo
-// Hotel/Local, fecha igual o posterior, no Cancelada, libres o ya de esta cotizacion) para no
-// "robar" una orden que ya pertenece a otra.
+// vienen en la lista se desasocian. Solo toca ordenes que son candidatas validas (algun
+// Hotel/Local de los de esta cotizacion, fecha igual o posterior, no Cancelada, libres o ya de
+// esta cotizacion) para no "robar" una orden que ya pertenece a otra.
 app.put('/api/cotizaciones/:id/ordenes', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
   const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.params.id);
   if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
@@ -2652,9 +2699,10 @@ app.put('/api/cotizaciones/:id/ordenes', requirePermiso('catalogos', 'editar'), 
     const candidatas = await db.prepare(`
       SELECT o.id FROM ordenes o
       LEFT JOIN estatus_catalogo ec ON ec.id_estatus = o.estatus_id
-      WHERE o.destino_id = ? AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
+      WHERE o.destino_id IN (SELECT destino_id FROM cotizacion_destinos WHERE cotizacion_id = ?)
+        AND o.fecha >= ? AND (o.cotizacion_id IS NULL OR o.cotizacion_id = ?)
         AND (ec.estatus IS NULL OR ec.estatus != 'Cancelado')
-    `).all(cotizacion.destino_id, cotizacion.fecha_creacion, req.params.id);
+    `).all(req.params.id, cotizacion.fecha_creacion, req.params.id);
     const idsValidos = new Set(candidatas.map((o) => o.id));
 
     for (const ordenId of ordenIds) {
@@ -2798,7 +2846,7 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
 
   const lineasIzq = [
     { texto: cotizacion.negocio_nombre || '', font: 'Helvetica-Bold', size: 10.5 },
-    { texto: cotizacion.destino_nombre || '', font: 'Helvetica', size: 10 },
+    { texto: (cotizacion.destinos || []).map((d) => d.destino).join(', ') || cotizacion.destino_nombre || '', font: 'Helvetica', size: 10 },
     { texto: '', font: 'Helvetica', size: 5 },
     { texto: cotizacion.contacto_nombre || '', font: 'Helvetica-Bold', size: 10.5 },
     { texto: cotizacion.contacto_correo || '', font: 'Helvetica', size: 10 },
@@ -3175,20 +3223,25 @@ app.get('/api/ordenes/:id/cotizaciones-candidatas', requirePermiso('ordenes', 'v
   if (!orden.destino_id) return res.json([]);
 
   const cotizaciones = (await db.prepare(`
-    ${SELECT_COTIZACIONES} WHERE q.destino_id = ? AND q.etapa = 'Negociacion'
+    ${SELECT_COTIZACIONES}
+    WHERE q.id_cotizacion IN (SELECT cotizacion_id FROM cotizacion_destinos WHERE destino_id = ?)
+      AND q.etapa = 'Negociacion'
   `).all(orden.destino_id)).map(conEstatus).filter((c) => c.estatus === 'Vigente');
 
   res.json(cotizaciones);
 }));
 
-// Asocia esta orden a una cotizacion vigente del mismo Hotel/Local y, en el mismo paso, cierra
-// esa cotizacion como Ganada (el pedido real que llego confirma que se gano la venta).
+// Asocia esta orden a una cotizacion vigente de alguno de sus Hoteles/Locales y, en el mismo
+// paso, cierra esa cotizacion como Ganada (el pedido real que llego confirma que se gano la venta).
 app.put('/api/ordenes/:id/asociar-cotizacion', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
   const orden = await db.prepare('SELECT * FROM ordenes WHERE id = ?').get(req.params.id);
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
 
   const cotizacion = await db.prepare('SELECT * FROM cotizaciones WHERE id_cotizacion = ?').get(req.body.cotizacion_id);
-  if (!cotizacion || cotizacion.destino_id !== orden.destino_id || cotizacion.etapa !== 'Negociacion') {
+  const destinoValido = cotizacion && orden.destino_id && await db.prepare(
+    'SELECT 1 FROM cotizacion_destinos WHERE cotizacion_id = ? AND destino_id = ?'
+  ).get(cotizacion.id_cotizacion, orden.destino_id);
+  if (!cotizacion || !destinoValido || cotizacion.etapa !== 'Negociacion') {
     return res.status(400).json({ errores: ['La cotización no es una candidata válida para esta orden'] });
   }
 
@@ -4193,7 +4246,7 @@ app.get('/api/buscar-global', ar(async (req, res) => {
   const destinosConRegistros = await Promise.all(destinos.map(async (d) => ({
     ...d,
     ordenes: await db.prepare(`${SELECT_ORDENES} WHERE o.destino_id = ? ORDER BY o.creado_en DESC`).all(d.id_destino),
-    cotizaciones: (await db.prepare(`${SELECT_COTIZACIONES} WHERE q.destino_id = ? ORDER BY q.creado_en DESC`).all(d.id_destino)).map(conEstatus),
+    cotizaciones: (await db.prepare(`${SELECT_COTIZACIONES} WHERE q.id_cotizacion IN (SELECT cotizacion_id FROM cotizacion_destinos WHERE destino_id = ?) ORDER BY q.creado_en DESC`).all(d.id_destino)).map(conEstatus),
     contactos: (await db.prepare(`
       SELECT c.* FROM contacto_destinos cd JOIN contactos c ON c.id_contacto = cd.contacto_id WHERE cd.destino_id = ?
       ORDER BY c.nombre, c.apellido

@@ -1531,14 +1531,30 @@ async function cargarSolicitudesProveedor() {
           ${(s.items || []).map((it) => `${escaparHtml(it.codigo)}: ${it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio'} — ${escaparHtml(it.tiempo_entrega || 'sin tiempo de entrega')}${it.comentarios ? ` (${escaparHtml(it.comentarios)})` : ''}`).join('<br>')}
           ${s.comentarios ? `<br><strong>Comentarios del proveedor:</strong> ${escaparHtml(s.comentarios)}` : ''}
         </div>
-        <button type="button" class="btn-mini btn-copiar-solicitud-a-cotizacion" data-id="${escaparHtml(s.id_solicitud)}">Copiar a la cotización</button>
       ` : ''}
+      <div class="acciones-form" style="margin-top: 0.4rem;">
+        <button type="button" class="btn-mini btn-copiar-liga-solicitud" data-token="${escaparHtml(s.token_publico)}" title="Liga única de esta solicitud, sin necesidad de iniciar sesión">Copiar liga</button>
+        ${s.estatus === 'Respondida' ? `<button type="button" class="btn-mini btn-copiar-solicitud-a-cotizacion" data-id="${escaparHtml(s.id_solicitud)}">Copiar a la cotización</button>` : ''}
+      </div>
     </div>
   `).join('');
   renderizarPartidas();
 }
 
 listaSolicitudesProveedor.addEventListener('click', async (e) => {
+  if (e.target.classList.contains('btn-copiar-liga-solicitud')) {
+    const liga = `${window.location.origin}/solicitud-proveedor.html?token=${e.target.dataset.token}`;
+    try {
+      await navigator.clipboard.writeText(liga);
+    } catch {
+      prompt('Copia la liga:', liga);
+      return;
+    }
+    const textoOriginal = e.target.textContent;
+    e.target.textContent = 'Copiada';
+    setTimeout(() => { e.target.textContent = textoOriginal; }, 1500);
+    return;
+  }
   if (!e.target.classList.contains('btn-copiar-solicitud-a-cotizacion')) return;
   const id = e.target.dataset.id;
   const res = await fetch(`/api/cotizaciones/${encodeURIComponent(cotizacionId.value)}/solicitudes-proveedor/${encodeURIComponent(id)}/aplicar`, {

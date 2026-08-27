@@ -2462,7 +2462,11 @@ async function cargarProveedores() {
       <td>${escaparHtml(p.empresa || '')}</td>
       <td>${escaparHtml(p.correo_electronico || '')}</td>
       <td>${escaparHtml(p.telefono || '')}</td>
-      <td>${p.tiene_acceso ? `<span class="pill-estatus estatus-vigente">${escaparHtml(p.usuario)}</span>` : '<span class="pista">Sin acceso</span>'}</td>
+      <td>
+        ${p.tiene_acceso
+          ? `<span class="pill-estatus estatus-vigente">${escaparHtml(p.usuario)}</span> <button type="button" class="btn-mini btn-copiar-liga-portal">Copiar liga del Portal</button>`
+          : '<span class="pista">Sin acceso</span>'}
+      </td>
       <td class="acciones">
         ${permisosCatalogos.editar ? `<button class="btn-editar" data-id="${p.id_proveedor}">Editar</button>` : ''}
         ${permisosCatalogos.borrar ? `<button class="btn-borrar" data-id="${p.id_proveedor}">Borrar</button>` : ''}
@@ -2505,6 +2509,20 @@ formProveedor.addEventListener('submit', async (e) => {
 btnCancelarProveedor.addEventListener('click', limpiarFormProveedor);
 
 tablaProveedores.addEventListener('click', async (e) => {
+  if (e.target.classList.contains('btn-copiar-liga-portal')) {
+    const liga = `${window.location.origin}/proveedor-login.html`;
+    try {
+      await navigator.clipboard.writeText(liga);
+    } catch {
+      prompt('Copia la liga:', liga);
+      return;
+    }
+    const textoOriginal = e.target.textContent;
+    e.target.textContent = 'Copiada';
+    setTimeout(() => { e.target.textContent = textoOriginal; }, 1500);
+    return;
+  }
+
   const id = e.target.dataset.id;
   if (!id) return;
 

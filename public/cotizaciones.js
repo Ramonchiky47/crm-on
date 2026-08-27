@@ -1048,7 +1048,7 @@ function activarFiltroNegocio(id, nombre) {
 }
 
 function celdaEtapaCotizacion(etapa) {
-  const etiquetas = { Negociacion: 'Negociación', Ganada: 'Ganada', Perdida: 'Perdida' };
+  const etiquetas = { Pendiente: 'Pendiente', Negociacion: 'Negociación', Ganada: 'Ganada', Perdida: 'Perdida' };
   if (etapa === 'Ganada') return `<span class="estatus-vigente">${etiquetas[etapa]}</span>`;
   if (etapa === 'Perdida') return `<span class="estatus-vencido">${etiquetas[etapa]}</span>`;
   return etiquetas[etapa] || escaparHtml(etapa || '');
@@ -1094,9 +1094,9 @@ async function cargarCotizaciones() {
 
 // Filtro por Etapa: checkboxes dentro de un panel desplegable que solo se aplican al
 // presionar "Aplicar" (o se descartan con "Cancelar"), no en vivo como los demas filtros.
-// Por defecto solo se muestra Negociacion; Ganada y Perdida quedan ocultas hasta que el usuario
-// las seleccione explicitamente.
-let etapasCotSeleccionadas = new Set(['Negociacion']);
+// Por defecto solo se muestran Pendiente y Negociacion (las etapas abiertas); Ganada y Perdida
+// quedan ocultas hasta que el usuario las seleccione explicitamente.
+let etapasCotSeleccionadas = new Set(['Pendiente', 'Negociacion']);
 
 function actualizarBotonFiltroCotEtapa() {
   filtroCotEtapaBtn.textContent = etapasCotSeleccionadas.size
@@ -1170,6 +1170,17 @@ function poblarDatalistProductos() {
   datalistProductos.innerHTML = productosCache.map((p) => `<option value="${escaparHtml(p.item)}"></option>`).join('');
 }
 
+// Estatus (Pendiente/Cotizada) de la solicitud a proveedor mas reciente para este codigo, si
+// existe alguna (cargarSolicitudesProveedor mantiene solicitudesProveedorActuales actualizado).
+function pillEstatusPartida(codigo) {
+  if (!codigo) return '';
+  const solicitud = solicitudesProveedorActuales.find((s) => (s.items || []).some((it) => it.codigo === codigo));
+  if (!solicitud) return '';
+  const clase = solicitud.estatus === 'Respondida' ? 'estatus-vigente' : 'pill-neutro';
+  const texto = solicitud.estatus === 'Respondida' ? 'Cotizada' : 'Pendiente';
+  return `<span class="pill-estatus ${clase}">${texto}</span>`;
+}
+
 function renderizarPartidas() {
   const sinMoneda = !cotizacionMoneda.value;
   tablaPartidas.innerHTML = partidas.map((it, i) => `
@@ -1184,6 +1195,7 @@ function renderizarPartidas() {
       <td><input type="number" class="partida-precio" step="0.01" min="0" value="${it.precio_unitario || ''}" /></td>
       <td class="celda-check"><input type="checkbox" class="partida-causa-impuesto" ${it.causa_impuesto !== false ? 'checked' : ''} title="Si se desmarca, esta partida no suma IVA" /></td>
       <td class="partida-total">${formatoImporte((it.cantidad || 0) * (it.precio_unitario || 0))}</td>
+      <td>${pillEstatusPartida(it.producto_item)}</td>
       <td>
         ${cotizacionId.value ? `<button type="button" class="btn-mini btn-solicitar-proveedor" data-index="${i}" title="Pedir precio y tiempo de entrega a un proveedor">Solicitar cotización</button>` : ''}
       </td>
@@ -1487,6 +1499,10 @@ formRapidoProveedor.addEventListener('submit', async (e) => {
 const tarjetaSolicitudesProveedor = document.getElementById('tarjeta-solicitudes-proveedor');
 const listaSolicitudesProveedor = document.getElementById('lista-solicitudes-proveedor');
 
+// Solicitudes de la cotizacion actual; se usa tambien desde renderizarPartidas para mostrar la
+// columna "Cotización proveedor" (Pendiente/Cotizada) de cada producto.
+let solicitudesProveedorActuales = [];
+
 function pillEstatusSolicitud(estatus) {
   const clase = estatus === 'Respondida' ? 'estatus-vigente' : 'pill-neutro';
   return `<span class="pill-estatus ${clase}">${escaparHtml(estatus)}</span>`;
@@ -1495,10 +1511,12 @@ function pillEstatusSolicitud(estatus) {
 async function cargarSolicitudesProveedor() {
   if (!cotizacionId.value) {
     tarjetaSolicitudesProveedor.hidden = true;
+    solicitudesProveedorActuales = [];
     return;
   }
   const res = await fetch(`/api/cotizaciones/${encodeURIComponent(cotizacionId.value)}/solicitudes-proveedor`);
   const solicitudes = res.ok ? await res.json() : [];
+  solicitudesProveedorActuales = solicitudes;
   tarjetaSolicitudesProveedor.hidden = solicitudes.length === 0;
   listaSolicitudesProveedor.innerHTML = solicitudes.map((s) => `
     <div class="panel-form" data-id="${escaparHtml(s.id_solicitud)}">
@@ -1510,11 +1528,13 @@ async function cargarSolicitudesProveedor() {
       ${s.estatus === 'Respondida' ? `
         <div class="pista">
           ${(s.items || []).map((it) => `${escaparHtml(it.codigo)}: ${it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio'} — ${escaparHtml(it.tiempo_entrega || 'sin tiempo de entrega')}`).join('<br>')}
+          ${s.comentarios ? `<br><strong>Comentarios del proveedor:</strong> ${escaparHtml(s.comentarios)}` : ''}
         </div>
         <button type="button" class="btn-mini btn-copiar-solicitud-a-cotizacion" data-id="${escaparHtml(s.id_solicitud)}">Copiar a la cotización</button>
       ` : ''}
     </div>
   `).join('');
+  renderizarPartidas();
 }
 
 listaSolicitudesProveedor.addEventListener('click', async (e) => {
@@ -1815,7 +1835,7 @@ function cargarCotizacionEnFormulario(c) {
 
   cotizacionAccionesEdicion.hidden = false;
   cotizacionFormEstatus.innerHTML = pillEstatus(c.estatus);
-  cotizacionPanelEtapa.hidden = !(permisosCatalogos.editar && c.etapa === 'Negociacion');
+  cotizacionPanelEtapa.hidden = !(permisosCatalogos.editar && ['Pendiente', 'Negociacion'].includes(c.etapa));
   ocultarMarcarPerdidaForm();
   ocultarMarcarGanadaPanel();
 
@@ -1996,7 +2016,7 @@ async function abrirDetalleCotizacion(id) {
         ${permisosCatalogos.editar ? `<button type="button" class="btn-secundario btn-clonar-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Clonar</button>` : ''}
         ${permisosCatalogos.editar ? `<button type="button" class="btn-secundario btn-editar-cotizacion" data-id="${escaparHtml(c.id_cotizacion)}">Editar</button>` : ''}
       </div>
-      ${permisosCatalogos.editar && c.etapa === 'Negociacion' ? `
+      ${permisosCatalogos.editar && ['Pendiente', 'Negociacion'].includes(c.etapa) ? `
         <div class="separador-vertical-cot"></div>
         <div class="grupo-etapa-cot">
           <span class="etiqueta-etapa-cot">Etapa</span>
@@ -2011,7 +2031,7 @@ async function abrirDetalleCotizacion(id) {
         </div>
       ` : ''}
     </div>
-    ${permisosCatalogos.editar && c.etapa === 'Negociacion' ? `
+    ${permisosCatalogos.editar && ['Pendiente', 'Negociacion'].includes(c.etapa) ? `
       <div id="panel-marcar-ganada" class="panel-form" hidden>
         <p class="pista">Órdenes de ${escaparHtml((c.destinos || []).map((d) => d.destino).join(', ') || 'este Hotel/Local')} con fecha igual o posterior a la cotización (${escaparHtml(c.fecha_creacion)}). Selecciona las que correspondan (opcional):</p>
         <div id="lista-ordenes-candidatas-ganada"></div>
@@ -2021,7 +2041,7 @@ async function abrirDetalleCotizacion(id) {
         </div>
       </div>
     ` : ''}
-    ${permisosCatalogos.editar && c.etapa === 'Negociacion' ? `
+    ${permisosCatalogos.editar && ['Pendiente', 'Negociacion'].includes(c.etapa) ? `
       <form id="form-marcar-perdida-cotizacion" class="panel-form" hidden>
         <label>
           Motivo (por qué no se ganó esta cotización)

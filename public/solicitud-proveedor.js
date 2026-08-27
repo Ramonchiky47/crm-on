@@ -30,6 +30,9 @@ const solicitudFecha = document.getElementById('solicitud-fecha');
 const tablaItemsSolicitud = document.getElementById('tabla-items-solicitud');
 const formRespuestaProveedor = document.getElementById('form-respuesta-proveedor');
 const solicitudYaRespondida = document.getElementById('solicitud-ya-respondida');
+const solicitudComentarios = document.getElementById('solicitud-comentarios');
+const tarjetaComentariosRespondida = document.getElementById('tarjeta-comentarios-respondida');
+const solicitudComentariosRespondida = document.getElementById('solicitud-comentarios-respondida');
 
 function renderizarItems(items, soloLectura) {
   tablaItemsSolicitud.innerHTML = items.map((it) => `
@@ -82,6 +85,10 @@ async function cargar() {
   renderizarItems(solicitud.items, yaRespondida);
   formRespuestaProveedor.hidden = yaRespondida;
   solicitudYaRespondida.hidden = !yaRespondida;
+  tarjetaComentariosRespondida.hidden = !yaRespondida || !solicitud.comentarios;
+  if (yaRespondida) {
+    solicitudComentariosRespondida.textContent = solicitud.comentarios || '';
+  }
 }
 
 formRespuestaProveedor.addEventListener('submit', async (e) => {
@@ -98,7 +105,7 @@ formRespuestaProveedor.addEventListener('submit', async (e) => {
   const res = await fetch(`/api/rfq/${encodeURIComponent(token)}/responder`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items }),
+    body: JSON.stringify({ items, comentarios: solicitudComentarios.value.trim() }),
   });
   btn.disabled = false;
 

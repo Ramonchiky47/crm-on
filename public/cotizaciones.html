@@ -213,6 +213,7 @@
                     <label class="campo-angosto">
                       Etapa
                       <select id="cotizacion-etapa" required>
+                        <option value="Pendiente">Pendiente</option>
                         <option value="Negociacion">Negociación</option>
                         <option value="Ganada">Ganada</option>
                         <option value="Perdida">Perdida</option>
@@ -318,7 +319,7 @@
                   <table>
                     <thead>
                       <tr>
-                        <th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th title="Si se desmarca, esta partida no suma IVA">Causa impuesto</th><th>Total</th><th></th><th></th>
+                        <th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th title="Si se desmarca, esta partida no suma IVA">Causa impuesto</th><th>Total</th><th>Cotización proveedor</th><th></th><th></th>
                       </tr>
                     </thead>
                     <tbody id="tabla-partidas"></tbody>
@@ -373,6 +374,9 @@
         <div class="multi-select" id="filtro-cot-etapa-wrap">
           <button type="button" id="filtro-cot-etapa-btn" class="multi-select-btn">Todas las etapas</button>
           <div id="filtro-cot-etapa-panel" class="multi-select-panel" hidden>
+            <label class="multi-select-opcion">
+              <input type="checkbox" value="Pendiente" /><span class="multi-select-texto">Pendiente</span>
+            </label>
             <label class="multi-select-opcion">
               <input type="checkbox" value="Negociacion" /><span class="multi-select-texto">Negociación</span>
             </label>

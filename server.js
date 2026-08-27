@@ -2458,8 +2458,8 @@ app.post('/api/cotizaciones', requirePermiso('catalogos', 'editar'), ar(async (r
   if (!nombre) return res.status(400).json({ errores: ['nombre es requerido'] });
   if (!['USD', 'MXN'].includes(req.body.moneda)) return res.status(400).json({ errores: ['moneda debe ser USD o MXN'] });
   const etapa = req.body.etapa || 'Negociacion';
-  if (!['Negociacion', 'Ganada', 'Perdida'].includes(etapa)) {
-    return res.status(400).json({ errores: ['etapa debe ser Negociacion, Ganada o Perdida'] });
+  if (!['Pendiente', 'Negociacion', 'Ganada', 'Perdida'].includes(etapa)) {
+    return res.status(400).json({ errores: ['etapa debe ser Pendiente, Negociacion, Ganada o Perdida'] });
   }
 
   // El negocio ahora es opcional: se reserva para proyectos a largo plazo que ameritan seguir
@@ -2500,7 +2500,7 @@ app.post('/api/cotizaciones', requirePermiso('catalogos', 'editar'), ar(async (r
   // fecha_cierre = cuando se gano/perdio (no cuando se creo), para que "Cotizaciones ganadas/
   // perdidas" del panel cuenten por el periodo en que se cerro el trato, no por el de creacion
   // (una cotizacion creada hace un mes y ganada hoy debe contar como ganada "esta semana").
-  const fechaCierreInicial = etapa !== 'Negociacion';
+  const fechaCierreInicial = ['Ganada', 'Perdida'].includes(etapa);
 
   await transaction(async (db) => {
     await db.prepare(`
@@ -2540,8 +2540,8 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
   if (!nombre) return res.status(400).json({ errores: ['nombre es requerido'] });
   if (!['USD', 'MXN'].includes(req.body.moneda)) return res.status(400).json({ errores: ['moneda debe ser USD o MXN'] });
   const etapa = req.body.etapa || 'Negociacion';
-  if (!['Negociacion', 'Ganada', 'Perdida'].includes(etapa)) {
-    return res.status(400).json({ errores: ['etapa debe ser Negociacion, Ganada o Perdida'] });
+  if (!['Pendiente', 'Negociacion', 'Ganada', 'Perdida'].includes(etapa)) {
+    return res.status(400).json({ errores: ['etapa debe ser Pendiente, Negociacion, Ganada o Perdida'] });
   }
 
   // El negocio ahora es opcional (ver nota en el POST): solo se valida si se mando alguno.
@@ -2578,7 +2578,7 @@ app.put('/api/cotizaciones/:id', requirePermiso('catalogos', 'editar'), ar(async
   // etapa y se guarda de nuevo sin cambiarla, se conserva la fecha_cierre original.
   let fechaCierreSql = 'fecha_cierre';
   if (etapa !== existente.etapa) {
-    fechaCierreSql = etapa === 'Negociacion' ? 'NULL' : '(CURRENT_DATE)::text';
+    fechaCierreSql = ['Ganada', 'Perdida'].includes(etapa) ? '(CURRENT_DATE)::text' : 'NULL';
   }
 
   await transaction(async (db) => {
@@ -3225,7 +3225,7 @@ app.get('/api/ordenes/:id/cotizaciones-candidatas', requirePermiso('ordenes', 'v
   const cotizaciones = (await db.prepare(`
     ${SELECT_COTIZACIONES}
     WHERE q.id_cotizacion IN (SELECT cotizacion_id FROM cotizacion_destinos WHERE destino_id = ?)
-      AND q.etapa = 'Negociacion'
+      AND q.etapa IN ('Negociacion', 'Pendiente')
   `).all(orden.destino_id)).map(conEstatus).filter((c) => c.estatus === 'Vigente');
 
   res.json(cotizaciones);
@@ -3241,7 +3241,7 @@ app.put('/api/ordenes/:id/asociar-cotizacion', requirePermiso('ordenes', 'editar
   const destinoValido = cotizacion && orden.destino_id && await db.prepare(
     'SELECT 1 FROM cotizacion_destinos WHERE cotizacion_id = ? AND destino_id = ?'
   ).get(cotizacion.id_cotizacion, orden.destino_id);
-  if (!cotizacion || !destinoValido || cotizacion.etapa !== 'Negociacion') {
+  if (!cotizacion || !destinoValido || !['Negociacion', 'Pendiente'].includes(cotizacion.etapa)) {
     return res.status(400).json({ errores: ['La cotización no es una candidata válida para esta orden'] });
   }
 
@@ -3945,6 +3945,7 @@ app.get('/api/rfq/:token', ar(async (req, res) => {
     lugar_entrega: solicitud.lugar_entrega,
     estatus: solicitud.estatus,
     fecha_creacion: solicitud.fecha_creacion,
+    comentarios: solicitud.comentarios,
     items: items.map((it) => ({
       id: it.id, cantidad: it.cantidad, codigo: it.codigo, descripcion: it.descripcion, marca: it.marca,
       precio_venta: it.precio_venta, tiempo_entrega: it.tiempo_entrega,
@@ -3962,8 +3963,8 @@ app.post('/api/rfq/:token/responder', ar(async (req, res) => {
     await db.prepare('UPDATE solicitud_proveedor_items SET precio_venta = ?, tiempo_entrega = ? WHERE id = ? AND solicitud_id = ?')
       .run(numeroOpcional(r.precio_venta), (r.tiempo_entrega || '').trim() || null, r.id, solicitud.id_solicitud);
   }
-  await db.prepare("UPDATE solicitudes_proveedor SET estatus = 'Respondida', fecha_respuesta = to_char(now(), 'YYYY-MM-DD HH24:MI:SS') WHERE id_solicitud = ?")
-    .run(solicitud.id_solicitud);
+  await db.prepare("UPDATE solicitudes_proveedor SET estatus = 'Respondida', fecha_respuesta = to_char(now(), 'YYYY-MM-DD HH24:MI:SS'), comentarios = ? WHERE id_solicitud = ?")
+    .run((req.body.comentarios || '').trim() || null, solicitud.id_solicitud);
 
   res.json({ ok: true });
 }));
@@ -4575,7 +4576,7 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
     // Cotizaciones vencidas que siguen en Negociacion (no se cerraron Ganada/Perdida antes de
     // caducar): son las que necesitan mantenimiento, ya sea renovar la fecha o cerrarlas.
     resultado.cotizacionesVencidas = cotizaciones
-      .filter((c) => c.estatus === 'Vencido' && c.etapa === 'Negociacion')
+      .filter((c) => c.estatus === 'Vencido' && ['Negociacion', 'Pendiente'].includes(c.etapa))
       .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento))
       .slice(0, 6)
       .map((c) => ({
@@ -4594,7 +4595,7 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
     // compromiso ya paso. A diferencia de "Cotizaciones vencidas" (la cotizacion en si caduco),
     // esto es sobre el seguimiento del vendedor, no sobre la validez de la cotizacion.
     resultado.seguimientosAtrasados = cotizaciones
-      .filter((c) => c.etapa === 'Negociacion' && c.fecha_seguimiento && c.fecha_seguimiento < hoy)
+      .filter((c) => ['Negociacion', 'Pendiente'].includes(c.etapa) && c.fecha_seguimiento && c.fecha_seguimiento < hoy)
       .sort((a, b) => a.fecha_seguimiento.localeCompare(b.fecha_seguimiento))
       .map((c) => ({
         id_cotizacion: c.id_cotizacion, nombre: c.nombre, destino_nombre: c.destino_nombre,
@@ -4722,7 +4723,7 @@ app.get('/api/cron/seguimiento', ar(async (req, res) => {
   // Cotizaciones vigentes (etapa Negociacion) que vencen pronto, cuyo negocio no vaya a recibir
   // ya una tarea por inactividad y que tampoco tenga una de Seguimiento abierta.
   const cotizacionesPorVencer = cotizaciones.filter((c) => {
-    if (!c.negocio_id || !c.fecha_vencimiento || c.etapa !== 'Negociacion') return false;
+    if (!c.negocio_id || !c.fecha_vencimiento || !['Negociacion', 'Pendiente'].includes(c.etapa)) return false;
     if (idsNegociosInactivos.has(c.negocio_id) || negociosConSeguimientoAbierto.has(c.negocio_id)) return false;
     const dias = diasDesde(c.fecha_vencimiento) * -1;
     return dias >= 0 && dias <= DIAS_ANTES_DE_VENCER_COTIZACION;

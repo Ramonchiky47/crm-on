@@ -63,10 +63,23 @@
           </div>
         </div>
 
+        <div class="tarjeta" style="margin-top: 1.1rem;">
+          <h3>Comentarios</h3>
+          <div class="campo-cot">
+            <label class="etiqueta-cot" for="solicitud-comentarios" style="display: block; margin-bottom: 0.4rem;">¿Algo que debamos saber? (opcional)</label>
+            <textarea id="solicitud-comentarios" rows="4" placeholder="Ej. disponibilidad, condiciones de pago, vigencia de precios…" style="width: 100%; box-sizing: border-box; resize: vertical;"></textarea>
+          </div>
+        </div>
+
         <div class="acciones-form" style="margin-top: 1.1rem;">
           <button type="submit" class="btn-marca" id="btn-enviar-respuesta">Enviar cotización</button>
         </div>
       </form>
+
+      <div class="tarjeta" id="tarjeta-comentarios-respondida" style="margin-top: 1.1rem;" hidden>
+        <h3>Comentarios</h3>
+        <p class="valor-cot" id="solicitud-comentarios-respondida"></p>
+      </div>
 
       <p class="pista" id="solicitud-ya-respondida" hidden>Ya enviaste tu respuesta para esta solicitud. Gracias.</p>
     </div>

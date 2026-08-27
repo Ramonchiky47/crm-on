@@ -1359,7 +1359,7 @@ const formSolicitudProveedor = document.getElementById('form-solicitud-proveedor
 const solicitudProductoCodigo = document.getElementById('solicitud-producto-codigo');
 const solicitudProductoDescripcion = document.getElementById('solicitud-producto-descripcion');
 const solicitudProductoCantidad = document.getElementById('solicitud-producto-cantidad');
-const solicitudMarca = document.getElementById('solicitud-marca');
+const solicitudProductoMarca = document.getElementById('solicitud-producto-marca');
 const solicitudProveedorSelect = document.getElementById('solicitud-proveedor');
 const solicitudLugarEntrega = document.getElementById('solicitud-lugar-entrega');
 const solicitudProveedorResultado = document.getElementById('solicitud-proveedor-resultado');
@@ -1381,8 +1381,9 @@ function abrirModalSolicitudProveedor(partida) {
   const producto = productosCache.find((p) => p.item === partida.producto_item);
   solicitudProductoCodigo.textContent = partida.producto_item || '';
   solicitudProductoDescripcion.textContent = (producto && producto.descripcion) || '';
+  // La marca viene del catalogo de Articulos (productos.marca_id), no se captura a mano.
+  solicitudProductoMarca.textContent = (producto && producto.marca_nombre) || 'Sin marca en el catálogo';
   solicitudProductoCantidad.textContent = partida.cantidad;
-  solicitudMarca.value = '';
   solicitudProveedorSelect.value = '';
   solicitudLugarEntrega.value = cotizacionLugarEntrega.value || '';
   formSolicitudProveedor.hidden = false;
@@ -1416,7 +1417,7 @@ formSolicitudProveedor.addEventListener('submit', async (e) => {
         cantidad: partidaParaSolicitud.cantidad,
         codigo: partidaParaSolicitud.producto_item,
         descripcion: solicitudProductoDescripcion.textContent,
-        marca: solicitudMarca.value.trim(),
+        marca: (productosCache.find((p) => p.item === partidaParaSolicitud.producto_item) || {}).marca_nombre || '',
       }],
     }),
   });

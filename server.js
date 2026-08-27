@@ -2278,7 +2278,9 @@ const SELECT_COTIZACIONES = `
 // como para el Cierre estimado de un negocio.
 function estatusCotizacion(fechaVencimiento) {
   if (!fechaVencimiento) return 'Vigente';
-  const hoy = new Date().toISOString().slice(0, 10);
+  // Hora de Mexico (America/Mexico_City), no UTC de Node: evita que "hoy" se adelante un dia
+  // por la tarde/noche en Mexico (ver misma nota en /api/panel/resumen).
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
   return hoy > fechaVencimiento ? 'Vencido' : 'Vigente';
 }
 
@@ -3895,6 +3897,31 @@ async function itemsDeSolicitudProveedor(solicitudId) {
   return db.prepare('SELECT * FROM solicitud_proveedor_items WHERE solicitud_id = ? ORDER BY id').all(solicitudId);
 }
 
+// fecha_creacion/fecha_respuesta se guardan como texto 'YYYY-MM-DD HH24:MI:SS' en hora de Mexico
+// (America/Mexico_City, sin horario de verano desde 2022), asi que restar sus milisegundos como
+// si fueran UTC da directamente la duracion real transcurrida entre una y otra.
+function parseFechaHoraMexico(texto) {
+  const [fecha, hora] = texto.split(' ');
+  const [y, m, d] = fecha.split('-').map(Number);
+  const [hh, mm, ss] = (hora || '00:00:00').split(':').map(Number);
+  return Date.UTC(y, m - 1, d, hh, mm, ss || 0);
+}
+
+// Indicador de cuanto tardo el proveedor en responder, para dar seguimiento a su rapidez.
+function tiempoRespuestaSolicitud(fechaCreacion, fechaRespuesta) {
+  if (!fechaCreacion || !fechaRespuesta) return null;
+  const ms = parseFechaHoraMexico(fechaRespuesta) - parseFechaHoraMexico(fechaCreacion);
+  if (ms < 0) return null;
+  const totalHoras = Math.floor(ms / 3600000);
+  const dias = Math.floor(totalHoras / 24);
+  const horas = totalHoras % 24;
+  return { dias, horas, texto: dias > 0 ? `${dias}d ${horas}h` : `${horas}h` };
+}
+
+function conTiempoRespuesta(solicitud) {
+  return { ...solicitud, tiempo_respuesta: tiempoRespuestaSolicitud(solicitud.fecha_creacion, solicitud.fecha_respuesta) };
+}
+
 async function solicitudProveedorConDetalle(id) {
   const cabecera = await db.prepare(`${SELECT_SOLICITUDES_PROVEEDOR} WHERE s.id_solicitud = ?`).get(id);
   if (!cabecera) return null;
@@ -3907,7 +3934,7 @@ app.get('/api/cotizaciones/:id/solicitudes-proveedor', requirePermiso('catalogos
   if (!cotizacion || !esDueno(cotizacion, req)) return res.status(404).json({ error: 'Cotizacion no encontrada' });
 
   const filas = await db.prepare(`${SELECT_SOLICITUDES_PROVEEDOR} WHERE s.cotizacion_id = ? ORDER BY s.fecha_creacion DESC`).all(req.params.id);
-  const conItems = await Promise.all(filas.map(async (f) => ({ ...f, items: await itemsDeSolicitudProveedor(f.id_solicitud) })));
+  const conItems = await Promise.all(filas.map(async (f) => ({ ...conTiempoRespuesta(f), items: await itemsDeSolicitudProveedor(f.id_solicitud) })));
   res.json(conItems);
 }));
 
@@ -3996,7 +4023,7 @@ app.get('/api/rfq/:token', ar(async (req, res) => {
     comentarios: solicitud.comentarios,
     items: items.map((it) => ({
       id: it.id, cantidad: it.cantidad, codigo: it.codigo, descripcion: it.descripcion, marca: it.marca,
-      precio_venta: it.precio_venta, tiempo_entrega: it.tiempo_entrega,
+      precio_venta: it.precio_venta, tiempo_entrega: it.tiempo_entrega, comentarios: it.comentarios,
     })),
   });
 }));
@@ -4005,8 +4032,8 @@ async function responderSolicitudProveedor(solicitud, body) {
   const respuestas = Array.isArray(body.items) ? body.items : [];
   for (const r of respuestas) {
     if (!r.id) continue;
-    await db.prepare('UPDATE solicitud_proveedor_items SET precio_venta = ?, tiempo_entrega = ? WHERE id = ? AND solicitud_id = ?')
-      .run(numeroOpcional(r.precio_venta), (r.tiempo_entrega || '').trim() || null, r.id, solicitud.id_solicitud);
+    await db.prepare('UPDATE solicitud_proveedor_items SET precio_venta = ?, tiempo_entrega = ?, comentarios = ? WHERE id = ? AND solicitud_id = ?')
+      .run(numeroOpcional(r.precio_venta), (r.tiempo_entrega || '').trim() || null, (r.comentarios || '').trim() || null, r.id, solicitud.id_solicitud);
   }
   await db.prepare("UPDATE solicitudes_proveedor SET estatus = 'Respondida', fecha_respuesta = to_char(now(), 'YYYY-MM-DD HH24:MI:SS'), comentarios = ? WHERE id_solicitud = ?")
     .run((body.comentarios || '').trim() || null, solicitud.id_solicitud);
@@ -4081,6 +4108,7 @@ app.get('/api/proveedor-portal/solicitudes', requireProveedor, ar(async (req, re
   const conItems = await Promise.all(filas.map(async (f) => ({
     id_solicitud: f.id_solicitud, destino_nombre: f.destino_nombre, contacto_nombre: f.contacto_nombre,
     lugar_entrega: f.lugar_entrega, estatus: f.estatus, fecha_creacion: f.fecha_creacion, comentarios: f.comentarios,
+    tiempo_respuesta: tiempoRespuestaSolicitud(f.fecha_creacion, f.fecha_respuesta),
     items: await itemsDeSolicitudProveedor(f.id_solicitud),
   })));
   res.json(conItems);

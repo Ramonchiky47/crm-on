@@ -68,9 +68,11 @@ function abrirDetalle(solicitud, editable) {
     if (editable) {
       tr.querySelector('.item-precio-venta').value = it.precio_venta ?? '';
       tr.querySelector('.item-tiempo-entrega').value = it.tiempo_entrega || '';
+      tr.querySelector('.item-comentarios').value = it.comentarios || '';
     } else {
       tr.querySelector('.celda-precio').textContent = it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio';
       tr.querySelector('.celda-tiempo').textContent = it.tiempo_entrega || 'sin tiempo de entrega';
+      tr.querySelector('.celda-comentarios').textContent = it.comentarios || '';
     }
     detalleTablaItems.appendChild(fila);
   });
@@ -101,6 +103,7 @@ function renderizarTablas() {
       <td>${escaparHtml(s.destino_nombre || 'Sin especificar')}</td>
       <td>${escaparHtml(s.lugar_entrega || 'Sin especificar')}</td>
       <td>${escaparHtml(resumenProductos(s.items))}</td>
+      <td>${s.tiempo_respuesta ? escaparHtml(s.tiempo_respuesta.texto) : ''}</td>
       <td><button type="button" class="btn-mini btn-abrir-respondida" data-id="${escaparHtml(s.id_solicitud)}">Ver</button></td>
     </tr>
   `).join('');
@@ -139,6 +142,7 @@ formDetalleSolicitud.addEventListener('submit', async (e) => {
     id: Number(tr.dataset.id),
     precio_venta: tr.querySelector('.item-precio-venta').value,
     tiempo_entrega: tr.querySelector('.item-tiempo-entrega').value,
+    comentarios: tr.querySelector('.item-comentarios').value,
   }));
   const comentarios = detalleComentarios.value.trim();
 

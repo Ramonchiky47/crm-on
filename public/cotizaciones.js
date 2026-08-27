@@ -1524,10 +1524,11 @@ async function cargarSolicitudesProveedor() {
         <strong>${escaparHtml(s.proveedor_nombre || '')}</strong>
         — ${escaparHtml((s.items || []).map((it) => `${it.codigo} (x${it.cantidad})`).join(', '))}
         ${pillEstatusSolicitud(s.estatus)}
+        ${s.tiempo_respuesta ? `<span class="pista">Respondió en ${escaparHtml(s.tiempo_respuesta.texto)}</span>` : ''}
       </div>
       ${s.estatus === 'Respondida' ? `
         <div class="pista">
-          ${(s.items || []).map((it) => `${escaparHtml(it.codigo)}: ${it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio'} — ${escaparHtml(it.tiempo_entrega || 'sin tiempo de entrega')}`).join('<br>')}
+          ${(s.items || []).map((it) => `${escaparHtml(it.codigo)}: ${it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio'} — ${escaparHtml(it.tiempo_entrega || 'sin tiempo de entrega')}${it.comentarios ? ` (${escaparHtml(it.comentarios)})` : ''}`).join('<br>')}
           ${s.comentarios ? `<br><strong>Comentarios del proveedor:</strong> ${escaparHtml(s.comentarios)}` : ''}
         </div>
         <button type="button" class="btn-mini btn-copiar-solicitud-a-cotizacion" data-id="${escaparHtml(s.id_solicitud)}">Copiar a la cotización</button>

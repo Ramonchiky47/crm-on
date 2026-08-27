@@ -51,6 +51,11 @@ function renderizarItems(items, soloLectura) {
           ? escaparHtml(it.tiempo_entrega || 'Sin capturar')
           : `<input type="text" class="item-tiempo-entrega" placeholder="Ej. 2 a 3 semanas" value="${escaparHtml(it.tiempo_entrega || '')}" required />`}
       </td>
+      <td>
+        ${soloLectura
+          ? escaparHtml(it.comentarios || '')
+          : `<input type="text" class="item-comentarios" placeholder="Opcional" value="${escaparHtml(it.comentarios || '')}" />`}
+      </td>
     </tr>
   `).join('');
 }
@@ -98,6 +103,7 @@ formRespuestaProveedor.addEventListener('submit', async (e) => {
     id: Number(tr.dataset.id),
     precio_venta: tr.querySelector('.item-precio-venta').value,
     tiempo_entrega: tr.querySelector('.item-tiempo-entrega').value,
+    comentarios: tr.querySelector('.item-comentarios').value,
   }));
 
   const btn = document.getElementById('btn-enviar-respuesta');

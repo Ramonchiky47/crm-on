@@ -44,7 +44,7 @@
           <div class="tabla-scroll">
             <table id="tabla-respondidas" hidden>
               <thead>
-                <tr><th>Hotel / Local</th><th>Lugar de entrega</th><th>Productos cotizados</th><th></th></tr>
+                <tr><th>Hotel / Local</th><th>Lugar de entrega</th><th>Productos cotizados</th><th>Tiempo de respuesta</th><th></th></tr>
               </thead>
               <tbody></tbody>
             </table>
@@ -69,13 +69,13 @@
           <div class="tabla-scroll" style="margin-top: 0.7rem;">
             <table>
               <thead>
-                <tr><th>Código</th><th>Descripción</th><th>Marca</th><th>Cantidad</th><th>Precio de venta</th><th>Tiempo de entrega</th></tr>
+                <tr><th>Código</th><th>Descripción</th><th>Marca</th><th>Cantidad</th><th>Precio de venta</th><th>Tiempo de entrega</th><th>Comentarios</th></tr>
               </thead>
               <tbody class="tabla-items"></tbody>
             </table>
           </div>
           <label style="display: block; margin-top: 0.7rem;">
-            <span class="etiqueta-cot" style="display: block; margin-bottom: 0.3rem;">Comentarios (opcional)</span>
+            <span class="etiqueta-cot" style="display: block; margin-bottom: 0.3rem;">Comentarios generales (opcional)</span>
             <textarea class="campo-comentarios" rows="2" style="width: 100%; box-sizing: border-box;"></textarea>
           </label>
           <div class="acciones-form" style="margin-top: 0.7rem;">
@@ -94,6 +94,7 @@
       <td class="num celda-cantidad"></td>
       <td><input type="number" class="item-precio-venta" step="0.01" min="0" required /></td>
       <td><input type="text" class="item-tiempo-entrega" placeholder="Ej. 2 a 3 semanas" required /></td>
+      <td><input type="text" class="item-comentarios" placeholder="Opcional" /></td>
     </tr>
   </template>
 
@@ -105,6 +106,7 @@
       <td class="num celda-cantidad"></td>
       <td class="celda-precio"></td>
       <td class="celda-tiempo"></td>
+      <td class="celda-comentarios"></td>
     </tr>
   </template>
 

@@ -3886,11 +3886,13 @@ async function generarIdSolicitudProveedor() {
 const SELECT_SOLICITUDES_PROVEEDOR = `
   SELECT s.*, p.nombre AS proveedor_nombre, p.empresa AS proveedor_empresa,
     p.correo_electronico AS proveedor_correo, p.telefono AS proveedor_telefono,
-    d.destino AS destino_nombre, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre
+    d.destino AS destino_nombre, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre,
+    q.nombre AS cotizacion_nombre
   FROM solicitudes_proveedor s
   LEFT JOIN proveedores p ON p.id_proveedor = s.proveedor_id
   LEFT JOIN destinos d ON d.id_destino = s.destino_id
   LEFT JOIN contactos c ON c.id_contacto = s.contacto_id
+  LEFT JOIN cotizaciones q ON q.id_cotizacion = s.cotizacion_id
 `;
 
 async function itemsDeSolicitudProveedor(solicitudId) {
@@ -3927,6 +3929,22 @@ async function solicitudProveedorConDetalle(id) {
   if (!cabecera) return null;
   return { ...cabecera, items: await itemsDeSolicitudProveedor(id) };
 }
+
+// Todas las solicitudes a proveedor de todas las cotizaciones (catalogo global, no atado a una
+// cotizacion en particular): mismo alcance privado que Cotizaciones/Contactos/Destinos (cada
+// usuario ve solo lo que el mismo creo, salvo administrador).
+app.get('/api/solicitudes-proveedor', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
+  const condiciones = [];
+  const parametros = [];
+  if (!req.session.esAdmin) {
+    condiciones.push('s.usuario_id = ?');
+    parametros.push(req.session.usuarioId);
+  }
+  const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+  const filas = await db.prepare(`${SELECT_SOLICITUDES_PROVEEDOR} ${where} ORDER BY s.fecha_creacion DESC`).all(...parametros);
+  const conItems = await Promise.all(filas.map(async (f) => ({ ...conTiempoRespuesta(f), items: await itemsDeSolicitudProveedor(f.id_solicitud) })));
+  res.json(conItems);
+}));
 
 // Solicitudes ya mandadas para esta cotizacion (para mostrar su estatus/respuesta en la pantalla).
 app.get('/api/cotizaciones/:id/solicitudes-proveedor', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {

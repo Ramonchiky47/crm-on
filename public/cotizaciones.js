@@ -1633,6 +1633,74 @@ listaSolicitudesProveedor.addEventListener('click', async (e) => {
   alert(`Se actualizó el precio de ${data.actualizados} producto(s) en la cotización.`);
 });
 
+// ---- Catalogo global de solicitudes a proveedor (todas las cotizaciones, subtab propio) ----
+
+const tablaSolicitudesProveedorGlobal = document.getElementById('tabla-solicitudes-proveedor-global');
+const filtroSolpProveedor = document.getElementById('filtro-solp-proveedor');
+const filtroSolpCotizacion = document.getElementById('filtro-solp-cotizacion');
+const filtroSolpDestino = document.getElementById('filtro-solp-destino');
+const filtroSolpEstatus = document.getElementById('filtro-solp-estatus');
+
+let solicitudesProveedorGlobalCache = [];
+
+function renderizarSolicitudesProveedorGlobal(lista) {
+  tablaSolicitudesProveedorGlobal.innerHTML = lista.map((s) => `
+    <tr class="fila-clicable" data-cotizacion-id="${escaparHtml(s.cotizacion_id)}">
+      <td>${escaparHtml(s.fecha_creacion || '')}</td>
+      <td>${escaparHtml(s.proveedor_nombre || '')}</td>
+      <td>${escaparHtml(s.cotizacion_nombre || '')} <span class="pista">(${escaparHtml(s.cotizacion_id)})</span></td>
+      <td>${escaparHtml(s.destino_nombre || '')}</td>
+      <td>${escaparHtml((s.items || []).map((it) => `${it.codigo} (x${it.cantidad})`).join(', '))}</td>
+      <td>${pillEstatusSolicitud(s.estatus)}</td>
+      <td>${s.tiempo_respuesta ? escaparHtml(s.tiempo_respuesta.texto) : ''}</td>
+      <td class="acciones">
+        <button type="button" class="btn-mini btn-copiar-liga-solicitud" data-token="${escaparHtml(s.token_publico)}" title="Liga única de esta solicitud, sin necesidad de iniciar sesión">Copiar liga</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function aplicarFiltrosSolicitudesProveedorGlobal() {
+  const filtradas = solicitudesProveedorGlobalCache.filter((s) =>
+    coincideTexto(s.proveedor_nombre, filtroSolpProveedor.value.trim())
+    && (coincideTexto(s.cotizacion_nombre, filtroSolpCotizacion.value.trim()) || coincideTexto(s.cotizacion_id, filtroSolpCotizacion.value.trim()))
+    && coincideTexto(s.destino_nombre, filtroSolpDestino.value.trim())
+    && (!filtroSolpEstatus.value || s.estatus === filtroSolpEstatus.value)
+  );
+  renderizarSolicitudesProveedorGlobal(filtradas);
+}
+
+async function cargarSolicitudesProveedorGlobal() {
+  const res = await fetch('/api/solicitudes-proveedor');
+  solicitudesProveedorGlobalCache = res.ok ? await res.json() : [];
+  aplicarFiltrosSolicitudesProveedorGlobal();
+}
+
+[filtroSolpProveedor, filtroSolpCotizacion, filtroSolpDestino].forEach((input) => {
+  input.addEventListener('input', aplicarFiltrosSolicitudesProveedorGlobal);
+});
+filtroSolpEstatus.addEventListener('change', aplicarFiltrosSolicitudesProveedorGlobal);
+
+tablaSolicitudesProveedorGlobal.addEventListener('click', async (e) => {
+  if (e.target.classList.contains('btn-copiar-liga-solicitud')) {
+    const liga = `${window.location.origin}/solicitud-proveedor.html?token=${e.target.dataset.token}`;
+    try {
+      await navigator.clipboard.writeText(liga);
+    } catch {
+      prompt('Copia la liga:', liga);
+      return;
+    }
+    const textoOriginal = e.target.textContent;
+    e.target.textContent = 'Copiada';
+    setTimeout(() => { e.target.textContent = textoOriginal; }, 1500);
+    return;
+  }
+  if (e.target.closest('button')) return;
+  const fila = e.target.closest('tr');
+  if (!fila || !fila.dataset.cotizacionId) return;
+  abrirDetalleCotizacion(fila.dataset.cotizacionId);
+});
+
 // ---- Alta / edicion de la cotizacion ----
 
 // ---- Fecha de creacion / Fecha de vencimiento ----
@@ -2839,6 +2907,7 @@ promesaAuth.then(async (sesion) => {
     cargarCotizaciones();
     restaurarCotizacionPendienteProducto();
   });
+  cargarSolicitudesProveedorGlobal();
   cargarProveedoresCotizacion();
 
   const parametros = new URLSearchParams(window.location.search);
@@ -2892,4 +2961,5 @@ promesaAuth.then(async (sesion) => {
   suscribirTiempoReal(['cotizaciones', 'cotizacion_items'], cargarCotizaciones);
   suscribirTiempoReal(['contactos', 'destinos', 'productos', 'representantes'], poblarSelectsCotizacion);
   suscribirTiempoReal(['etapas_negocio'], poblarSelectsNegocio);
+  suscribirTiempoReal(['solicitudes_proveedor', 'solicitud_proveedor_items'], cargarSolicitudesProveedorGlobal);
 });

@@ -31,6 +31,10 @@
         <h3>Visualización de cotizaciones</h3>
         <p>Listado y detalle de cotizaciones</p>
       </button>
+      <button type="button" class="tarjeta-subcatalogo" data-subtab="solicitudes-proveedor">
+        <h3>Solicitudes a proveedor</h3>
+        <p>Todas las solicitudes de cotización mandadas a proveedores, de cualquier cotización</p>
+      </button>
     </div>
 
     <div data-subpanel="negocios">
@@ -415,6 +419,34 @@
             </tr>
           </thead>
           <tbody id="tabla-cotizaciones"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div data-subpanel="solicitudes-proveedor" hidden>
+      <h2>Solicitudes a proveedor</h2>
+      <p class="pista">Todas las solicitudes de cotización mandadas a proveedores, de cualquier cotización. Da clic en un renglón para abrir su cotización.</p>
+
+      <div class="fila-filtros">
+        <input type="text" id="filtro-solp-proveedor" placeholder="Proveedor" />
+        <input type="text" id="filtro-solp-cotizacion" placeholder="Cotización (ID o nombre)" />
+        <input type="text" id="filtro-solp-destino" placeholder="Hotel / Local" />
+        <select id="filtro-solp-estatus">
+          <option value="">Todos los estatus</option>
+          <option value="Pendiente">Pendiente</option>
+          <option value="Respondida">Respondida</option>
+        </select>
+      </div>
+
+      <div class="tabla-scroll tabla-alto-fijo">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Proveedor</th><th>Cotización</th><th>Hotel / Local</th><th>Productos</th>
+              <th>Estatus</th><th>Tiempo de respuesta</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="tabla-solicitudes-proveedor-global"></tbody>
         </table>
       </div>
     </div>

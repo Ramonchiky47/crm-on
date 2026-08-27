@@ -847,6 +847,10 @@ function filtrarDestinosPorContacto() {
     : destinosCache.filter((d) => idsPermitidos.has(String(d.id_destino)));
   poblarSelectMultiple(cotizacionDestino, opciones, 'id_destino', 'destino');
   marcarSeleccionMultiple(cotizacionDestino, seleccionActual);
+  // El filtro puede haber vuelto invalida la seleccion anterior de Hotel/Local (ninguna opcion
+  // valida coincide con lo ya marcado): sin esto el campo se queda vacio en silencio, sin el
+  // borde rojo que avisa "falta capturar".
+  actualizarCampoVacio(cotizacionDestino);
   actualizarPistaAsociar();
 }
 
@@ -858,6 +862,9 @@ function filtrarContactosPorDestino() {
     destinoIds.forEach((did) => (contactosPorDestino.get(did) || new Set()).forEach((cid) => idsPermitidos.add(cid)));
   }
   filtrarSelectAsociado(cotizacionContacto, contactosCache, 'id_contacto', 'nombre_completo_correo', idsPermitidos);
+  // Mismo caso que arriba pero para Contacto: si el filtro lo vacio (el contacto que tenia
+  // capturado no esta asociado al Hotel/Local recien elegido), que se note con el borde rojo.
+  actualizarCampoVacio(cotizacionContacto);
   actualizarPistaAsociar();
 }
 
@@ -871,8 +878,13 @@ const pistaAsociar = document.getElementById('pista-asociar-contacto-destino');
 function actualizarPistaAsociar() {
   const contactoId = cotizacionContacto.value;
   const destinosElegidos = valoresSeleccionados(cotizacionDestino);
-  const destinoBloqueado = contactoId && cotizacionDestino.options.length === 0;
-  const contactoBloqueado = destinosElegidos.length > 0 && cotizacionContacto.options.length <= 1;
+  // Se avisa siempre que un lado tiene algo elegido y el otro se quedo vacio, sin importar si
+  // hay OTRAS opciones disponibles del lado vacio: aunque el Hotel/Local elegido tenga otros
+  // contactos asociados, el que ya se habia capturado se pudo haber limpiado por el filtro, y
+  // eso necesita avisarse igual (antes solo se avisaba si el lado vacio quedaba sin ninguna
+  // opcion, y un contacto recien limpiado en silencio se sentia como "se quedo en blanco").
+  const destinoBloqueado = Boolean(contactoId) && destinosElegidos.length === 0;
+  const contactoBloqueado = destinosElegidos.length > 0 && !contactoId;
 
   if (destinoBloqueado) {
     const nombre = cotizacionContacto.options[cotizacionContacto.selectedIndex]?.textContent || 'Este contacto';

@@ -2923,10 +2923,11 @@ promesaAuth.then(async (sesion) => {
 
   const parametros = new URLSearchParams(window.location.search);
 
-  // Enlaces directos a una pestana (ej. desde la barra lateral): ?tab=negocios o
-  // ?tab=visualizacion. "captura" tiene su propio manejo mas abajo porque ademas precarga datos.
+  // Enlaces directos a una pestana (ej. desde la barra lateral): ?tab=negocios,
+  // ?tab=visualizacion o ?tab=solicitudes-proveedor. "captura" tiene su propio manejo mas abajo
+  // porque ademas precarga datos.
   const tabDirecto = parametros.get('tab');
-  if (tabDirecto === 'negocios' || tabDirecto === 'visualizacion') activarSubtab(tabDirecto);
+  if (['negocios', 'visualizacion', 'solicitudes-proveedor'].includes(tabDirecto)) activarSubtab(tabDirecto);
 
   // Se llego desde una Tarea con actividad "Cotizacion": abre directo la captura de una
   // cotizacion nueva y recuerda la tarea para borrarla cuando se guarde.

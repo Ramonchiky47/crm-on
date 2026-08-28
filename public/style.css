@@ -771,11 +771,39 @@ button:disabled {
 
 .acciones-form-centrado { align-items: center; }
 
-/* Guardar/Cancelar de la captura de cotizacion: fijos al fondo del modal (que tiene su propio
-   scroll interno), para no tener que llegar hasta abajo del todo para encontrar Guardar. */
+/* Guardar/Cancelar de la captura de cotizacion: fijos al fondo del modal, para no tener que
+   llegar hasta abajo del todo (con scroll) para encontrar Guardar. Con position:sticky esta
+   barra se solapaba con la ultima partida de Productos (el contenido en flujo normal seguia
+   ocupando el mismo espacio que la barra "pegada"), asi que en vez de sticky, el modal completo
+   se vuelve una columna flex: el contenido (".cotizacion-scroll") es el unico que hace scroll y
+   la barra queda fuera de esa columna, en su propio espacio reservado. Solo aplica a este modal
+   (no a los demas que usan .modal-caja con su propio scroll normal). */
+#modal-cotizacion-overlay .modal-caja {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#modal-cotizacion-overlay .modal-cerrar,
+#modal-cotizacion-overlay .eyebrow-cot,
+#modal-cotizacion-overlay #titulo-form-cotizacion {
+  flex-shrink: 0;
+}
+#form-cotizacion {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.cotizacion-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  /* Compensa el padding-right que .modal-caja pierde por el scrollbar de esta columna, para que
+     el contenido no quede pegado al borde. */
+  padding-right: 2px;
+}
 .barra-guardar-cotizacion {
-  position: sticky;
-  bottom: 0;
+  flex-shrink: 0;
   margin: 1.1rem -1.5rem -1.5rem;
   padding: 0.9rem 1.5rem 1.5rem;
   background: var(--fondo-modal);

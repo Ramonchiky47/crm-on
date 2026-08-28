@@ -1395,6 +1395,7 @@ async function restaurarCotizacionPendienteProducto() {
     abrirFormCotizacion();
     cotizacionNombre.value = d.nombre || '';
     cotizacionNegocio.value = d.negocio_id || '';
+    poblarSelect(cotizacionContacto, contactosCache, 'id_contacto', 'nombre_completo_correo');
     cotizacionContacto.value = d.contacto_id || '';
     poblarSelectMultiple(cotizacionDestino, destinosCache, 'id_destino', 'destino');
     marcarSeleccionMultiple(cotizacionDestino, new Set((d.destino_ids || []).map(String)));
@@ -1773,6 +1774,12 @@ cotizacionVencimientoOpcion.addEventListener('change', actualizarVencimientoPorO
 function limpiarFormCotizacion() {
   cotizacionId.value = '';
   formCotizacion.reset();
+  // reset() solo regresa los VALORES a su default; si Contacto o Destino habian quedado
+  // filtrados por un cruce anterior (filtrarContactosPorDestino/filtrarDestinosPorContacto), sus
+  // <option> siguen siendo el subconjunto angosto. Se regresan aqui al catalogo completo para
+  // que una cotizacion nueva siempre arranque sin ese filtro heredado.
+  poblarSelect(cotizacionContacto, contactosCache, 'id_contacto', 'nombre_completo_correo');
+  poblarSelectMultiple(cotizacionDestino, destinosCache, 'id_destino', 'destino');
   actualizarLimiteDescuento();
   partidas = [];
   renderizarPartidas();
@@ -1984,6 +1991,7 @@ function cargarCotizacionEnFormulario(c) {
   cotizacionId.value = c.id_cotizacion;
   cotizacionNombre.value = c.nombre;
   cotizacionNegocio.value = c.negocio_id || '';
+  poblarSelect(cotizacionContacto, contactosCache, 'id_contacto', 'nombre_completo_correo');
   cotizacionContacto.value = c.contacto_id || '';
   poblarSelectMultiple(cotizacionDestino, destinosCache, 'id_destino', 'destino');
   marcarSeleccionMultiple(cotizacionDestino, new Set((c.destinos || []).map((d) => String(d.id_destino))));
@@ -2051,6 +2059,7 @@ async function clonarCotizacion(id) {
 
   cotizacionNombre.value = `${c.nombre} (copia)`;
   cotizacionNegocio.value = c.negocio_id || '';
+  poblarSelect(cotizacionContacto, contactosCache, 'id_contacto', 'nombre_completo_correo');
   cotizacionContacto.value = c.contacto_id || '';
   poblarSelectMultiple(cotizacionDestino, destinosCache, 'id_destino', 'destino');
   marcarSeleccionMultiple(cotizacionDestino, new Set((c.destinos || []).map((d) => String(d.id_destino))));

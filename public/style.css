@@ -771,6 +771,17 @@ button:disabled {
 
 .acciones-form-centrado { align-items: center; }
 
+/* Guardar/Cancelar de la captura de cotizacion: fijos al fondo del modal (que tiene su propio
+   scroll interno), para no tener que llegar hasta abajo del todo para encontrar Guardar. */
+.barra-guardar-cotizacion {
+  position: sticky;
+  bottom: 0;
+  margin: 1.1rem -1.5rem -1.5rem;
+  padding: 0.9rem 1.5rem 1.5rem;
+  background: var(--fondo-modal);
+  border-top: 1px solid var(--borde);
+}
+
 .chip-select {
   display: flex;
   align-items: center;
@@ -1797,11 +1808,37 @@ td.celda-check {
   margin-top: 1rem;
 }
 
-/* Paso 1 de la captura de cotizacion (datos generales, ver cotizaciones.html/js): ya no
-   comparte pantalla con la tabla de productos, es una columna suelta dentro de un modal ancho,
-   por eso estas reglas no dependen de ningun grid — solo evitan que los campos vivos
-   (inputs/selects) se amontonen y les dan el espaciado que .campo-cot ya tiene en la vista de
-   solo lectura. */
+/* Datos generales de la captura de cotizacion (ver cotizaciones.html/js): dos columnas para
+   aprovechar el ancho del modal (1100px) en vez de apilar las 4 tarjetas en una sola columna
+   angosta, que se sentia muy larga/amontonada. Se colapsa a una columna en ventanas angostas. */
+.detalle-cotizacion-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.1rem;
+  align-items: start;
+}
+
+.col-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+/* El espacio entre tarjetas ya lo da el gap de .col-datos; sin esto se sumaria tambien el
+   margin-bottom que .detalle-cotizacion-info .tarjeta define mas abajo (para cuando esas
+   tarjetas viven en una sola columna, sin gap), duplicando el espacio en la primera de cada
+   columna. Specificidad de 3 clases a proposito, para ganarle a esa regla sin importar el
+   orden en que aparezcan en el archivo. */
+.detalle-cotizacion-info .col-datos .tarjeta {
+  margin-bottom: 0;
+}
+
+@media (max-width: 860px) {
+  .detalle-cotizacion-info {
+    grid-template-columns: 1fr;
+  }
+}
+
 .detalle-cotizacion-info .tarjeta label {
   min-width: 150px;
 }
@@ -1840,6 +1877,75 @@ td.celda-check {
 }
 .detalle-negocio .tarjeta textarea {
   width: 100%;
+}
+
+/* Productos de la cotizacion en dos niveles en vez de una fila de tabla con 8 columnas: la
+   linea principal (Producto/Cantidad/Precio/Total) queda grande y legible, y lo que se usa
+   menos seguido (Causa impuesto, estatus de la solicitud a proveedor, Solicitar/Quitar) baja a
+   una linea secundaria mas discreta. */
+.partidas-encabezado, .fp-principal {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) 90px 130px 130px 32px;
+  gap: 0.7rem;
+  align-items: center;
+}
+.partidas-encabezado {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a8a8a;
+  padding: 0 0.15rem 0.5rem;
+  min-width: 620px;
+}
+.lista-partidas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 620px;
+}
+.fila-producto {
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+}
+.fp-principal .partida-cantidad,
+.fp-principal .partida-precio {
+  font-variant-numeric: tabular-nums;
+}
+.fp-principal .partida-total {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+}
+.btn-quitar-partida {
+  justify-self: end;
+  background: none;
+  border: none;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: #999;
+  cursor: pointer;
+  padding: 0.2rem;
+}
+.btn-quitar-partida:hover { color: var(--peligro); }
+
+.fp-secundaria {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed var(--borde);
+  font-size: 0.8rem;
+  color: #666;
+  flex-wrap: wrap;
+}
+.fp-secundaria label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
 }
 
 .detalle-cotizacion-productos .resumen-cotizacion {
@@ -1941,6 +2047,27 @@ td.celda-check {
   font-weight: 700;
   letter-spacing: -0.01em;
 }
+
+/* Cabecera colapsable de "Solicitudes a proveedor" en la captura de cotizacion: resumen de una
+   linea en vez del panel completo desplegado siempre, que empujaba todo lo demas hacia abajo. */
+.solp-resumen-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.solp-resumen-titulo { font-weight: 600; }
+.solp-resumen-texto { color: var(--texto-tenue, #666); font-size: 0.85rem; flex: 1; }
+.solp-resumen-flecha { transition: transform 0.15s ease; color: #999; }
+.solp-resumen-btn[aria-expanded="true"] .solp-resumen-flecha { transform: rotate(180deg); }
+#solp-detalle { margin-top: 0.9rem; }
 
 .eyebrow-cot {
   margin: 0 0 0.3rem;

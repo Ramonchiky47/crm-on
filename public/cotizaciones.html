@@ -194,124 +194,132 @@
               <!-- Arriba de todo, para que se vea de inmediato al abrir la cotizacion (sin tener
                    que ir al paso de Productos): que se solicito a cada proveedor y si ya respondio. -->
               <div class="tarjeta" id="tarjeta-solicitudes-proveedor" hidden>
-                <h3>Solicitudes a proveedor</h3>
-                <p class="pista">Cada solicitud tiene su propia liga (sin necesidad de que el proveedor inicie sesión). Si el proveedor ya tiene usuario y contraseña del <a href="proveedor-login.html" target="_blank">Portal de Proveedores</a>, ahí puede ver y responder todas sus solicitudes pendientes en un solo lugar.</p>
-                <div id="lista-solicitudes-proveedor"></div>
+                <button type="button" class="solp-resumen-btn" id="btn-toggle-solicitudes-proveedor">
+                  <span class="solp-resumen-titulo">Solicitudes a proveedor</span>
+                  <span class="solp-resumen-texto" id="solp-resumen-texto"></span>
+                  <span class="solp-resumen-flecha" aria-hidden="true">▾</span>
+                </button>
+                <div id="solp-detalle" hidden>
+                  <p class="pista">Cada solicitud tiene su propia liga (sin necesidad de que el proveedor inicie sesión). Si el proveedor ya tiene usuario y contraseña del <a href="proveedor-login.html" target="_blank">Portal de Proveedores</a>, ahí puede ver y responder todas sus solicitudes pendientes en un solo lugar.</p>
+                  <div id="lista-solicitudes-proveedor"></div>
+                </div>
               </div>
 
               <div class="detalle-cotizacion-info">
-                <div class="tarjeta">
-                  <h3>General</h3>
-                  <label>
-                    Nombre de cotización
-                    <input type="text" id="cotizacion-nombre" required />
-                  </label>
-                  <div class="fila">
+                <div class="col-datos">
+                  <div class="tarjeta">
+                    <h3>General</h3>
                     <label>
-                      Negocio (opcional, para proyectos a largo plazo)
+                      Nombre de cotización
+                      <input type="text" id="cotizacion-nombre" required />
+                    </label>
+                    <div class="fila">
+                      <label>
+                        Negocio (opcional, para proyectos a largo plazo)
+                        <span class="campo-con-boton">
+                          <select id="cotizacion-negocio"><option value="">-- Selecciona --</option></select>
+                          <button type="button" id="btn-nuevo-negocio" class="btn-mini" title="Agregar negocio nuevo">+</button>
+                        </span>
+                      </label>
+                      <label class="campo-angosto">
+                        Moneda
+                        <select id="cotizacion-moneda" required>
+                          <option value="">-- Selecciona --</option>
+                          <option value="USD">USD</option>
+                          <option value="MXN">MXN</option>
+                        </select>
+                      </label>
+                      <label class="campo-angosto">
+                        Etapa
+                        <select id="cotizacion-etapa" required>
+                          <option value="Pendiente">Pendiente</option>
+                          <option value="Negociacion">Negociación</option>
+                          <option value="Ganada">Ganada</option>
+                          <option value="Perdida">Perdida</option>
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="tarjeta">
+                    <h3>Cliente y destino</h3>
+                    <label>
+                      Contacto
                       <span class="campo-con-boton">
-                        <select id="cotizacion-negocio"><option value="">-- Selecciona --</option></select>
-                        <button type="button" id="btn-nuevo-negocio" class="btn-mini" title="Agregar negocio nuevo">+</button>
+                        <select id="cotizacion-contacto" class="select-contacto-ancho"><option value="">-- Selecciona --</option></select>
+                        <button type="button" id="btn-nuevo-contacto-cotizacion" class="btn-mini" title="Agregar contacto nuevo">+</button>
                       </span>
                     </label>
+                    <div class="fila">
+                      <label>
+                        Hotel(es) / Local(es) <span class="pista-inline">(mantén Cmd/Ctrl para elegir varios)</span>
+                        <span class="campo-con-boton campo-con-boton-arriba">
+                          <select id="cotizacion-destino" multiple size="4"></select>
+                          <button type="button" id="btn-nuevo-destino-cotizacion" class="btn-mini" title="Agregar hotel/local nuevo">+</button>
+                        </span>
+                      </label>
+                      <label>
+                        Representante de ventas
+                        <select id="cotizacion-representante"><option value="">-- Selecciona --</option></select>
+                      </label>
+                    </div>
+                    <p id="pista-asociar-contacto-destino" class="pista" hidden></p>
                     <label class="campo-angosto">
-                      Moneda
-                      <select id="cotizacion-moneda" required>
-                        <option value="">-- Selecciona --</option>
-                        <option value="USD">USD</option>
-                        <option value="MXN">MXN</option>
-                      </select>
-                    </label>
-                    <label class="campo-angosto">
-                      Etapa
-                      <select id="cotizacion-etapa" required>
-                        <option value="Pendiente">Pendiente</option>
-                        <option value="Negociacion">Negociación</option>
-                        <option value="Ganada">Ganada</option>
-                        <option value="Perdida">Perdida</option>
-                      </select>
-                    </label>
-                  </div>
-                </div>
-                <div id="cotizacion-detalles-generales">
-                <div class="tarjeta">
-                  <h3>Cliente y destino</h3>
-                  <label>
-                    Contacto
-                    <span class="campo-con-boton">
-                      <select id="cotizacion-contacto" class="select-contacto-ancho"><option value="">-- Selecciona --</option></select>
-                      <button type="button" id="btn-nuevo-contacto-cotizacion" class="btn-mini" title="Agregar contacto nuevo">+</button>
-                    </span>
-                  </label>
-                  <div class="fila">
-                    <label>
-                      Hotel(es) / Local(es) <span class="pista-inline">(mantén Cmd/Ctrl para elegir varios)</span>
-                      <span class="campo-con-boton campo-con-boton-arriba">
-                        <select id="cotizacion-destino" multiple size="4"></select>
-                        <button type="button" id="btn-nuevo-destino-cotizacion" class="btn-mini" title="Agregar hotel/local nuevo">+</button>
+                      Descuento
+                      <span class="campo-con-boton">
+                        <input type="number" id="cotizacion-descuento" step="0.01" min="0" max="100" value="0" />
+                        <select id="cotizacion-descuento-tipo" class="select-descuento-tipo">
+                          <option value="porcentaje">%</option>
+                          <option value="monto">$</option>
+                        </select>
                       </span>
                     </label>
-                    <label>
-                      Representante de ventas
-                      <select id="cotizacion-representante"><option value="">-- Selecciona --</option></select>
+                  </div>
+                </div>
+                <div class="col-datos">
+                  <div class="tarjeta">
+                    <h3>Condiciones y seguimiento</h3>
+                    <div class="fila">
+                      <label>
+                        Fecha de creación
+                        <input type="date" id="cotizacion-fecha-creacion" readonly />
+                      </label>
+                      <label>
+                        Vencimiento
+                        <select id="cotizacion-vencimiento-opcion">
+                          <option value="30">30 días</option>
+                          <option value="60">60 días</option>
+                          <option value="90">90 días</option>
+                          <option value="personalizada">Personalizada</option>
+                        </select>
+                      </label>
+                      <label>
+                        Fecha de vencimiento
+                        <input type="date" id="cotizacion-vencimiento-fecha" />
+                      </label>
+                    </div>
+                    <div class="fila">
+                      <label>
+                        Método de pago
+                        <input type="text" id="cotizacion-metodo-pago" maxlength="50" placeholder="Ej. Contado" />
+                      </label>
+                      <label>
+                        Lugar de entrega
+                        <input type="text" id="cotizacion-lugar-entrega" maxlength="50" />
+                      </label>
+                      <label>
+                        Tiempo de entrega
+                        <input type="text" id="cotizacion-tiempo-entrega" maxlength="50" />
+                      </label>
+                    </div>
+                    <label class="campo-angosto">
+                      Fecha de seguimiento
+                      <input type="date" id="cotizacion-fecha-seguimiento" />
                     </label>
                   </div>
-                  <p id="pista-asociar-contacto-destino" class="pista" hidden></p>
-                  <label class="campo-angosto">
-                    Descuento
-                    <span class="campo-con-boton">
-                      <input type="number" id="cotizacion-descuento" step="0.01" min="0" max="100" value="0" />
-                      <select id="cotizacion-descuento-tipo" class="select-descuento-tipo">
-                        <option value="porcentaje">%</option>
-                        <option value="monto">$</option>
-                      </select>
-                    </span>
-                  </label>
-                </div>
-                <div class="tarjeta">
-                  <h3>Condiciones y seguimiento</h3>
-                  <div class="fila">
-                    <label>
-                      Fecha de creación
-                      <input type="date" id="cotizacion-fecha-creacion" readonly />
-                    </label>
-                    <label>
-                      Vencimiento
-                      <select id="cotizacion-vencimiento-opcion">
-                        <option value="30">30 días</option>
-                        <option value="60">60 días</option>
-                        <option value="90">90 días</option>
-                        <option value="personalizada">Personalizada</option>
-                      </select>
-                    </label>
-                    <label>
-                      Fecha de vencimiento
-                      <input type="date" id="cotizacion-vencimiento-fecha" />
-                    </label>
+                  <div class="tarjeta">
+                    <h3>Observaciones</h3>
+                    <textarea id="cotizacion-observaciones" rows="3" aria-label="Observaciones" placeholder="Notas para esta cotización..."></textarea>
                   </div>
-                  <div class="fila">
-                    <label>
-                      Método de pago
-                      <input type="text" id="cotizacion-metodo-pago" maxlength="50" placeholder="Ej. Contado" />
-                    </label>
-                    <label>
-                      Lugar de entrega
-                      <input type="text" id="cotizacion-lugar-entrega" maxlength="50" />
-                    </label>
-                    <label>
-                      Tiempo de entrega
-                      <input type="text" id="cotizacion-tiempo-entrega" maxlength="50" />
-                    </label>
-                  </div>
-                  <label class="campo-angosto">
-                    Fecha de seguimiento
-                    <input type="date" id="cotizacion-fecha-seguimiento" />
-                  </label>
-                </div>
-                <div class="tarjeta">
-                  <h3>Observaciones</h3>
-                  <textarea id="cotizacion-observaciones" rows="3" aria-label="Observaciones" placeholder="Notas para esta cotización..."></textarea>
-                </div>
                 </div>
               </div>
             </div>
@@ -325,15 +333,12 @@
               <div class="detalle-cotizacion-productos">
                 <datalist id="lista-productos"></datalist>
 
+                <h3>Productos</h3>
                 <div class="tabla-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th title="Si se desmarca, esta partida no suma IVA">Causa impuesto</th><th>Total</th><th>Cotización proveedor</th><th></th><th></th>
-                      </tr>
-                    </thead>
-                    <tbody id="tabla-partidas"></tbody>
-                  </table>
+                  <div class="partidas-encabezado" aria-hidden="true">
+                    <span>Producto</span><span>Cantidad</span><span>Precio unitario</span><span>Total</span><span></span>
+                  </div>
+                  <div id="tabla-partidas" class="lista-partidas"></div>
                 </div>
                 <div class="acciones-form">
                   <button type="button" id="btn-agregar-partida">+ Agregar producto</button>
@@ -354,7 +359,7 @@
                 </div>
               </div>
 
-              <div class="acciones-form">
+              <div class="acciones-form barra-guardar-cotizacion">
                 <button type="submit" id="btn-guardar-cotizacion" class="btn-marca">Guardar cotización</button>
                 <button type="button" id="btn-cancelar-cotizacion">Cancelar</button>
                 <button type="button" id="btn-enviar-tareas-seguimiento" class="btn-mini" hidden>Enviar a Tareas de seguimiento</button>

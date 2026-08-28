@@ -1188,23 +1188,25 @@ function pillEstatusPartida(codigo) {
 function renderizarPartidas() {
   const sinMoneda = !cotizacionMoneda.value;
   tablaPartidas.innerHTML = partidas.map((it, i) => `
-    <tr data-index="${i}">
-      <td>
+    <div class="fila-producto" data-index="${i}">
+      <div class="fp-principal">
         <span class="campo-con-boton">
           <input type="text" class="partida-producto" list="lista-productos" placeholder="Código" value="${escaparHtml(it.producto_item || '')}" ${sinMoneda ? 'disabled title="Selecciona primero la Moneda"' : ''} />
           <button type="button" class="btn-mini btn-nuevo-producto-partida" data-index="${i}" title="Este código no existe en el catálogo, créalo" ${!it.producto_item || productosCache.some((p) => p.item === it.producto_item) ? 'hidden' : ''}>+</button>
         </span>
-      </td>
-      <td><input type="number" class="partida-cantidad" step="1" min="0" value="${it.cantidad || ''}" /></td>
-      <td><input type="number" class="partida-precio" step="0.01" min="0" value="${it.precio_unitario || ''}" /></td>
-      <td class="celda-check"><input type="checkbox" class="partida-causa-impuesto" ${it.causa_impuesto !== false ? 'checked' : ''} title="Si se desmarca, esta partida no suma IVA" /></td>
-      <td class="partida-total">${formatoImporte((it.cantidad || 0) * (it.precio_unitario || 0))}</td>
-      <td>${pillEstatusPartida(it.producto_item)}</td>
-      <td>
+        <input type="number" class="partida-cantidad" step="1" min="0" value="${it.cantidad || ''}" />
+        <input type="number" class="partida-precio" step="0.01" min="0" value="${it.precio_unitario || ''}" />
+        <span class="partida-total">${formatoImporte((it.cantidad || 0) * (it.precio_unitario || 0))}</span>
+        <button type="button" class="btn-quitar-partida" title="Quitar">✕</button>
+      </div>
+      <div class="fp-secundaria">
+        <label title="Si se desmarca, esta partida no suma IVA">
+          <input type="checkbox" class="partida-causa-impuesto" ${it.causa_impuesto !== false ? 'checked' : ''} /> Causa impuesto
+        </label>
+        ${pillEstatusPartida(it.producto_item)}
         ${cotizacionId.value ? `<button type="button" class="btn-mini btn-solicitar-proveedor" data-index="${i}" title="Pedir precio y tiempo de entrega a un proveedor">Solicitar cotización</button>` : ''}
-      </td>
-      <td><button type="button" class="btn-quitar-partida" title="Quitar">✕</button></td>
-    </tr>
+      </div>
+    </div>
   `).join('');
 }
 
@@ -1266,7 +1268,7 @@ btnAgregarPartida.addEventListener('click', () => {
 });
 
 tablaPartidas.addEventListener('input', (e) => {
-  const tr = e.target.closest('tr');
+  const tr = e.target.closest('.fila-producto');
   if (!tr) return;
   const i = Number(tr.dataset.index);
 
@@ -1300,7 +1302,7 @@ tablaPartidas.addEventListener('input', (e) => {
 
 tablaPartidas.addEventListener('click', (e) => {
   if (e.target.classList.contains('btn-quitar-partida')) {
-    const i = Number(e.target.closest('tr').dataset.index);
+    const i = Number(e.target.closest('.fila-producto').dataset.index);
     partidas.splice(i, 1);
     renderizarPartidas();
     actualizarResumen();
@@ -1559,6 +1561,15 @@ formRapidoProveedor.addEventListener('submit', async (e) => {
 
 const tarjetaSolicitudesProveedor = document.getElementById('tarjeta-solicitudes-proveedor');
 const listaSolicitudesProveedor = document.getElementById('lista-solicitudes-proveedor');
+const btnToggleSolicitudesProveedor = document.getElementById('btn-toggle-solicitudes-proveedor');
+const solpDetalle = document.getElementById('solp-detalle');
+const solpResumenTexto = document.getElementById('solp-resumen-texto');
+
+btnToggleSolicitudesProveedor.addEventListener('click', () => {
+  const expandido = solpDetalle.hidden;
+  solpDetalle.hidden = !expandido;
+  btnToggleSolicitudesProveedor.setAttribute('aria-expanded', String(expandido));
+});
 
 // Solicitudes de la cotizacion actual; se usa tambien desde renderizarPartidas para mostrar la
 // columna "Cotización proveedor" (Pendiente/Cotizada) de cada producto.
@@ -1579,6 +1590,16 @@ async function cargarSolicitudesProveedor() {
   const solicitudes = res.ok ? await res.json() : [];
   solicitudesProveedorActuales = solicitudes;
   tarjetaSolicitudesProveedor.hidden = solicitudes.length === 0;
+
+  const pendientes = solicitudes.filter((s) => s.estatus !== 'Respondida').length;
+  solpResumenTexto.textContent = solicitudes.length
+    ? `${solicitudes.length} solicitud${solicitudes.length === 1 ? '' : 'es'}${pendientes ? ` · ${pendientes} pendiente${pendientes === 1 ? '' : 's'}` : ' · todas respondidas'}`
+    : '';
+  // Colapsada por default cada vez que se (re)carga (ej. al abrir la cotizacion o tras crear una
+  // solicitud nueva), para no empujar el resto del formulario hacia abajo.
+  solpDetalle.hidden = true;
+  btnToggleSolicitudesProveedor.setAttribute('aria-expanded', 'false');
+
   listaSolicitudesProveedor.innerHTML = solicitudes.map((s) => `
     <div class="panel-form" data-id="${escaparHtml(s.id_solicitud)}">
       <div>

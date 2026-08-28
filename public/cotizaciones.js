@@ -548,10 +548,6 @@ const btnMostrarFormCotizacion = document.getElementById('btn-mostrar-form-cotiz
 const modalCotizacionOverlay = document.getElementById('modal-cotizacion-overlay');
 const modalCotizacionCerrar = document.getElementById('modal-cotizacion-cerrar');
 const tituloFormCotizacion = document.getElementById('titulo-form-cotizacion');
-const cotizacionPasoDatos = document.getElementById('cotizacion-paso-datos');
-const cotizacionPasoProductos = document.getElementById('cotizacion-paso-productos');
-const btnSiguienteProductosCotizacion = document.getElementById('btn-siguiente-productos-cotizacion');
-const btnRegresarDatosCotizacion = document.getElementById('btn-regresar-datos-cotizacion');
 const formCotizacion = document.getElementById('form-cotizacion');
 const cotizacionId = document.getElementById('cotizacion-id');
 const cotizacionNombre = document.getElementById('cotizacion-nombre');
@@ -1806,39 +1802,14 @@ function limpiarFormCotizacion() {
   mostrarPasoDatosCotizacion();
 }
 
-// Captura en dos pasos para que los datos generales no compartan pantalla con la tabla de
-// productos (se sentia amontonado): paso 1 son los datos, "Siguiente" valida solo esos campos
-// (los del paso 2, oculto, no cuentan para la validacion nativa del navegador) y pasa al paso 2.
-function mostrarPasoDatosCotizacion() {
-  cotizacionPasoDatos.hidden = false;
-  cotizacionPasoProductos.hidden = true;
-}
-
-function mostrarPasoProductosCotizacion() {
-  cotizacionPasoDatos.hidden = true;
-  cotizacionPasoProductos.hidden = false;
-}
-
-btnSiguienteProductosCotizacion.addEventListener('click', () => {
-  // Validacion propia y explicita en vez de depender del globo nativo del navegador
-  // (formCotizacion.reportValidity()): dentro de un modal alto con su propio scroll, ese globo
-  // podia no verse o comportarse distinto segun el navegador, haciendo que el boton pareciera
-  // "no hacer nada" de forma intermitente. Aqui solo se checan los dos campos que en verdad son
-  // obligatorios para pasar a Productos, con un aviso que no depende de la posicion del campo.
-  if (!cotizacionNombre.value.trim()) {
-    alert('Captura el Nombre de la cotización antes de continuar.');
-    cotizacionNombre.focus();
-    return;
-  }
-  if (!cotizacionMoneda.value) {
-    alert('Selecciona la Moneda antes de continuar.');
-    cotizacionMoneda.focus();
-    return;
-  }
-  mostrarPasoProductosCotizacion();
-});
-
-btnRegresarDatosCotizacion.addEventListener('click', mostrarPasoDatosCotizacion);
+// La captura solia estar dividida en dos pasos (Datos generales / Productos) con un boton
+// "Siguiente" que validaba y cambiaba de pantalla. Se quito: ese cambio de pantalla dependia de
+// la validacion nativa del navegador dentro de un modal con su propio scroll, y de forma
+// intermitente (distinto navegador/momento) el boton parecia "no hacer nada" sin ningun aviso,
+// dejando a quien capturaba sin poder llegar siquiera al boton de Guardar. Ahora todo vive en
+// una sola pantalla continua: no hay nada que pueda bloquear el acceso a Guardar.
+function mostrarPasoDatosCotizacion() {}
+function mostrarPasoProductosCotizacion() {}
 
 function abrirFormCotizacion() {
   modalCotizacionOverlay.hidden = false;

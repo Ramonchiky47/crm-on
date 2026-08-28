@@ -1820,18 +1820,19 @@ function mostrarPasoProductosCotizacion() {
 }
 
 btnSiguienteProductosCotizacion.addEventListener('click', () => {
-  // Si falta un campo requerido (Nombre, Moneda), el modal es alto y con scroll propio: si el
-  // campo invalido quedo fuera de la parte visible, el navegador podia intentar mostrar su
-  // globo de validacion sobre un elemento no visible y el clic parecia no hacer nada ("se queda
-  // en blanco"). Se hace scroll + foco al campo invalido ANTES de pedirle al navegador que
-  // reporte la validez, para que el aviso siempre aparezca sobre algo visible.
-  const primerInvalido = formCotizacion.querySelector(':invalid');
-  if (primerInvalido) {
-    // Scroll instantaneo (no 'smooth'): reportValidity() se llama justo despues y necesita que
-    // el campo ya este en su posicion final, no a medio animar.
-    primerInvalido.scrollIntoView({ behavior: 'auto', block: 'center' });
-    primerInvalido.focus({ preventScroll: true });
-    formCotizacion.reportValidity();
+  // Validacion propia y explicita en vez de depender del globo nativo del navegador
+  // (formCotizacion.reportValidity()): dentro de un modal alto con su propio scroll, ese globo
+  // podia no verse o comportarse distinto segun el navegador, haciendo que el boton pareciera
+  // "no hacer nada" de forma intermitente. Aqui solo se checan los dos campos que en verdad son
+  // obligatorios para pasar a Productos, con un aviso que no depende de la posicion del campo.
+  if (!cotizacionNombre.value.trim()) {
+    alert('Captura el Nombre de la cotización antes de continuar.');
+    cotizacionNombre.focus();
+    return;
+  }
+  if (!cotizacionMoneda.value) {
+    alert('Selecciona la Moneda antes de continuar.');
+    cotizacionMoneda.focus();
     return;
   }
   mostrarPasoProductosCotizacion();

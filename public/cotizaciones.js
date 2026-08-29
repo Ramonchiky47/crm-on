@@ -433,8 +433,8 @@ function seleccionarEtapaPorNombre(select, nombre) {
 function limpiarFormNegocio() {
   negocioId.value = '';
   formNegocio.reset();
-  // Todo negocio nuevo nace en la etapa "Negociacion" por default.
-  seleccionarEtapaPorNombre(negocioEtapa, 'negociacion');
+  // Todo negocio nuevo nace en la primera etapa del pipeline por default.
+  seleccionarEtapaPorNombre(negocioEtapa, 'prospeccion');
   negocioMotivoPerdida.value = '';
   actualizarVisibilidadMotivoPerdida();
   tituloFormNegocio.textContent = 'Nuevo negocio';

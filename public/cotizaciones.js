@@ -1769,6 +1769,19 @@ const filtroSolpEstatus = document.getElementById('filtro-solp-estatus');
 
 let solicitudesProveedorGlobalCache = [];
 
+// Antes de responder solo tiene sentido mostrar que se pidio (codigo x cantidad); ya respondida,
+// se agrega lo que en verdad cotizo el proveedor (precio y tiempo de entrega), que es lo que de
+// verdad importa ver en este catalogo una vez contestada.
+function resumenProductosSolicitud(s) {
+  return (s.items || []).map((it) => {
+    const base = `${escaparHtml(it.codigo)} (x${escaparHtml(it.cantidad)})`;
+    if (s.estatus !== 'Respondida') return base;
+    const precio = it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio';
+    const tiempo = escaparHtml(it.tiempo_entrega || 'sin tiempo de entrega');
+    return `${base}: ${precio} — ${tiempo}`;
+  }).join('<br>');
+}
+
 function renderizarSolicitudesProveedorGlobal(lista) {
   tablaSolicitudesProveedorGlobal.innerHTML = lista.map((s) => `
     <tr class="fila-clicable" data-cotizacion-id="${escaparHtml(s.cotizacion_id)}" data-token="${escaparHtml(s.token_publico)}" title="Clic para ver la pantalla que se le envió al proveedor">
@@ -1776,7 +1789,7 @@ function renderizarSolicitudesProveedorGlobal(lista) {
       <td>${escaparHtml(s.proveedor_nombre || '')}</td>
       <td>${escaparHtml(s.cotizacion_nombre || '')} <span class="pista">(${escaparHtml(s.cotizacion_id)})</span></td>
       <td>${escaparHtml(s.destino_nombre || '')}</td>
-      <td>${escaparHtml((s.items || []).map((it) => `${it.codigo} (x${it.cantidad})`).join(', '))}</td>
+      <td>${resumenProductosSolicitud(s)}</td>
       <td>${pillEstatusSolicitud(s.estatus)}</td>
       <td>${s.tiempo_respuesta ? escaparHtml(s.tiempo_respuesta.texto) : ''}</td>
       <td class="acciones">

@@ -93,6 +93,27 @@
         </div>
       </div>
 
+      <div class="tarjeta pipeline-resumen">
+        <div class="pipeline-resumen-cabecera">
+          <div>
+            <span class="etiqueta-pipeline">Avance general del pipeline</span>
+            <div class="pipeline-avance-cifra">
+              <strong id="pipeline-avance-pct">0%</strong>
+              <span>promedio ponderado · <span id="pipeline-avance-total">0</span> negocios activos</span>
+            </div>
+          </div>
+          <div class="pipeline-stats-cierre">
+            <div class="stat-cierre-mini ganado"><strong id="pipeline-ganados">0</strong><span>Ganados</span></div>
+            <div class="stat-cierre-mini perdido"><strong id="pipeline-perdidos">0</strong><span>Perdidos</span></div>
+          </div>
+        </div>
+        <div class="barra-avance-pista"><div class="barra-avance-relleno" id="pipeline-avance-barra" style="width: 0%;"></div></div>
+      </div>
+
+      <div class="tabla-scroll">
+        <div class="tablero-pipeline" id="tablero-pipeline-negocios"></div>
+      </div>
+
       <div class="fila-filtros">
         <input type="text" id="filtro-neg-id" placeholder="ID negocio" />
         <input type="text" id="filtro-neg-nombre" placeholder="Negocio" />

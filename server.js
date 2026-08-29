@@ -2045,7 +2045,7 @@ app.post('/api/productos/importar-csv', requirePermiso('catalogos', 'editar'), a
 // ---------- Cotizaciones: Etapa del Negocio (catalogo) ----------
 
 app.get('/api/etapas-negocio', requirePermiso('catalogos', 'ver'), ar(async (req, res) => {
-  res.json(await db.prepare('SELECT * FROM etapas_negocio ORDER BY id_etapa').all());
+  res.json(await db.prepare('SELECT * FROM etapas_negocio ORDER BY orden NULLS LAST, id_etapa').all());
 }));
 
 app.post('/api/etapas-negocio', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {
@@ -2053,7 +2053,10 @@ app.post('/api/etapas-negocio', requirePermiso('catalogos', 'editar'), ar(async 
   if (!etapa) return res.status(400).json({ errores: ['etapa es requerida'] });
 
   try {
-    const info = await db.prepare('INSERT INTO etapas_negocio (etapa) VALUES (?)').run(etapa);
+    // Una etapa agregada a mano (fuera de las 6 del pipeline mas Ganado/Perdido) se coloca al
+    // final del orden de despliegue, sin probabilidad asignada todavia.
+    const { siguienteOrden } = await db.prepare('SELECT COALESCE(MAX(orden), 0) + 1 AS "siguienteOrden" FROM etapas_negocio').get();
+    const info = await db.prepare('INSERT INTO etapas_negocio (etapa, orden) VALUES (?, ?)').run(etapa, siguienteOrden);
     res.status(201).json(await db.prepare('SELECT * FROM etapas_negocio WHERE id_etapa = ?').get(info.lastInsertRowid));
   } catch (e) {
     res.status(400).json({ errores: ['Esa etapa ya existe'] });
@@ -2090,7 +2093,8 @@ app.delete('/api/etapas-negocio/:id', requirePermiso('catalogos', 'borrar'), ar(
 // Sub Total de sus cotizaciones, agrupada por moneda.
 
 const SELECT_NEGOCIOS = `
-  SELECT n.*, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre, e.etapa AS etapa_nombre
+  SELECT n.*, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre, e.etapa AS etapa_nombre,
+    e.orden AS etapa_orden, e.probabilidad AS etapa_probabilidad
   FROM negocios n
   LEFT JOIN contactos c ON c.id_contacto = n.contacto_id
   LEFT JOIN etapas_negocio e ON e.id_etapa = n.etapa_id
@@ -4726,7 +4730,7 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
     const negocios = soloPropios
       ? await db.prepare(`${SELECT_NEGOCIOS} WHERE n.usuario_id = ?`).all(usuarioId)
       : await db.prepare(SELECT_NEGOCIOS).all();
-    const etapasCatalogo = await db.prepare('SELECT id_etapa, etapa FROM etapas_negocio ORDER BY id_etapa').all();
+    const etapasCatalogo = await db.prepare('SELECT id_etapa, etapa FROM etapas_negocio ORDER BY orden NULLS LAST, id_etapa').all();
     const conteoPorEtapa = new Map();
     for (const n of negocios) {
       const nombre = n.etapa_nombre || 'Sin etapa';

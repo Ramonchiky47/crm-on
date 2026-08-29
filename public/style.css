@@ -11,6 +11,7 @@
      magnitud (ej. negocios por etapa), y --peligro/--exito/--alerta reutilizados como los
      3 colores de estado (critico/bueno/alerta) para mantener un solo sistema de color. */
   --dato-250: #86b6ef;
+  --dato-300: #5c9fea;
   --dato-400: #3987e5;
   --dato-450: #2a78d6;
   --dato-500: #256abf;
@@ -2096,6 +2097,97 @@ td.celda-check {
 .solp-resumen-flecha { transition: transform 0.15s ease; color: #999; }
 .solp-resumen-btn[aria-expanded="true"] .solp-resumen-flecha { transform: rotate(180deg); }
 #solp-detalle { margin-top: 0.9rem; }
+
+/* Pipeline de Negocios: resumen de avance + tablero de 6 columnas (una por etapa activa), en
+   la pestana Negocios de Cotizaciones. Reutiliza la misma rampa secuencial (--dato-*) del
+   widget de pipeline en Inicio (panel.js) para que ambos hablen el mismo idioma visual. */
+.pipeline-resumen { margin-bottom: 1.1rem; }
+.pipeline-resumen-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-bottom: 0.7rem;
+}
+.etiqueta-pipeline {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a8a8a;
+  margin-bottom: 0.35rem;
+}
+.pipeline-avance-cifra { display: flex; align-items: baseline; gap: 0.5rem; }
+.pipeline-avance-cifra strong { font-size: 1.9rem; font-weight: 700; color: var(--dato-500); line-height: 1; }
+.pipeline-avance-cifra span { font-size: 0.8rem; color: #666; }
+.barra-avance-pista { height: 8px; border-radius: 999px; background: var(--fondo-suave); overflow: hidden; }
+.barra-avance-relleno { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--dato-300), var(--dato-500)); }
+
+.pipeline-stats-cierre { display: flex; gap: 1.3rem; }
+.stat-cierre-mini { text-align: right; }
+.stat-cierre-mini strong { display: block; font-size: 1.5rem; font-weight: 700; line-height: 1; }
+.stat-cierre-mini span { font-size: 0.76rem; color: #666; }
+.stat-cierre-mini.ganado strong { color: var(--exito); }
+.stat-cierre-mini.perdido strong { color: var(--peligro); }
+
+.tablero-pipeline {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(200px, 1fr));
+  gap: 0.8rem;
+  min-width: 1240px;
+  padding-bottom: 1.3rem;
+}
+.columna-pipeline { display: flex; flex-direction: column; min-width: 0; }
+.columna-pipeline-cabecera {
+  border-radius: 8px 8px 0 0;
+  padding: 0.6rem 0.75rem 0.5rem;
+}
+.nombre-etapa-pipeline { display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 0.15rem; }
+.meta-etapa-pipeline {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+.columna-pipeline-cuerpo {
+  border: 1px solid var(--borde);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  background: var(--fondo-suave);
+  padding: 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  min-height: 90px;
+}
+.columna-pipeline-vacia { font-size: 0.75rem; color: #999; text-align: center; padding: 0.6rem 0; margin: 0; }
+
+.tarjeta-negocio-pipeline {
+  background: var(--fondo-modal);
+  border: 1px solid var(--borde);
+  border-left-width: 3px;
+  border-radius: 7px;
+  padding: 0.6rem 0.7rem 0.65rem;
+  cursor: pointer;
+}
+.tarjeta-negocio-pipeline:hover { border-color: #b8b8b8; }
+.nombre-negocio-pipeline {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 0.25rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.contacto-negocio-pipeline { font-size: 0.72rem; color: #777; margin-bottom: 0.45rem; }
+.barra-mini-pista { height: 4px; border-radius: 999px; background: var(--borde); overflow: hidden; margin-bottom: 0.35rem; }
+.barra-mini-relleno { height: 100%; border-radius: 999px; }
+.pie-negocio-pipeline { font-size: 0.68rem; color: #999; }
 
 .eyebrow-cot {
   margin: 0 0 0.3rem;

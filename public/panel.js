@@ -18,12 +18,12 @@ function fechaLarga(fecha) {
 
 document.getElementById('panel-fecha').innerHTML = `<strong>${fechaLarga(new Date())}</strong>`;
 
-const etapasPipelineOrdinal = ['Prospeccion', 'Calificacion', 'Contacto', 'Cotizacion', 'Negociacion'];
-
 function colorEtapaPipeline(nombreEtapa, indiceEnCurso) {
   if (nombreEtapa === 'Cierre Ganado') return 'var(--exito)';
   if (nombreEtapa === 'Cierre Perdido') return 'var(--peligro)';
-  const pasos = ['var(--dato-250)', 'var(--dato-400)', 'var(--dato-450)', 'var(--dato-500)', 'var(--dato-600)'];
+  // Una entrada por cada etapa "en curso" del pipeline (Prospeccion..Cierre): claro->oscuro
+  // conforme el negocio avanza y se acerca a cerrarse.
+  const pasos = ['var(--dato-250)', 'var(--dato-300)', 'var(--dato-400)', 'var(--dato-450)', 'var(--dato-500)', 'var(--dato-600)'];
   return pasos[indiceEnCurso % pasos.length];
 }
 

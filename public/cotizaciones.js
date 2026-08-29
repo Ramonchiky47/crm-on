@@ -229,9 +229,11 @@ async function poblarSelectsNegocio() {
     fetch('/api/contactos').then((r) => r.json()),
     fetch('/api/etapas-negocio').then((r) => r.json()),
   ]);
+  etapasNegocioCache = etapas;
   poblarSelect(negocioContacto, contactos, 'id_contacto', 'nombre_completo_correo');
   poblarSelect(negocioEtapa, etapas, 'id_etapa', 'etapa');
   poblarOpcionesFiltroNegEtapa(etapas);
+  renderizarPipelineNegocios();
 
   if (!etapasNegInicializadas) {
     etapasNegInicializadas = true;
@@ -243,8 +245,8 @@ async function poblarSelectsNegocio() {
     aplicarFiltrosNegocios();
   }
 
-  // Un negocio nuevo nace en la etapa "Negociacion" por default.
-  if (!negocioId.value) seleccionarEtapaPorNombre(negocioEtapa, 'negociacion');
+  // Un negocio nuevo nace en la primera etapa del pipeline por default.
+  if (!negocioId.value) seleccionarEtapaPorNombre(negocioEtapa, 'prospeccion');
 }
 
 function celdaEstatus(estatus) {
@@ -393,6 +395,7 @@ async function cargarNegocios() {
   const negocios = await res.json();
   negociosCache = negocios;
   aplicarFiltrosNegocios();
+  renderizarPipelineNegocios();
   // Mantiene sincronizado el desplegable "Negocio" del formulario de Cotizacion: si se crea o
   // edita un negocio desde esta tarjeta, debe poder seleccionarse de inmediato en Captura.
   poblarSelect(cotizacionNegocio, negocios, 'id_negocio', 'negocio');
@@ -530,6 +533,80 @@ async function editarNegocio(id) {
   abrirFormNegocio();
   negocioNombre.focus();
 }
+
+// ---- Pipeline de Negocios (tablero) ----
+// Vista visual de las 6 etapas activas del pipeline, aparte de la tabla (que sigue sirviendo
+// para filtros/orden/acciones masivas). Se recalcula cada vez que cambia negociosCache o
+// etapasNegocioCache, sin pedir nada nuevo al servidor.
+
+const tableroPipelineNegocios = document.getElementById('tablero-pipeline-negocios');
+
+// Mismo criterio de color que el widget de pipeline en Inicio (panel.js): claro->oscuro segun
+// que tan avanzada esta la etapa dentro del pipeline activo.
+function colorEtapaPipelineNegocios(nombreEtapa, indice) {
+  if (nombreEtapa === 'Cierre Ganado') return 'var(--exito)';
+  if (nombreEtapa === 'Cierre Perdido') return 'var(--peligro)';
+  const pasos = ['var(--dato-250)', 'var(--dato-300)', 'var(--dato-400)', 'var(--dato-450)', 'var(--dato-500)', 'var(--dato-600)'];
+  return pasos[indice % pasos.length];
+}
+
+function renderizarPipelineNegocios() {
+  if (!tableroPipelineNegocios || !etapasNegocioCache.length) return;
+
+  const etapasActivas = etapasNegocioCache.filter((e) => !ETAPAS_NEG_EXCLUIDAS_POR_DEFECTO.includes(e.etapa));
+  const negociosPorEtapa = new Map();
+  for (const n of negociosCache) {
+    const lista = negociosPorEtapa.get(n.etapa_id) || [];
+    lista.push(n);
+    negociosPorEtapa.set(n.etapa_id, lista);
+  }
+
+  // % de avance general: promedio de la probabilidad de la etapa de cada negocio activo. Se
+  // pondera por cantidad de negocios (no por valor de la cotizacion): un Negocio ya no vive
+  // necesariamente ligado a cotizaciones con importe, asi que contar por trato es lo confiable.
+  const negociosActivos = negociosCache.filter((n) => !ETAPAS_NEG_EXCLUIDAS_POR_DEFECTO.includes(n.etapa_nombre));
+  const promedioAvance = negociosActivos.length
+    ? Math.round(negociosActivos.reduce((acc, n) => acc + (n.etapa_probabilidad ?? 0), 0) / negociosActivos.length)
+    : 0;
+  const ganados = negociosCache.filter((n) => n.etapa_nombre === 'Cierre Ganado').length;
+  const perdidos = negociosCache.filter((n) => n.etapa_nombre === 'Cierre Perdido').length;
+
+  document.getElementById('pipeline-avance-pct').textContent = `${promedioAvance}%`;
+  document.getElementById('pipeline-avance-total').textContent = negociosActivos.length;
+  document.getElementById('pipeline-avance-barra').style.width = `${promedioAvance}%`;
+  document.getElementById('pipeline-ganados').textContent = ganados;
+  document.getElementById('pipeline-perdidos').textContent = perdidos;
+
+  tableroPipelineNegocios.innerHTML = etapasActivas.map((etapa, indice) => {
+    const negociosEtapa = negociosPorEtapa.get(etapa.id_etapa) || [];
+    const color = colorEtapaPipelineNegocios(etapa.etapa, indice);
+    const probabilidad = etapa.probabilidad ?? 0;
+    return `
+      <div class="columna-pipeline">
+        <div class="columna-pipeline-cabecera" style="background: ${color};">
+          <span class="nombre-etapa-pipeline">${escaparHtml(etapa.etapa)}</span>
+          <div class="meta-etapa-pipeline"><strong>${negociosEtapa.length}</strong><span>${probabilidad}%</span></div>
+        </div>
+        <div class="columna-pipeline-cuerpo">
+          ${negociosEtapa.length ? negociosEtapa.map((n) => `
+            <div class="tarjeta-negocio-pipeline" data-id="${escaparHtml(n.id_negocio)}" style="border-left-color: ${color};">
+              <div class="nombre-negocio-pipeline">${escaparHtml(n.negocio)}</div>
+              <div class="contacto-negocio-pipeline">${escaparHtml(n.contacto_nombre || 'Sin contacto')}</div>
+              <div class="barra-mini-pista"><div class="barra-mini-relleno" style="width: ${probabilidad}%; background: ${color};"></div></div>
+              <div class="pie-negocio-pipeline">${n.fecha_estimada_cierre ? `Cierre est. ${escaparHtml(n.fecha_estimada_cierre)}` : 'Sin fecha estimada'}</div>
+            </div>
+          `).join('') : '<p class="columna-pipeline-vacia">Sin negocios</p>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+tableroPipelineNegocios.addEventListener('click', (e) => {
+  const tarjeta = e.target.closest('.tarjeta-negocio-pipeline');
+  if (!tarjeta) return;
+  editarNegocio(tarjeta.dataset.id);
+});
 
 // Clic en cualquier parte de la fila (fuera de botones/checkbox) abre la edicion del negocio,
 // igual que el clic en una fila de Cotizaciones abre su detalle.
@@ -747,6 +824,7 @@ btnCancelarFiltroCotRepresentante.addEventListener('click', () => {
 
 let productosCache = [];
 let negociosCache = [];
+let etapasNegocioCache = [];
 let contactosCache = [];
 let destinosCache = [];
 let cotizacionesCache = [];

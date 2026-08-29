@@ -960,6 +960,9 @@ button:hover {
   margin-bottom: 0.75rem;
 }
 
+.panel-form-clicable { cursor: pointer; }
+.panel-form-clicable:hover { border-color: #b8b8b8; }
+
 .etiqueta-vacia {
   color: #9b9b9b;
 }

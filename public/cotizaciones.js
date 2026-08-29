@@ -1679,7 +1679,7 @@ async function cargarSolicitudesProveedor() {
   btnToggleSolicitudesProveedor.setAttribute('aria-expanded', 'false');
 
   listaSolicitudesProveedor.innerHTML = solicitudes.map((s) => `
-    <div class="panel-form" data-id="${escaparHtml(s.id_solicitud)}">
+    <div class="panel-form panel-form-clicable" data-id="${escaparHtml(s.id_solicitud)}" data-token="${escaparHtml(s.token_publico)}" title="Clic para ver la pantalla que se le envió al proveedor">
       <div>
         <strong>${escaparHtml(s.proveedor_nombre || '')}</strong>
         — ${escaparHtml((s.items || []).map((it) => `${it.codigo} (x${it.cantidad})`).join(', '))}
@@ -1732,7 +1732,12 @@ listaSolicitudesProveedor.addEventListener('click', async (e) => {
     await eliminarSolicitudProveedor(e.target.dataset.id, cargarSolicitudesProveedor);
     return;
   }
-  if (!e.target.classList.contains('btn-copiar-solicitud-a-cotizacion')) return;
+  if (!e.target.classList.contains('btn-copiar-solicitud-a-cotizacion')) {
+    if (e.target.closest('button')) return;
+    const tarjeta = e.target.closest('.panel-form-clicable');
+    if (tarjeta) window.open(`solicitud-proveedor.html?token=${tarjeta.dataset.token}`, '_blank');
+    return;
+  }
   const id = e.target.dataset.id;
   const res = await fetch(`/api/cotizaciones/${encodeURIComponent(cotizacionId.value)}/solicitudes-proveedor/${encodeURIComponent(id)}/aplicar`, {
     method: 'PUT',
@@ -1766,7 +1771,7 @@ let solicitudesProveedorGlobalCache = [];
 
 function renderizarSolicitudesProveedorGlobal(lista) {
   tablaSolicitudesProveedorGlobal.innerHTML = lista.map((s) => `
-    <tr class="fila-clicable" data-cotizacion-id="${escaparHtml(s.cotizacion_id)}">
+    <tr class="fila-clicable" data-cotizacion-id="${escaparHtml(s.cotizacion_id)}" data-token="${escaparHtml(s.token_publico)}" title="Clic para ver la pantalla que se le envió al proveedor">
       <td>${escaparHtml(s.fecha_creacion || '')}</td>
       <td>${escaparHtml(s.proveedor_nombre || '')}</td>
       <td>${escaparHtml(s.cotizacion_nombre || '')} <span class="pista">(${escaparHtml(s.cotizacion_id)})</span></td>
@@ -1776,6 +1781,7 @@ function renderizarSolicitudesProveedorGlobal(lista) {
       <td>${s.tiempo_respuesta ? escaparHtml(s.tiempo_respuesta.texto) : ''}</td>
       <td class="acciones">
         <button type="button" class="btn-mini btn-copiar-liga-solicitud" data-token="${escaparHtml(s.token_publico)}" title="Liga única de esta solicitud, sin necesidad de iniciar sesión">Copiar liga</button>
+        <button type="button" class="btn-mini btn-ver-cotizacion-solicitud" data-cotizacion-id="${escaparHtml(s.cotizacion_id)}">Ver cotización</button>
         ${permisosCatalogos.borrar ? `<button type="button" class="btn-mini btn-borrar-solicitud-proveedor" data-id="${escaparHtml(s.id_solicitud)}">Borrar</button>` : ''}
       </td>
     </tr>
@@ -1821,10 +1827,14 @@ tablaSolicitudesProveedorGlobal.addEventListener('click', async (e) => {
     await eliminarSolicitudProveedor(e.target.dataset.id, cargarSolicitudesProveedorGlobal);
     return;
   }
+  if (e.target.classList.contains('btn-ver-cotizacion-solicitud')) {
+    abrirDetalleCotizacion(e.target.dataset.cotizacionId);
+    return;
+  }
   if (e.target.closest('button')) return;
   const fila = e.target.closest('tr');
-  if (!fila || !fila.dataset.cotizacionId) return;
-  abrirDetalleCotizacion(fila.dataset.cotizacionId);
+  if (!fila || !fila.dataset.token) return;
+  window.open(`solicitud-proveedor.html?token=${fila.dataset.token}`, '_blank');
 });
 
 // ---- Alta / edicion de la cotizacion ----

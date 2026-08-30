@@ -228,6 +228,37 @@ function mostrarReporte(data) {
   renderizarTablaErrores(listaErrores, data.errores);
 }
 
+// ---------- Actualizar directo desde NetSuite ----------
+
+const btnActualizarNetsuite = document.getElementById('btn-actualizar-netsuite');
+const inputNetsuiteDias = document.getElementById('netsuite-dias');
+
+btnActualizarNetsuite.addEventListener('click', async () => {
+  const dias = Number(inputNetsuiteDias.value) || 90;
+
+  btnActualizarNetsuite.disabled = true;
+  btnActualizarNetsuite.textContent = 'Actualizando...';
+
+  try {
+    const res = await fetch('/api/ordenes/actualizar-netsuite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dias }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('Error al actualizar desde NetSuite: ' + (data.error || res.statusText));
+      return;
+    }
+
+    mostrarReporte(data);
+  } finally {
+    btnActualizarNetsuite.disabled = false;
+    btnActualizarNetsuite.textContent = 'Actualizar desde NetSuite';
+  }
+});
+
 // ---------- Detalle de compra ----------
 
 const ENCABEZADOS_PLANTILLA_DETALLE = ['id', 'articulo', 'tipo', 'fecha', 'numero_serie', 'cantidad_vendida', 'importe'];

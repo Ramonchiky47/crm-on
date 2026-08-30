@@ -3342,15 +3342,13 @@ app.delete('/api/ordenes/:id', requirePermiso('ordenes', 'borrar'), ar(async (re
 // moneda, importe_moneda_extranjera, importe, estatus, observaciones, destino, contacto, empresa, estado_entrega
 // "destino" y "contacto" van como texto; si no existen en su catalogo se crean automaticamente.
 // Si "destino" trae "empresa", esa empresa se agrega al catalogo de ese destino (sin duplicar).
-app.post('/api/ordenes/importar-csv', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
-  if (typeof req.body !== 'string' || !req.body.trim()) {
-    return res.status(400).json({ error: 'Envia el contenido del CSV como texto (Content-Type: text/csv)' });
-  }
-
-  const registros = filasCsvAObjetos(parsearCSV(req.body));
-
-  const resultado = await transaction(async (db) => {
-    const destinosCreados = new Set();
+// Logica compartida por la carga de CSV (importar-csv) y la carga directa desde NetSuite
+// (actualizar-netsuite): ambas terminan con el mismo arreglo "registros" (mismos nombres de
+// campo) y aqui se decide, fila por fila, si se inserta una orden nueva o se actualiza una que
+// ya existe (protegiendo Estatus/Observaciones/Destino/Contacto/Empresa/Estado de la Republica,
+// que solo se cargan la primera vez).
+async function procesarRegistrosOrdenes(db, registros) {
+  const destinosCreados = new Set();
     const contactosCreados = new Set();
     const empresasAgregadas = new Set();
     const estatusCreados = new Set();
@@ -3496,9 +3494,138 @@ app.post('/api/ordenes/importar-csv', requirePermiso('ordenes', 'editar'), ar(as
       empresasAgregadas: [...empresasAgregadas], estatusCreados: [...estatusCreados],
       estadosEntregaCreados: [...estadosEntregaCreados],
     };
-  });
+}
 
+app.post('/api/ordenes/importar-csv', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
+  if (typeof req.body !== 'string' || !req.body.trim()) {
+    return res.status(400).json({ error: 'Envia el contenido del CSV como texto (Content-Type: text/csv)' });
+  }
+
+  const registros = filasCsvAObjetos(parsearCSV(req.body));
+  const resultado = await transaction((db) => procesarRegistrosOrdenes(db, registros));
   res.json({ total: registros.length, ...resultado });
+}));
+
+// ---------- Integracion con NetSuite (SuiteQL) ----------
+// Igual idea que Google Tasks: una sola cuenta/rol de NetSuite (no por usuario de la app),
+// autenticada por Token-Based Authentication (OAuth 1.0a, HMAC-SHA256). Requiere las variables
+// de entorno NETSUITE_ACCOUNT_ID/CONSUMER_KEY/CONSUMER_SECRET/TOKEN_ID/TOKEN_SECRET (ver
+// .agents/skills/netsuite/references/setup_guide.md para como generarlas).
+//
+// NOTA: la consulta SuiteQL y los nombres de columna de abajo se armaron con base en el
+// cheatsheet de la habilidad (.agents/skills/netsuite/references/suiteql_cheatsheet.md) pero
+// NO se pudieron probar contra NetSuite real (el login por token fallaba con 401 al momento de
+// escribir esto). Es posible que algun nombre de columna (otherrefnum, currency.symbol, etc.)
+// necesite ajustarse en cuanto se pruebe con una cuenta real.
+
+function netsuiteConfigurado() {
+  return Boolean(
+    process.env.NETSUITE_ACCOUNT_ID && process.env.NETSUITE_CONSUMER_KEY
+    && process.env.NETSUITE_CONSUMER_SECRET && process.env.NETSUITE_TOKEN_ID && process.env.NETSUITE_TOKEN_SECRET
+  );
+}
+
+// Percent-encoding segun RFC 3986 (OAuth 1.0a lo exige asi): encodeURIComponent de JS deja sin
+// codificar ! * ' ( ) ademas de los caracteres "unreserved", asi que se codifican aparte.
+function oauthPercentEncode(valor) {
+  return encodeURIComponent(String(valor)).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function netsuiteOAuthHeader(metodoHttp, url) {
+  const accountId = process.env.NETSUITE_ACCOUNT_ID;
+  const realm = accountId.replace(/-/g, '_').toUpperCase();
+  const nonce = crypto.randomBytes(24).toString('hex');
+  const timestamp = String(Math.floor(Date.now() / 1000));
+
+  const oauthParams = {
+    oauth_consumer_key: process.env.NETSUITE_CONSUMER_KEY,
+    oauth_token: process.env.NETSUITE_TOKEN_ID,
+    oauth_nonce: nonce,
+    oauth_timestamp: timestamp,
+    oauth_signature_method: 'HMAC-SHA256',
+    oauth_version: '1.0',
+  };
+
+  const parsedUrl = new URL(url);
+  const baseUrl = `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.pathname}`;
+  const todosLosParametros = [...parsedUrl.searchParams.entries(), ...Object.entries(oauthParams)]
+    .sort(([ka, va], [kb, vb]) => (ka === kb ? String(va).localeCompare(String(vb)) : ka.localeCompare(kb)));
+
+  const paramString = todosLosParametros.map(([k, v]) => `${oauthPercentEncode(k)}=${oauthPercentEncode(v)}`).join('&');
+  const baseString = `${metodoHttp.toUpperCase()}&${oauthPercentEncode(baseUrl)}&${oauthPercentEncode(paramString)}`;
+  const signingKey = `${oauthPercentEncode(process.env.NETSUITE_CONSUMER_SECRET)}&${oauthPercentEncode(process.env.NETSUITE_TOKEN_SECRET)}`;
+  const signature = crypto.createHmac('sha256', signingKey).update(baseString).digest('base64');
+
+  const authHeaderParts = [`realm="${oauthPercentEncode(realm)}"`];
+  for (const [k, v] of Object.entries({ ...oauthParams, oauth_signature: signature }).sort(([ka], [kb]) => ka.localeCompare(kb))) {
+    authHeaderParts.push(`${oauthPercentEncode(k)}="${oauthPercentEncode(v)}"`);
+  }
+  return `OAuth ${authHeaderParts.join(', ')}`;
+}
+
+async function netsuiteSuiteQL(query, { limit = 1000, offset = 0 } = {}) {
+  const accountDomain = process.env.NETSUITE_ACCOUNT_ID.toLowerCase().replace(/_/g, '-');
+  const url = `https://${accountDomain}.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql?limit=${limit}&offset=${offset}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: netsuiteOAuthHeader('POST', url),
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Prefer: 'transient',
+    },
+    body: JSON.stringify({ q: query }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const detalle = data?.['o:errorDetails']?.[0]?.detail || data?.title || resp.statusText;
+    throw new Error(`NetSuite respondio ${resp.status}: ${detalle}`);
+  }
+  return data;
+}
+
+// Trae las Ordenes de Venta (Sales Order) de los ultimos N dias de NetSuite y las procesa con la
+// misma logica de insertar/actualizar que la carga por CSV (ver procesarRegistrosOrdenes).
+app.post('/api/ordenes/actualizar-netsuite', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
+  if (!netsuiteConfigurado()) {
+    return res.status(400).json({ error: 'NetSuite no esta configurado en este entorno (faltan las variables NETSUITE_*).' });
+  }
+
+  const dias = Number(req.body.dias) > 0 ? Math.floor(Number(req.body.dias)) : 90;
+  const fechaDesde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
+
+  let filas;
+  try {
+    const resultado = await netsuiteSuiteQL(`
+      SELECT
+        t.tranid AS id,
+        TO_CHAR(t.trandate, 'YYYY-MM-DD') AS fecha,
+        c.companyname AS nombre,
+        BUILTIN.DF(t.status) AS estatus_sistema,
+        t.otherrefnum AS numero_oc,
+        cur.symbol AS moneda,
+        t.foreigntotal AS importe_moneda_extranjera,
+        t.foreigntotal AS importe,
+        t.memo AS nota
+      FROM transaction t
+      LEFT JOIN customer c ON c.id = t.entity
+      LEFT JOIN currency cur ON cur.id = t.currency
+      WHERE t.type = 'SalesOrd' AND t.trandate >= TO_DATE('${fechaDesde}', 'YYYY-MM-DD')
+      ORDER BY t.trandate DESC
+    `);
+    filas = resultado.items || [];
+  } catch (e) {
+    return res.status(502).json({ error: `No se pudo consultar NetSuite: ${e.message}` });
+  }
+
+  const registros = filas.map((f) => ({
+    id: f.id, fecha: f.fecha, nombre: f.nombre, estatus_sistema: f.estatus_sistema,
+    numero_oc: f.numero_oc, moneda: f.moneda, importe_moneda_extranjera: f.importe_moneda_extranjera,
+    importe: f.importe, nota: f.nota,
+  }));
+
+  const resultado = await transaction((db) => procesarRegistrosOrdenes(db, registros));
+  res.json({ total: registros.length, fuente: 'netsuite', desde: fechaDesde, ...resultado });
 }));
 
 // ---------- Integracion con Google Tasks ----------

@@ -10,6 +10,7 @@ const campos = {
   cantidad_vendida: document.getElementById('cantidad_vendida'),
   precio_venta: document.getElementById('precio_venta'),
   ingresos: document.getElementById('ingresos'),
+  pedido_id: document.getElementById('pedido_id'),
 };
 const btnGuardar = document.getElementById('btn-guardar');
 const btnCancelar = document.getElementById('btn-cancelar');
@@ -97,11 +98,14 @@ function renderizar(lista) {
       <td>${f.cantidad_vendida ?? ''}</td>
       <td>${formatoImporte(f.precio_venta)}</td>
       <td>${formatoImporte(f.ingresos)}</td>
+      <td>${escaparHtml(f.pedido_id || '')}</td>
       <td class="acciones">
         ${permisosFacturacion.editar ? `<button class="btn-editar" data-id="${f.id_facturacion}">Editar</button>` : ''}
         ${permisosFacturacion.borrar ? `<button class="btn-borrar" data-id="${f.id_facturacion}">Borrar</button>` : ''}
       </td>
     `;
+    tr.dataset.id = f.id_facturacion;
+    tr.classList.add('fila-clicable');
     tabla.appendChild(tr);
   }
 }
@@ -136,6 +140,7 @@ form.addEventListener('submit', async (e) => {
     cantidad_vendida: campos.cantidad_vendida.value,
     precio_venta: campos.precio_venta.value,
     ingresos: campos.ingresos.value,
+    pedido_id: campos.pedido_id.value.trim(),
   };
 
   const idOriginal = inputIdOriginal.value;
@@ -160,34 +165,46 @@ form.addEventListener('submit', async (e) => {
 btnCancelar.addEventListener('click', cerrarFormulario);
 btnMostrarForm.addEventListener('click', abrirFormulario);
 
-tabla.addEventListener('click', async (e) => {
-  const idFacturacion = e.target.dataset.id;
-  if (!idFacturacion) return;
+// Abre el formulario ya lleno con los datos del registro (se usa tanto desde el boton "Editar"
+// como al hacer clic en cualquier parte de la fila, para poder asociar el ID de pedido rapido).
+async function abrirDetalleFacturacion(idFacturacion, { enfocarPedido = false } = {}) {
+  const res = await fetch(`/api/facturacion/${idFacturacion}`);
+  const f = await res.json();
 
+  inputIdOriginal.value = f.id_facturacion;
+  campos.id.value = f.id;
+  campos.articulo.value = f.articulo || '';
+  campos.tipo.value = f.tipo || '';
+  campos.fecha.value = f.fecha || '';
+  campos.descripcion.value = f.descripcion || '';
+  campos.numero_serie.value = f.numero_serie || '';
+  campos.cantidad_vendida.value = f.cantidad_vendida ?? '';
+  campos.precio_venta.value = f.precio_venta ?? '';
+  campos.ingresos.value = f.ingresos ?? '';
+  campos.pedido_id.value = f.pedido_id || '';
+
+  btnGuardar.textContent = 'Guardar cambios';
+  abrirFormulario();
+  (enfocarPedido ? campos.pedido_id : campos.articulo).focus();
+}
+
+tabla.addEventListener('click', async (e) => {
   if (e.target.classList.contains('btn-borrar')) {
+    const idFacturacion = e.target.dataset.id;
     if (!confirmarDoble('¿Seguro que quieres borrar este registro?')) return;
     await fetch(`/api/facturacion/${idFacturacion}`, { method: 'DELETE' });
     cargarFacturacion();
+    return;
   }
 
   if (e.target.classList.contains('btn-editar')) {
-    const res = await fetch(`/api/facturacion/${idFacturacion}`);
-    const f = await res.json();
+    await abrirDetalleFacturacion(e.target.dataset.id);
+    return;
+  }
 
-    inputIdOriginal.value = f.id_facturacion;
-    campos.id.value = f.id;
-    campos.articulo.value = f.articulo || '';
-    campos.tipo.value = f.tipo || '';
-    campos.fecha.value = f.fecha || '';
-    campos.descripcion.value = f.descripcion || '';
-    campos.numero_serie.value = f.numero_serie || '';
-    campos.cantidad_vendida.value = f.cantidad_vendida ?? '';
-    campos.precio_venta.value = f.precio_venta ?? '';
-    campos.ingresos.value = f.ingresos ?? '';
-
-    btnGuardar.textContent = 'Guardar cambios';
-    abrirFormulario();
-    campos.articulo.focus();
+  const fila = e.target.closest('tr[data-id]');
+  if (fila && permisosFacturacion.editar) {
+    await abrirDetalleFacturacion(fila.dataset.id, { enfocarPedido: true });
   }
 });
 

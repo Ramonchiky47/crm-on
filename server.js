@@ -4830,8 +4830,8 @@ app.post('/api/facturacion', requirePermiso('facturacion', 'editar'), ar(async (
 
   const b = req.body;
   const info = await db.prepare(`
-    INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos, pedido_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     quitarAcentos(b.id.trim()),
     quitarAcentos(b.articulo) || null,
@@ -4841,7 +4841,8 @@ app.post('/api/facturacion', requirePermiso('facturacion', 'editar'), ar(async (
     quitarAcentos(b.numero_serie) || null,
     numeroOpcional(b.cantidad_vendida),
     numeroOpcional(b.precio_venta),
-    numeroOpcional(b.ingresos)
+    numeroOpcional(b.ingresos),
+    quitarAcentos(b.pedido_id) || null
   );
 
   res.status(201).json(await db.prepare(`${SELECT_FACTURACION} WHERE id_facturacion = ?`).get(info.lastInsertRowid));
@@ -4859,11 +4860,11 @@ app.put('/api/facturacion/:idFacturacion', requirePermiso('facturacion', 'editar
 
   await db.prepare(`
     UPDATE facturacion SET
-      id = ?, articulo = ?, tipo = ?, fecha = ?, descripcion = ?, numero_serie = ?, cantidad_vendida = ?, precio_venta = ?, ingresos = ?
+      id = ?, articulo = ?, tipo = ?, fecha = ?, descripcion = ?, numero_serie = ?, cantidad_vendida = ?, precio_venta = ?, ingresos = ?, pedido_id = ?
     WHERE id_facturacion = ?
   `).run(
     campo('id'), campo('articulo'), campo('tipo'), campo('fecha', normalizarFecha), campo('descripcion'), campo('numero_serie'),
-    campo('cantidad_vendida', numeroOpcional), campo('precio_venta', numeroOpcional), campo('ingresos', numeroOpcional),
+    campo('cantidad_vendida', numeroOpcional), campo('precio_venta', numeroOpcional), campo('ingresos', numeroOpcional), campo('pedido_id'),
     req.params.idFacturacion
   );
 
@@ -4877,7 +4878,7 @@ app.delete('/api/facturacion/:idFacturacion', requirePermiso('facturacion', 'bor
 }));
 
 // Carga masiva por CSV. Columnas esperadas: id, articulo, tipo, fecha, descripcion, numero_serie,
-// cantidad_vendida, precio_venta, ingresos. "id" no es unico: cada fila se inserta.
+// cantidad_vendida, precio_venta, ingresos, pedido_id. "id" no es unico: cada fila se inserta.
 app.post('/api/facturacion/importar-csv', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
   if (typeof req.body !== 'string' || !req.body.trim()) {
     return res.status(400).json({ error: 'Envia el contenido del CSV como texto (Content-Type: text/csv)' });
@@ -4903,8 +4904,8 @@ app.post('/api/facturacion/importar-csv', requirePermiso('facturacion', 'editar'
         if (ingresos === undefined) throw new Error('ingresos debe ser numerico');
 
         await db.prepare(`
-          INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos)
-          VALUES (@id, @articulo, @tipo, @fecha, @descripcion, @numero_serie, @cantidad_vendida, @precio_venta, @ingresos)
+          INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos, pedido_id)
+          VALUES (@id, @articulo, @tipo, @fecha, @descripcion, @numero_serie, @cantidad_vendida, @precio_venta, @ingresos, @pedido_id)
         `).run({
           id: registro.id,
           articulo: registro.articulo || null,
@@ -4915,6 +4916,7 @@ app.post('/api/facturacion/importar-csv', requirePermiso('facturacion', 'editar'
           cantidad_vendida: cantidadVendida,
           precio_venta: precioVenta,
           ingresos,
+          pedido_id: registro.pedido_id || null,
         });
 
         insertadas++;

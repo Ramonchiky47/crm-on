@@ -165,15 +165,25 @@ form.addEventListener('submit', async (e) => {
   btnCargar.textContent = 'Cargando...';
 
   try {
-    let contenido = await leerArchivoComoTexto(archivo);
-    if (checkEsNetsuite.checked) {
-      contenido = transformarNetSuiteAOrdenes(arreglarMojibake(contenido));
+    const esExcel = /\.xlsx$/i.test(archivo.name);
+    let res;
+    if (esExcel) {
+      res = await fetch('/api/ordenes/importar-excel-netsuite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        body: await archivo.arrayBuffer(),
+      });
+    } else {
+      let contenido = await leerArchivoComoTexto(archivo);
+      if (checkEsNetsuite.checked) {
+        contenido = transformarNetSuiteAOrdenes(arreglarMojibake(contenido));
+      }
+      res = await fetch('/api/ordenes/importar-csv', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/csv' },
+        body: contenido,
+      });
     }
-    const res = await fetch('/api/ordenes/importar-csv', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/csv' },
-      body: contenido,
-    });
 
     const data = await res.json();
     if (!res.ok) {

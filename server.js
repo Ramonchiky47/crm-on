@@ -4,6 +4,7 @@ const express = require('express');
 const session = require('express-session');
 const pgSessionFabrica = require('connect-pg-simple');
 const PDFDocument = require('pdfkit');
+const ExcelJS = require('exceljs');
 const { db, pool, transaction } = require('./db');
 
 const MODULOS = ['ordenes', 'detalle_compra', 'catalogos'];
@@ -61,6 +62,7 @@ app.use(session({
 }));
 app.use(express.json());
 app.use(express.text({ type: 'text/csv', limit: '10mb' }));
+app.use(express.raw({ type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Envuelve un route handler asincrono para que sus errores lleguen al middleware de errores
@@ -3502,6 +3504,79 @@ app.post('/api/ordenes/importar-csv', requirePermiso('ordenes', 'editar'), ar(as
   }
 
   const registros = filasCsvAObjetos(parsearCSV(req.body));
+  const resultado = await transaction((db) => procesarRegistrosOrdenes(db, registros));
+  res.json({ total: registros.length, ...resultado });
+}));
+
+// Mismo mapeo de encabezados que MAPA_ENCABEZADOS_NETSUITE en public/carga.js (ruta CSV), pero
+// para el archivo .xlsx que exporta NetSuite directamente (reporte "Vista predeterminada
+// Transaccion"): a diferencia del CSV, aqui las celdas de fecha/importe ya vienen tipadas
+// (Date/number), no como texto con formato.
+const MAPA_ENCABEZADOS_NETSUITE_XLSX = {
+  'fecha': 'fecha',
+  'imprimir': 'imprimir',
+  'numero de documento': 'id',
+  'nombre': 'nombre',
+  'numero de oc/cheque': 'numero_oc',
+  'estado': 'estatus_sistema',
+  'numeros de seguimiento': 'numero_seguimiento',
+  'nota': 'nota',
+  'moneda': 'moneda',
+  'importe (moneda extranjera)': 'importe_moneda_extranjera',
+  'importe': 'importe',
+};
+
+function normalizarEncabezadoXlsx(valor) {
+  return quitarAcentos(String(valor || '').trim().toLowerCase());
+}
+
+function celdaXlsxATexto(valor, esFecha) {
+  if (valor instanceof Date) {
+    return esFecha
+      ? `${valor.getUTCFullYear()}-${String(valor.getUTCMonth() + 1).padStart(2, '0')}-${String(valor.getUTCDate()).padStart(2, '0')}`
+      : valor.toISOString();
+  }
+  if (valor && typeof valor === 'object' && 'result' in valor) valor = valor.result; // celda con formula
+  if (valor === null || valor === undefined) return '';
+  return String(valor).trim();
+}
+
+async function netsuiteXlsxARegistros(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const hoja = workbook.worksheets[0];
+  if (!hoja) return [];
+
+  const encabezados = [];
+  hoja.getRow(1).eachCell({ includeEmpty: true }, (celda, columna) => {
+    encabezados[columna] = normalizarEncabezadoXlsx(celda.value);
+  });
+
+  const registros = [];
+  for (let numeroFila = 2; numeroFila <= hoja.rowCount; numeroFila++) {
+    const registro = {};
+    hoja.getRow(numeroFila).eachCell({ includeEmpty: true }, (celda, columna) => {
+      const destino = MAPA_ENCABEZADOS_NETSUITE_XLSX[encabezados[columna]];
+      if (!destino) return;
+      registro[destino] = celdaXlsxATexto(celda.value, destino === 'fecha');
+    });
+    if (registro.id) registros.push(registro);
+  }
+  return registros;
+}
+
+app.post('/api/ordenes/importar-excel-netsuite', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) {
+    return res.status(400).json({ error: 'Envia el archivo .xlsx de NetSuite como binario (Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)' });
+  }
+
+  let registros;
+  try {
+    registros = await netsuiteXlsxARegistros(req.body);
+  } catch (e) {
+    return res.status(400).json({ error: `No se pudo leer el archivo Excel: ${e.message}` });
+  }
+
   const resultado = await transaction((db) => procesarRegistrosOrdenes(db, registros));
   res.json({ total: registros.length, ...resultado });
 }));

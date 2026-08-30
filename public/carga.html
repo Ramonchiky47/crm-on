@@ -51,18 +51,20 @@
 
       <form id="form-carga">
         <label>
-          Archivo CSV
-          <input type="file" id="archivo-csv" accept=".csv,text/csv" required />
+          Archivo CSV o Excel de NetSuite
+          <input type="file" id="archivo-csv" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
         </label>
         <span>
           <input type="checkbox" id="es-netsuite" />
-          Es una exportación de NetSuite (columnas "Número de documento", "Estado", etc. e importes con "$" y comas)
+          Es una exportación de NetSuite en CSV (columnas "Número de documento", "Estado", etc. e importes con "$" y comas)
         </span>
         <p class="pista">
           Con esa casilla marcada se ajustan automáticamente las columnas, la codificación de acentos y los
-          importes. Como el export de NetSuite no trae Hotel/Local ni Contacto, una orden nueva se crea sin esos
-          datos (se pueden agregar luego a mano); una orden que ya existe solo actualiza estatus del sistema,
-          importes y seguimiento (no el Estatus del catálogo), igual que con la plantilla normal.
+          importes. Si en vez de CSV subes el archivo <strong>.xlsx</strong> tal como lo exporta NetSuite (reporte
+          "Vista predeterminada Transacción"), no hace falta marcar la casilla: se detecta solo. Como el export de
+          NetSuite no trae Hotel/Local ni Contacto, una orden nueva se crea sin esos datos (se pueden agregar luego
+          a mano); una orden que ya existe solo actualiza estatus del sistema, importes y seguimiento (no el
+          Estatus del catálogo), igual que con la plantilla normal.
         </p>
         <div class="acciones-form">
           <button type="submit" id="btn-cargar">Cargar archivo</button>

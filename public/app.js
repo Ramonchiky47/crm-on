@@ -18,6 +18,8 @@ const campos = {
 const btnGuardar = document.getElementById('btn-guardar');
 const btnCancelar = document.getElementById('btn-cancelar');
 const btnMostrarForm = document.getElementById('btn-mostrar-form');
+const btnActualizarOrdenesNetsuite = document.getElementById('btn-actualizar-ordenes-netsuite');
+const inputActualizarOrdenesNetsuite = document.getElementById('input-actualizar-ordenes-netsuite');
 const modalOrdenOverlay = document.getElementById('modal-orden-overlay');
 const modalOrdenCerrar = document.getElementById('modal-orden-cerrar');
 const tituloFormOrden = document.getElementById('titulo-form-orden');
@@ -742,6 +744,35 @@ form.addEventListener('submit', async (e) => {
 
 btnCancelar.addEventListener('click', cerrarFormulario);
 btnMostrarForm.addEventListener('click', abrirFormulario);
+
+btnActualizarOrdenesNetsuite.addEventListener('click', () => inputActualizarOrdenesNetsuite.click());
+
+inputActualizarOrdenesNetsuite.addEventListener('change', async () => {
+  const archivo = inputActualizarOrdenesNetsuite.files[0];
+  if (!archivo) return;
+
+  btnActualizarOrdenesNetsuite.disabled = true;
+  btnActualizarOrdenesNetsuite.textContent = 'Actualizando...';
+
+  try {
+    const res = await fetch('/api/ordenes/importar-excel-netsuite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+      body: await archivo.arrayBuffer(),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('Error al actualizar desde el archivo de NetSuite: ' + (data.error || res.statusText));
+      return;
+    }
+    alert(`Ordenes procesadas: ${data.total}\nNuevas: ${data.insertadas}\nActualizadas: ${data.actualizadas}\nErrores: ${data.errores.length}`);
+    await cargarOrdenes();
+  } finally {
+    btnActualizarOrdenesNetsuite.disabled = false;
+    btnActualizarOrdenesNetsuite.textContent = 'Actualizar';
+    inputActualizarOrdenesNetsuite.value = '';
+  }
+});
 modalOrdenCerrar.addEventListener('click', cerrarFormulario);
 modalOrdenOverlay.addEventListener('click', (e) => {
   if (e.target === modalOrdenOverlay) cerrarFormulario();
@@ -860,7 +891,10 @@ buscar.addEventListener('input', () => {
 promesaAuth.then((sesion) => {
   if (!sesion) return;
   permisosOrdenes = sesion.permisos.ordenes;
-  if (!permisosOrdenes.editar) btnMostrarForm.hidden = true;
+  if (!permisosOrdenes.editar) {
+    btnMostrarForm.hidden = true;
+    btnActualizarOrdenesNetsuite.hidden = true;
+  }
 
   Promise.all([cargarCatalogos(), cargarFiltroAnio()]).then(cargarOrdenes).then(() => {
     // Se llego desde el detalle de un Contacto/Hotel-Local: abre directo esa orden.

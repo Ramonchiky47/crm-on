@@ -7,7 +7,7 @@ const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 const { db, pool, transaction } = require('./db');
 
-const MODULOS = ['ordenes', 'detalle_compra', 'catalogos'];
+const MODULOS = ['ordenes', 'detalle_compra', 'facturacion', 'catalogos'];
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -4775,6 +4775,157 @@ app.post('/api/detalle-compra/importar-excel-netsuite', requirePermiso('detalle_
   }
 
   const resultado = await transaction((db) => procesarRegistrosDetalleCompra(db, registros));
+  res.json({ total: registros.length, ...resultado });
+}));
+
+// ---------- Facturacion ----------
+// "id" (numero de documento, ej. INV8237, CM180) enlaza conceptualmente con una factura o nota de
+// credito de NetSuite; NO es unico aqui: una factura puede tener varios articulos.
+
+const SELECT_FACTURACION = `SELECT * FROM facturacion`;
+
+function validarFacturacion(body, { parcial = false } = {}) {
+  const errores = [];
+  const { id, cantidad_vendida, precio_venta, ingresos } = body;
+
+  if (!parcial && (typeof id !== 'string' || id.trim() === '')) {
+    errores.push('id es requerido y debe ser texto no vacio');
+  }
+  if (cantidad_vendida !== undefined && numeroOpcional(cantidad_vendida) === undefined) {
+    errores.push('cantidad_vendida debe ser numerico');
+  }
+  if (precio_venta !== undefined && numeroOpcional(precio_venta) === undefined) {
+    errores.push('precio_venta debe ser numerico');
+  }
+  if (ingresos !== undefined && numeroOpcional(ingresos) === undefined) {
+    errores.push('ingresos debe ser numerico');
+  }
+
+  return errores;
+}
+
+app.get('/api/facturacion', requirePermiso('facturacion', 'ver'), ar(async (req, res) => {
+  const { id, q } = req.query;
+  let rows;
+  if (id) {
+    rows = await db.prepare(`${SELECT_FACTURACION} WHERE id = ? ORDER BY id_facturacion`).all(id);
+  } else if (q) {
+    rows = await db.prepare(`${SELECT_FACTURACION} WHERE id ILIKE ? OR articulo ILIKE ? OR numero_serie ILIKE ? ORDER BY fecha DESC`)
+      .all(`%${q}%`, `%${q}%`, `%${q}%`);
+  } else {
+    rows = await db.prepare(`${SELECT_FACTURACION} ORDER BY fecha DESC`).all();
+  }
+  res.json(rows);
+}));
+
+app.get('/api/facturacion/:idFacturacion', requirePermiso('facturacion', 'ver'), ar(async (req, res) => {
+  const row = await db.prepare(`${SELECT_FACTURACION} WHERE id_facturacion = ?`).get(req.params.idFacturacion);
+  if (!row) return res.status(404).json({ error: 'Registro de facturacion no encontrado' });
+  res.json(row);
+}));
+
+app.post('/api/facturacion', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
+  const errores = validarFacturacion(req.body);
+  if (errores.length) return res.status(400).json({ errores });
+
+  const b = req.body;
+  const info = await db.prepare(`
+    INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    quitarAcentos(b.id.trim()),
+    quitarAcentos(b.articulo) || null,
+    quitarAcentos(b.tipo) || null,
+    normalizarFecha(b.fecha) || null,
+    quitarAcentos(b.descripcion) || null,
+    quitarAcentos(b.numero_serie) || null,
+    numeroOpcional(b.cantidad_vendida),
+    numeroOpcional(b.precio_venta),
+    numeroOpcional(b.ingresos)
+  );
+
+  res.status(201).json(await db.prepare(`${SELECT_FACTURACION} WHERE id_facturacion = ?`).get(info.lastInsertRowid));
+}));
+
+app.put('/api/facturacion/:idFacturacion', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
+  const existente = await db.prepare('SELECT * FROM facturacion WHERE id_facturacion = ?').get(req.params.idFacturacion);
+  if (!existente) return res.status(404).json({ error: 'Registro de facturacion no encontrado' });
+
+  const errores = validarFacturacion(req.body, { parcial: true });
+  if (errores.length) return res.status(400).json({ errores });
+
+  const b = req.body;
+  const campo = (nombre, transform = quitarAcentos) => (b[nombre] !== undefined ? transform(b[nombre]) : existente[nombre]);
+
+  await db.prepare(`
+    UPDATE facturacion SET
+      id = ?, articulo = ?, tipo = ?, fecha = ?, descripcion = ?, numero_serie = ?, cantidad_vendida = ?, precio_venta = ?, ingresos = ?
+    WHERE id_facturacion = ?
+  `).run(
+    campo('id'), campo('articulo'), campo('tipo'), campo('fecha', normalizarFecha), campo('descripcion'), campo('numero_serie'),
+    campo('cantidad_vendida', numeroOpcional), campo('precio_venta', numeroOpcional), campo('ingresos', numeroOpcional),
+    req.params.idFacturacion
+  );
+
+  res.json(await db.prepare(`${SELECT_FACTURACION} WHERE id_facturacion = ?`).get(req.params.idFacturacion));
+}));
+
+app.delete('/api/facturacion/:idFacturacion', requirePermiso('facturacion', 'borrar'), ar(async (req, res) => {
+  const info = await db.prepare('DELETE FROM facturacion WHERE id_facturacion = ?').run(req.params.idFacturacion);
+  if (info.changes === 0) return res.status(404).json({ error: 'Registro de facturacion no encontrado' });
+  res.status(204).end();
+}));
+
+// Carga masiva por CSV. Columnas esperadas: id, articulo, tipo, fecha, descripcion, numero_serie,
+// cantidad_vendida, precio_venta, ingresos. "id" no es unico: cada fila se inserta.
+app.post('/api/facturacion/importar-csv', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
+  if (typeof req.body !== 'string' || !req.body.trim()) {
+    return res.status(400).json({ error: 'Envia el contenido del CSV como texto (Content-Type: text/csv)' });
+  }
+
+  const registros = filasCsvAObjetos(parsearCSV(req.body));
+
+  const resultado = await transaction(async (db) => {
+    const errores = [];
+    let insertadas = 0;
+
+    for (let indice = 0; indice < registros.length; indice++) {
+      const registro = registros[indice];
+      const numeroFila = indice + 2;
+      try {
+        if (!registro.id) throw new Error('id es requerido');
+
+        const cantidadVendida = registro.cantidad_vendida ? numeroOpcional(registro.cantidad_vendida) : null;
+        if (cantidadVendida === undefined) throw new Error('cantidad_vendida debe ser numerico');
+        const precioVenta = registro.precio_venta ? numeroOpcional(registro.precio_venta) : null;
+        if (precioVenta === undefined) throw new Error('precio_venta debe ser numerico');
+        const ingresos = registro.ingresos ? numeroOpcional(registro.ingresos) : null;
+        if (ingresos === undefined) throw new Error('ingresos debe ser numerico');
+
+        await db.prepare(`
+          INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos)
+          VALUES (@id, @articulo, @tipo, @fecha, @descripcion, @numero_serie, @cantidad_vendida, @precio_venta, @ingresos)
+        `).run({
+          id: registro.id,
+          articulo: registro.articulo || null,
+          tipo: registro.tipo || null,
+          fecha: registro.fecha ? normalizarFecha(registro.fecha) : null,
+          descripcion: registro.descripcion || null,
+          numero_serie: registro.numero_serie || null,
+          cantidad_vendida: cantidadVendida,
+          precio_venta: precioVenta,
+          ingresos,
+        });
+
+        insertadas++;
+      } catch (e) {
+        errores.push({ fila: numeroFila, id: registro.id || '(sin id)', error: e.message });
+      }
+    }
+
+    return { insertadas, errores };
+  });
+
   res.json({ total: registros.length, ...resultado });
 }));
 

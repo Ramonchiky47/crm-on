@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Facturación · CRM-ON</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="contenedor">
+    <h1>Facturación</h1>
+
+    <button type="button" id="btn-mostrar-form" class="btn-agregar">+ Agregar registro</button>
+
+    <form id="form-facturacion" hidden>
+      <input type="hidden" id="facturacion-id-original" />
+      <div class="fila">
+        <label>
+          ID (documento)
+          <input type="text" id="id" required />
+        </label>
+        <label>
+          Artículo
+          <input type="text" id="articulo" />
+        </label>
+        <label>
+          Tipo
+          <input type="text" id="tipo" />
+        </label>
+        <label>
+          Fecha
+          <input type="date" id="fecha" />
+        </label>
+      </div>
+      <div class="fila">
+        <label>
+          Descripción
+          <input type="text" id="descripcion" />
+        </label>
+        <label>
+          Número de serie
+          <input type="text" id="numero_serie" />
+        </label>
+        <label>
+          Cantidad vendida
+          <input type="number" id="cantidad_vendida" step="0.01" />
+        </label>
+      </div>
+      <div class="fila">
+        <label>
+          Precio de venta
+          <input type="number" id="precio_venta" step="0.01" />
+        </label>
+        <label>
+          Ingresos
+          <input type="number" id="ingresos" step="0.01" />
+        </label>
+      </div>
+
+      <div class="acciones-form">
+        <button type="submit" id="btn-guardar">Agregar registro</button>
+        <button type="button" id="btn-cancelar">Cancelar</button>
+      </div>
+    </form>
+
+    <div class="busqueda">
+      <input type="text" autocomplete="off" id="buscar" placeholder="Buscar por ID de documento, artículo o número de serie..." />
+    </div>
+
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th data-campo="id">ID</th>
+            <th data-campo="articulo">Artículo</th>
+            <th data-campo="tipo">Tipo</th>
+            <th data-campo="fecha">Fecha</th>
+            <th data-campo="descripcion">Descripción</th>
+            <th data-campo="numero_serie">Serie</th>
+            <th data-campo="cantidad_vendida">Cantidad</th>
+            <th data-campo="precio_venta">Precio</th>
+            <th data-campo="ingresos">Ingresos</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-facturacion"></tbody>
+      </table>
+    </div>
+
+    <p id="estado-vacio" hidden>No hay registros de facturación para mostrar.</p>
+  </div>
+
+  <script src="auth.js"></script>
+  <script src="facturacion.js"></script>
+</body>
+</html>

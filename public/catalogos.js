@@ -1345,6 +1345,7 @@ tablaEstadoEntrega.addEventListener('click', async (e) => {
 const MODULOS_USUARIO = [
   { clave: 'ordenes', etiqueta: 'Órdenes' },
   { clave: 'detalle_compra', etiqueta: 'Detalle de compra' },
+  { clave: 'facturacion', etiqueta: 'Facturación' },
   { clave: 'catalogos', etiqueta: 'Catálogos' },
 ];
 
@@ -1413,6 +1414,7 @@ async function cargarUsuarios() {
         <td>${u.es_admin ? 'Sí' : 'No'}</td>
         <td>${resumen('ordenes')}</td>
         <td>${resumen('detalle_compra')}</td>
+        <td>${resumen('facturacion')}</td>
         <td>${resumen('catalogos')}</td>
         <td class="acciones">
           <button class="btn-editar" data-id="${u.id_usuario}">Editar</button>

@@ -34,21 +34,6 @@
         <button type="button" id="btn-plantilla">Descargar plantilla CSV</button>
       </div>
 
-      <div class="tarjeta" style="margin: 1rem 0;">
-        <h3>Actualizar directo desde NetSuite</h3>
-        <p class="pista">
-          Trae las Órdenes de Venta de NetSuite de los últimos días y las carga igual que un CSV (misma regla:
-          una orden nueva se crea, una que ya existe solo actualiza estatus del sistema/importes/seguimiento).
-        </p>
-        <label class="campo-angosto">
-          Días hacia atrás
-          <input type="number" id="netsuite-dias" value="90" min="1" max="3650" />
-        </label>
-        <div class="acciones-form">
-          <button type="button" id="btn-actualizar-netsuite">Actualizar desde NetSuite</button>
-        </div>
-      </div>
-
       <form id="form-carga">
         <label>
           Archivo CSV o Excel de NetSuite

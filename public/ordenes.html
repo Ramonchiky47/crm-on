@@ -19,8 +19,8 @@
 
     <div class="acciones-form acciones-form-centrado">
       <button type="button" id="btn-mostrar-form" class="btn-agregar">+ Agregar orden</button>
-      <button type="button" id="btn-actualizar-ordenes-netsuite" class="btn-mini" title="Sube el .xlsx de NetSuite (Vista predeterminada Transacción)">Actualizar</button>
-      <input type="file" id="input-actualizar-ordenes-netsuite" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
+      <button type="button" id="btn-actualizar-ordenes-netsuite" class="btn-mini" title="Sube el/los .xlsx de NetSuite: Vista predeterminada Transacción (actualiza Órdenes) y/o Detalle de órdenes de venta por artículo (actualiza Detalle de compra)">Actualizar</button>
+      <input type="file" id="input-actualizar-ordenes-netsuite" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden />
       <div class="chip-select">
         <span class="chip-select-etiqueta">Año</span>
         <select id="filtro-anio"></select>

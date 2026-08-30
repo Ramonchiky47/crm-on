@@ -747,25 +747,53 @@ btnMostrarForm.addEventListener('click', abrirFormulario);
 
 btnActualizarOrdenesNetsuite.addEventListener('click', () => inputActualizarOrdenesNetsuite.click());
 
+function normalizarNombreArchivo(nombre) {
+  return nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Detecta el tipo de reporte de NetSuite por el nombre del archivo (NetSuite siempre nombra sus
+// exportaciones empezando con el nombre del reporte + un ID numerico): "Vista predeterminada
+// Transaccion..." actualiza Ordenes, "Detalle de ordenes de venta por articulo..." actualiza
+// Detalle de compra. Cualquier otro archivo (ej. "Detalle de ventas por articulo") se ignora.
+function endpointNetsuitePorArchivo(nombreArchivo) {
+  const normalizado = normalizarNombreArchivo(nombreArchivo);
+  if (normalizado.includes('vistapredeterminadatransaccion')) return '/api/ordenes/importar-excel-netsuite';
+  if (normalizado.includes('detalledeordenesdeventaporarticulo')) return '/api/detalle-compra/importar-excel-netsuite';
+  return null;
+}
+
 inputActualizarOrdenesNetsuite.addEventListener('change', async () => {
-  const archivo = inputActualizarOrdenesNetsuite.files[0];
-  if (!archivo) return;
+  const archivos = [...inputActualizarOrdenesNetsuite.files];
+  if (!archivos.length) return;
 
   btnActualizarOrdenesNetsuite.disabled = true;
   btnActualizarOrdenesNetsuite.textContent = 'Actualizando...';
 
   try {
-    const res = await fetch('/api/ordenes/importar-excel-netsuite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
-      body: await archivo.arrayBuffer(),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      alert('Error al actualizar desde el archivo de NetSuite: ' + (data.error || res.statusText));
-      return;
+    const resumen = [];
+    for (const archivo of archivos) {
+      const endpoint = endpointNetsuitePorArchivo(archivo.name);
+      if (!endpoint) {
+        resumen.push(`${archivo.name}: archivo no reconocido, se omitio`);
+        continue;
+      }
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        body: await archivo.arrayBuffer(),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        resumen.push(`${archivo.name}: error - ${data.error || res.statusText}`);
+        continue;
+      }
+      const destino = endpoint.includes('detalle-compra') ? 'Detalle de compra' : 'Ordenes';
+      const detalle = endpoint.includes('detalle-compra')
+        ? `nuevas ${data.insertadas}, ya existian ${data.omitidas}, errores ${data.errores.length}`
+        : `nuevas ${data.insertadas}, actualizadas ${data.actualizadas}, errores ${data.errores.length}`;
+      resumen.push(`${archivo.name} -> ${destino}: procesadas ${data.total}, ${detalle}`);
     }
-    alert(`Ordenes procesadas: ${data.total}\nNuevas: ${data.insertadas}\nActualizadas: ${data.actualizadas}\nErrores: ${data.errores.length}`);
+    alert(resumen.join('\n'));
     await cargarOrdenes();
   } finally {
     btnActualizarOrdenesNetsuite.disabled = false;

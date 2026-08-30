@@ -1,7 +1,7 @@
-// Busca el archivo .xlsx mas reciente de "Vista predeterminada Transaccion" (exportacion de
-// NetSuite) en la carpeta de descargas, inicia sesion en la app con la cuenta de APP_USUARIO/
-// APP_PASSWORD y lo sube a /api/ordenes/importar-excel-netsuite (misma logica que subirlo a mano
-// desde Carga inicial -> Ordenes).
+// Busca en la carpeta de descargas los archivos .xlsx mas recientes que exporta NetSuite ("Vista
+// predeterminada Transaccion" -> Ordenes, "Detalle de ordenes de venta por articulo" -> Detalle de
+// compra), inicia sesion en la app con la cuenta de APP_USUARIO/APP_PASSWORD y los sube a sus
+// endpoints (misma logica que subirlos a mano desde el boton "Actualizar" de Ordenes).
 //
 // Uso: node --env-file=.env scripts/subir_ordenes_netsuite.js
 const fs = require('fs');
@@ -9,14 +9,21 @@ const path = require('path');
 
 const CARPETA_DESCARGAS = '/Users/ramonvillanueva/Downloads/descargas netsuite';
 
+// Mismo criterio que endpointNetsuitePorArchivo en public/app.js: NetSuite siempre nombra sus
+// exportaciones empezando con el nombre del reporte + un ID numerico.
+const REPORTES = [
+  { patron: 'vistapredeterminadatransaccion', endpoint: '/api/ordenes/importar-excel-netsuite', nombre: 'Ordenes' },
+  { patron: 'detalledeordenesdeventaporarticulo', endpoint: '/api/detalle-compra/importar-excel-netsuite', nombre: 'Detalle de compra' },
+];
+
 function normalizar(texto) {
   return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function archivoMasReciente() {
+function archivoMasRecienteDe(patron) {
   const archivos = fs.readdirSync(CARPETA_DESCARGAS)
     .filter((nombre) => !nombre.startsWith('~$') && /\.xlsx$/i.test(nombre))
-    .filter((nombre) => normalizar(nombre).includes('vistapredeterminadatransaccion'))
+    .filter((nombre) => normalizar(nombre).includes(patron))
     .map((nombre) => {
       const ruta = path.join(CARPETA_DESCARGAS, nombre);
       return { ruta, mtime: fs.statSync(ruta).mtimeMs };
@@ -40,9 +47,9 @@ async function iniciarSesion(baseUrl, usuario, password) {
   return cookies.join('; ');
 }
 
-async function subirArchivo(baseUrl, cookie, rutaArchivo) {
+async function subirArchivo(baseUrl, cookie, endpoint, rutaArchivo) {
   const buffer = fs.readFileSync(rutaArchivo);
-  const res = await fetch(`${baseUrl}/api/ordenes/importar-excel-netsuite`, {
+  const res = await fetch(`${baseUrl}${endpoint}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -64,21 +71,24 @@ async function subirArchivo(baseUrl, cookie, rutaArchivo) {
     process.exit(1);
   }
 
-  const rutaArchivo = archivoMasReciente();
-  if (!rutaArchivo) {
-    console.error(`No se encontro ningun archivo "Vista predeterminada Transaccion" (.xlsx) en ${CARPETA_DESCARGAS}`);
-    process.exit(1);
-  }
-  console.log(`Archivo encontrado: ${rutaArchivo}`);
-
   const cookie = await iniciarSesion(baseUrl, usuario, password);
-  const resultado = await subirArchivo(baseUrl, cookie, rutaArchivo);
 
-  console.log(`Total procesadas: ${resultado.total}`);
-  console.log(`Nuevas: ${resultado.insertadas}`);
-  console.log(`Actualizadas: ${resultado.actualizadas}`);
-  console.log(`Errores: ${resultado.errores.length}`);
-  if (resultado.errores.length) console.log(JSON.stringify(resultado.errores, null, 2));
+  for (const reporte of REPORTES) {
+    const rutaArchivo = archivoMasRecienteDe(reporte.patron);
+    if (!rutaArchivo) {
+      console.log(`(sin archivo de "${reporte.nombre}" en ${CARPETA_DESCARGAS}, se omite)`);
+      continue;
+    }
+    console.log(`\n${reporte.nombre} <- ${rutaArchivo}`);
+
+    const resultado = await subirArchivo(baseUrl, cookie, reporte.endpoint, rutaArchivo);
+    console.log(`Total procesadas: ${resultado.total}`);
+    console.log(`Nuevas: ${resultado.insertadas}`);
+    if ('actualizadas' in resultado) console.log(`Actualizadas: ${resultado.actualizadas}`);
+    if ('omitidas' in resultado) console.log(`Ya existian: ${resultado.omitidas}`);
+    console.log(`Errores: ${resultado.errores.length}`);
+    if (resultado.errores.length) console.log(JSON.stringify(resultado.errores, null, 2));
+  }
 })().catch((e) => {
   console.error(e.message);
   process.exit(1);

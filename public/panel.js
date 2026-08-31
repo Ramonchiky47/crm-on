@@ -119,39 +119,43 @@ function chipAtraso(dias) {
 }
 
 function renderizarQueHacerHoy(seguimientos, tareas) {
-  const items = [
-    ...seguimientos.map((c) => ({
-      tipo: 'Seguimiento',
-      dias: diasHasta(c.fecha_seguimiento),
-      href: `cotizaciones.html?cotizacion=${encodeURIComponent(c.id_cotizacion)}`,
-      principal: `${escaparHtml(c.id_cotizacion)} · ${escaparHtml(c.destino_nombre || c.nombre)}`,
-      secundario: `${escaparHtml(c.contacto_nombre || '')} · ${escaparHtml(c.moneda)} ${formatoImporte(c.gran_total)}`,
-    })),
-    ...tareas.map((t) => ({
-      tipo: 'Tarea',
-      dias: diasHasta(t.fecha_compromiso),
-      href: 'index.html',
-      principal: escaparHtml(t.nombre),
-      secundario: '',
-    })),
-  ].sort((a, b) => a.dias - b.dias);
+  const itemsTarea = tareas.map((t) => ({
+    dias: diasHasta(t.fecha_compromiso),
+    href: 'index.html',
+    principal: escaparHtml(t.nombre),
+    secundario: '',
+  })).sort((a, b) => a.dias - b.dias);
 
+  const itemsSeguimiento = seguimientos.map((c) => ({
+    dias: diasHasta(c.fecha_seguimiento),
+    href: `cotizaciones.html?cotizacion=${encodeURIComponent(c.id_cotizacion)}`,
+    principal: `${escaparHtml(c.id_cotizacion)} · ${escaparHtml(c.destino_nombre || c.nombre)}`,
+    secundario: `${escaparHtml(c.contacto_nombre || '')} · ${escaparHtml(c.moneda)} ${formatoImporte(c.gran_total)}`,
+  })).sort((a, b) => a.dias - b.dias);
+
+  const total = itemsTarea.length + itemsSeguimiento.length;
   document.getElementById('que-hacer-hoy-subtitulo').textContent =
-    items.length ? `${items.length} atrasado${items.length === 1 ? '' : 's'}` : 'Al día';
+    total ? `${total} atrasado${total === 1 ? '' : 's'}` : 'Al día';
 
-  document.getElementById('lista-que-hacer-hoy').innerHTML = items.length
-    ? items.map((it) => `
-        <div class="fila-lista" tabindex="0" data-href="${it.href}" title="Abrir">
-          <div class="fila-lista__texto">
-            <div class="fila-lista__principal">
-              <span class="chip-tipo chip-tipo-${it.tipo === 'Tarea' ? 'tarea' : 'seguimiento'}">${it.tipo}</span>
-              ${it.principal}
-            </div>
-            ${it.secundario ? `<div class="fila-lista__secundario">${it.secundario}</div>` : ''}
-          </div>
-          ${chipAtraso(it.dias)}
-        </div>
-      `).join('')
+  const fila = (it) => `
+    <div class="fila-lista" tabindex="0" data-href="${it.href}" title="Abrir">
+      <div class="fila-lista__texto">
+        <div class="fila-lista__principal">${it.principal}</div>
+        ${it.secundario ? `<div class="fila-lista__secundario">${it.secundario}</div>` : ''}
+      </div>
+      ${chipAtraso(it.dias)}
+    </div>
+  `;
+
+  // Separadas en dos grupos (Tareas y Seguimientos de cotizacion) en vez de una sola lista
+  // mezclada: son cosas distintas que se resuelven de forma distinta, no tiene sentido
+  // intercalarlas solo por cual esta mas atrasada.
+  const grupo = (titulo, items) => items.length
+    ? `<div class="lista__grupo-titulo">${titulo} (${items.length})</div>${items.map(fila).join('')}`
+    : '';
+
+  document.getElementById('lista-que-hacer-hoy').innerHTML = total
+    ? grupo('Tareas', itemsTarea) + grupo('Seguimientos de cotización', itemsSeguimiento)
     : '<p class="tarjeta-vacio">Sin pendientes atrasados.</p>';
 }
 

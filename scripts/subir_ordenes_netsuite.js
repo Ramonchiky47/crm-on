@@ -1,7 +1,8 @@
 // Busca en la carpeta de descargas los archivos .xlsx mas recientes que exporta NetSuite ("Vista
 // predeterminada Transaccion" -> Ordenes, "Detalle de ordenes de venta por articulo" -> Detalle de
-// compra), inicia sesion en la app con la cuenta de APP_USUARIO/APP_PASSWORD y los sube a sus
-// endpoints (misma logica que subirlos a mano desde el boton "Actualizar" de Ordenes).
+// compra, "Detalle de ventas por articulo" -> Facturacion), inicia sesion en la app con la cuenta
+// de APP_USUARIO/APP_PASSWORD y los sube a sus endpoints (misma logica que subirlos a mano desde
+// el boton "Actualizar" de Ordenes).
 //
 // Uso: node --env-file=.env scripts/subir_ordenes_netsuite.js
 const fs = require('fs');
@@ -9,11 +10,12 @@ const path = require('path');
 
 const CARPETA_DESCARGAS = '/Users/ramonvillanueva/Downloads/descargas netsuite';
 
-// Mismo criterio que endpointNetsuitePorArchivo en public/app.js: NetSuite siempre nombra sus
+// Mismo criterio que reporteNetsuitePorArchivo en public/app.js: NetSuite siempre nombra sus
 // exportaciones empezando con el nombre del reporte + un ID numerico.
 const REPORTES = [
   { patron: 'vistapredeterminadatransaccion', endpoint: '/api/ordenes/importar-excel-netsuite', nombre: 'Ordenes' },
   { patron: 'detalledeordenesdeventaporarticulo', endpoint: '/api/detalle-compra/importar-excel-netsuite', nombre: 'Detalle de compra' },
+  { patron: 'detalledeventasporarticulo', endpoint: '/api/facturacion/importar-excel-netsuite', nombre: 'Facturación' },
 ];
 
 function normalizar(texto) {

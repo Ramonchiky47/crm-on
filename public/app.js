@@ -754,12 +754,16 @@ function normalizarNombreArchivo(nombre) {
 // Detecta el tipo de reporte de NetSuite por el nombre del archivo (NetSuite siempre nombra sus
 // exportaciones empezando con el nombre del reporte + un ID numerico): "Vista predeterminada
 // Transaccion..." actualiza Ordenes, "Detalle de ordenes de venta por articulo..." actualiza
-// Detalle de compra. Cualquier otro archivo (ej. "Detalle de ventas por articulo") se ignora.
-function endpointNetsuitePorArchivo(nombreArchivo) {
+// Detalle de compra, "Detalle de ventas por articulo..." actualiza Facturacion.
+const REPORTES_NETSUITE = [
+  { patron: 'vistapredeterminadatransaccion', endpoint: '/api/ordenes/importar-excel-netsuite', destino: 'Ordenes' },
+  { patron: 'detalledeordenesdeventaporarticulo', endpoint: '/api/detalle-compra/importar-excel-netsuite', destino: 'Detalle de compra' },
+  { patron: 'detalledeventasporarticulo', endpoint: '/api/facturacion/importar-excel-netsuite', destino: 'Facturación' },
+];
+
+function reporteNetsuitePorArchivo(nombreArchivo) {
   const normalizado = normalizarNombreArchivo(nombreArchivo);
-  if (normalizado.includes('vistapredeterminadatransaccion')) return '/api/ordenes/importar-excel-netsuite';
-  if (normalizado.includes('detalledeordenesdeventaporarticulo')) return '/api/detalle-compra/importar-excel-netsuite';
-  return null;
+  return REPORTES_NETSUITE.find((r) => normalizado.includes(r.patron)) || null;
 }
 
 inputActualizarOrdenesNetsuite.addEventListener('change', async () => {
@@ -772,12 +776,12 @@ inputActualizarOrdenesNetsuite.addEventListener('change', async () => {
   try {
     const resumen = [];
     for (const archivo of archivos) {
-      const endpoint = endpointNetsuitePorArchivo(archivo.name);
-      if (!endpoint) {
+      const reporte = reporteNetsuitePorArchivo(archivo.name);
+      if (!reporte) {
         resumen.push(`${archivo.name}: archivo no reconocido, se omitio`);
         continue;
       }
-      const res = await fetch(endpoint, {
+      const res = await fetch(reporte.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
         body: await archivo.arrayBuffer(),
@@ -787,11 +791,10 @@ inputActualizarOrdenesNetsuite.addEventListener('change', async () => {
         resumen.push(`${archivo.name}: error - ${data.error || res.statusText}`);
         continue;
       }
-      const destino = endpoint.includes('detalle-compra') ? 'Detalle de compra' : 'Ordenes';
-      const detalle = endpoint.includes('detalle-compra')
+      const detalle = 'omitidas' in data
         ? `nuevas ${data.insertadas}, ya existian ${data.omitidas}, errores ${data.errores.length}`
         : `nuevas ${data.insertadas}, actualizadas ${data.actualizadas}, errores ${data.errores.length}`;
-      resumen.push(`${archivo.name} -> ${destino}: procesadas ${data.total}, ${detalle}`);
+      resumen.push(`${archivo.name} -> ${reporte.destino}: procesadas ${data.total}, ${detalle}`);
     }
     alert(resumen.join('\n'));
     await cargarOrdenes();

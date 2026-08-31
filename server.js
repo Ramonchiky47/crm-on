@@ -4931,6 +4931,123 @@ app.post('/api/facturacion/importar-csv', requirePermiso('facturacion', 'editar'
   res.json({ total: registros.length, ...resultado });
 }));
 
+// El reporte "Detalle de ventas por articulo" de NetSuite viene agrupado igual que el de Detalle
+// de compra (el codigo de articulo aparece una sola vez y las lineas van debajo sin repetirlo, con
+// filas de subtotal intercaladas), solo que con columnas distintas: Articulo, Tipo, Fecha, Numero
+// de documento, Descripcion, Numeros de serie, Cantidad vendida, Precio de venta, Ingresos.
+async function netsuiteFacturacionXlsxARegistros(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const hoja = workbook.worksheets[0];
+  if (!hoja) return [];
+
+  let filaEncabezado = null;
+  for (let numeroFila = 1; numeroFila <= Math.min(hoja.rowCount, 20); numeroFila++) {
+    const fila = hoja.getRow(numeroFila);
+    if (normalizarEncabezadoXlsx(fila.getCell(1).value) === 'articulo'
+      && normalizarEncabezadoXlsx(fila.getCell(2).value) === 'tipo') {
+      filaEncabezado = numeroFila;
+      break;
+    }
+  }
+  if (!filaEncabezado) return [];
+
+  const registros = [];
+  let articuloActual = null;
+
+  for (let numeroFila = filaEncabezado + 1; numeroFila <= hoja.rowCount; numeroFila++) {
+    const fila = hoja.getRow(numeroFila);
+    const articulo = celdaXlsxATexto(fila.getCell(1).value, false);
+    const idDocumento = celdaXlsxATexto(fila.getCell(4).value, false);
+
+    if (idDocumento) {
+      registros.push({
+        id: idDocumento,
+        articulo: articuloActual,
+        tipo: celdaXlsxATexto(fila.getCell(2).value, false) || null,
+        fecha: celdaXlsxATexto(fila.getCell(3).value, true) || null,
+        descripcion: celdaXlsxATexto(fila.getCell(5).value, false) || null,
+        numero_serie: celdaXlsxATexto(fila.getCell(6).value, false) || null,
+        cantidad_vendida: celdaXlsxATexto(fila.getCell(7).value, false),
+        precio_venta: celdaXlsxATexto(fila.getCell(8).value, false),
+        ingresos: celdaXlsxATexto(fila.getCell(9).value, false),
+      });
+    } else if (articulo && !articulo.startsWith('Total')) {
+      articuloActual = articulo;
+    }
+  }
+  return registros;
+}
+
+// Igual criterio que procesarRegistrosDetalleCompra: el reporte trae el historial completo cada
+// vez que se descarga, asi que una linea solo se inserta si no existe ya una identica (mismo id,
+// articulo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta e ingresos). Nunca se
+// actualiza una fila existente, asi que el pedido_id que ya se haya asociado a mano jamas se toca
+// (el reporte de NetSuite no trae esa columna, solo se llena manualmente desde el detalle).
+async function procesarRegistrosFacturacion(db, registros) {
+  const errores = [];
+  let insertadas = 0;
+  let omitidas = 0;
+
+  for (let indice = 0; indice < registros.length; indice++) {
+    const registro = registros[indice];
+    const numeroFila = indice + 2;
+    try {
+      if (!registro.id) throw new Error('id es requerido');
+
+      const cantidadVendida = registro.cantidad_vendida ? numeroOpcional(registro.cantidad_vendida) : null;
+      if (cantidadVendida === undefined) throw new Error('cantidad_vendida debe ser numerico');
+      const precioVenta = registro.precio_venta ? numeroOpcional(registro.precio_venta) : null;
+      if (precioVenta === undefined) throw new Error('precio_venta debe ser numerico');
+      const ingresos = registro.ingresos ? numeroOpcional(registro.ingresos) : null;
+      if (ingresos === undefined) throw new Error('ingresos debe ser numerico');
+
+      const fecha = registro.fecha ? normalizarFecha(registro.fecha) : null;
+      const articulo = registro.articulo || null;
+      const tipo = registro.tipo || null;
+      const descripcion = registro.descripcion || null;
+      const numeroSerie = registro.numero_serie || null;
+
+      const existente = await db.prepare(`
+        SELECT COUNT(*) c FROM facturacion
+        WHERE id = ? AND articulo IS NOT DISTINCT FROM ? AND fecha IS NOT DISTINCT FROM ?
+          AND descripcion IS NOT DISTINCT FROM ? AND numero_serie IS NOT DISTINCT FROM ?
+          AND cantidad_vendida IS NOT DISTINCT FROM ? AND precio_venta IS NOT DISTINCT FROM ?
+          AND ingresos IS NOT DISTINCT FROM ?
+      `).get(registro.id, articulo, fecha, descripcion, numeroSerie, cantidadVendida, precioVenta, ingresos);
+
+      if (Number(existente.c) > 0) { omitidas++; continue; }
+
+      await db.prepare(`
+        INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(registro.id, articulo, tipo, fecha, descripcion, numeroSerie, cantidadVendida, precioVenta, ingresos);
+
+      insertadas++;
+    } catch (e) {
+      errores.push({ fila: numeroFila, id: registro.id || '(sin id)', error: e.message });
+    }
+  }
+
+  return { insertadas, omitidas, errores };
+}
+
+app.post('/api/facturacion/importar-excel-netsuite', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) {
+    return res.status(400).json({ error: 'Envia el archivo .xlsx de NetSuite como binario (Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)' });
+  }
+
+  let registros;
+  try {
+    registros = await netsuiteFacturacionXlsxARegistros(req.body);
+  } catch (e) {
+    return res.status(400).json({ error: `No se pudo leer el archivo Excel: ${e.message}` });
+  }
+
+  const resultado = await transaction((db) => procesarRegistrosFacturacion(db, registros));
+  res.json({ total: registros.length, ...resultado });
+}));
+
 // ---------- Buscador global ----------
 // Busca por nombre de Contacto, Destino o ID/nombre de Orden, y regresa junto con cada
 // coincidencia todos sus registros asociados (ordenes, cotizaciones, negocios).

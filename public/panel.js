@@ -339,6 +339,9 @@ async function cargarPanel() {
   if (d.ventasMes !== undefined) {
     kpis.push(tarjetaKpi('Ventas del mes (MXN)', `$${formatoImporte(d.ventasMes)}`, null));
   }
+  if (d.ventasOrdenesCargadasMes !== undefined) {
+    kpis.push(tarjetaKpi('Órdenes cargadas en el mes (MXN)', `$${formatoImporte(d.ventasOrdenesCargadasMes)}`, null));
+  }
   document.getElementById('panel-kpis').innerHTML = kpis.join('');
 
   if (d.pipeline) {

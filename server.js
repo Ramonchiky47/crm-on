@@ -5318,7 +5318,14 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
       WHERE e.estatus = 'Pendiente'
     `).get();
     resultado.ordenesPendientes = Number(enUso.c);
-    const ventasMes = await db.prepare('SELECT COALESCE(SUM(importe), 0) ventas FROM ordenes WHERE fecha >= ?').get(inicioMes);
+    // "Cargadas en el mes" = por creado_en (cuando se registro la orden en el CRM), no por su
+    // propia fecha: refleja la actividad de captura del mes, distinto de cuando se facturo.
+    const ventasOrdenesCargadasMes = await db.prepare('SELECT COALESCE(SUM(importe), 0) ventas FROM ordenes WHERE creado_en >= ?').get(inicioMes);
+    resultado.ventasOrdenesCargadasMes = Number(ventasOrdenesCargadasMes.ventas);
+  }
+
+  if (permisos.facturacion.ver) {
+    const ventasMes = await db.prepare('SELECT COALESCE(SUM(ingresos), 0) ventas FROM facturacion WHERE fecha >= ?').get(inicioMes);
     resultado.ventasMes = Number(ventasMes.ventas);
   }
 

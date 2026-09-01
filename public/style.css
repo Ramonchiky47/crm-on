@@ -771,6 +771,36 @@ button:disabled {
 
 .acciones-form-centrado { align-items: center; }
 
+/* Encabezado de listas simples (ej. Facturacion): boton de alta a la izquierda, filtro +
+   resumen a la derecha, en el mismo renglon en vez de apilados. Se envuelve en pantallas
+   angostas en vez de forzar una sola linea muy comprimida. */
+.fila-encabezado-lista {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.2rem;
+  margin-bottom: 0.9rem;
+}
+.fila-encabezado-lista .btn-agregar { margin-bottom: 0; }
+
+.filtro-resumen-facturacion {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  flex-wrap: wrap;
+}
+.resumen-facturacion {
+  display: flex;
+  gap: 1.1rem;
+  font-size: 0.85rem;
+}
+.resumen-facturacion .pista { margin-top: 0; }
+.resumen-facturacion strong {
+  color: #1a1a1a;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Guardar/Cancelar de la captura de cotizacion: fijos al fondo del modal, para no tener que
    llegar hasta abajo del todo (con scroll) para encontrar Guardar. Con position:sticky esta
    barra se solapaba con la ultima partida de Productos (el contenido en flujo normal seguia
@@ -2446,6 +2476,7 @@ td.celda-check {
   }
   .chip-select { background: #2a2a2a; }
   .chip-select-etiqueta { color: #aaa; }
+  .resumen-facturacion strong { color: #eee; }
   .lista__grupo-titulo { color: #999; }
   .multi-select-btn {
     background: #2a2a2a;

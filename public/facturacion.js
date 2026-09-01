@@ -18,6 +18,9 @@ const btnMostrarForm = document.getElementById('btn-mostrar-form');
 const tabla = document.getElementById('tabla-facturacion');
 const estadoVacio = document.getElementById('estado-vacio');
 const buscar = document.getElementById('buscar');
+const filtroMes = document.getElementById('filtro-mes-facturacion');
+const resumenCantidad = document.getElementById('resumen-fact-cantidad');
+const resumenIngresos = document.getElementById('resumen-fact-ingresos');
 
 function escaparHtml(texto) {
   const div = document.createElement('div');
@@ -40,13 +43,41 @@ function comparar(va, vb) {
   return String(va).localeCompare(String(vb), 'es', { numeric: true });
 }
 
+function nombreMes(anioMes) {
+  const [anio, mes] = anioMes.split('-');
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const nombre = meses[Number(mes) - 1] || mes;
+  return `${nombre.charAt(0).toUpperCase()}${nombre.slice(1)} ${anio}`;
+}
+
+// El desplegable de meses se arma con lo que ya esta cargado en ultimaLista (no pide nada
+// extra al servidor); si el mes seleccionado sigue existiendo en la lista nueva se respeta,
+// si no, regresa a "Todos" en vez de quedarse en un valor que ya no aplica.
+function actualizarOpcionesMes() {
+  const seleccionActual = filtroMes.value;
+  const meses = [...new Set(ultimaLista.map((f) => (f.fecha || '').slice(0, 7)).filter(Boolean))].sort().reverse();
+  filtroMes.innerHTML = '<option value="">Todos</option>'
+    + meses.map((m) => `<option value="${m}">${escaparHtml(nombreMes(m))}</option>`).join('');
+  filtroMes.value = meses.includes(seleccionActual) ? seleccionActual : '';
+}
+
+function actualizarResumen(lista) {
+  const ingresos = lista.reduce((acc, f) => acc + Number(f.ingresos || 0), 0);
+  resumenCantidad.textContent = lista.length;
+  resumenIngresos.textContent = `$${formatoImporte(ingresos)}`;
+}
+
 function ordenarYRenderizar() {
-  const lista = [...ultimaLista].sort((a, b) => {
+  const filtrada = filtroMes.value
+    ? ultimaLista.filter((f) => (f.fecha || '').startsWith(filtroMes.value))
+    : ultimaLista;
+  const lista = [...filtrada].sort((a, b) => {
     const cmp = comparar(a[orden.campo], b[orden.campo]);
     return orden.direccion === 'asc' ? cmp : -cmp;
   });
   renderizar(lista);
   actualizarIndicadoresOrden();
+  actualizarResumen(lista);
 }
 
 function actualizarIndicadoresOrden() {
@@ -77,8 +108,11 @@ async function cargarFacturacion() {
   const url = q ? `/api/facturacion?q=${encodeURIComponent(q)}` : '/api/facturacion';
   const res = await fetch(url);
   ultimaLista = await res.json();
+  actualizarOpcionesMes();
   ordenarYRenderizar();
 }
+
+filtroMes.addEventListener('change', ordenarYRenderizar);
 
 let permisosFacturacion = { ver: true, editar: true, borrar: true };
 

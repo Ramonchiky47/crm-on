@@ -10,7 +10,21 @@
   <div class="contenedor">
     <h1>Facturación</h1>
 
-    <button type="button" id="btn-mostrar-form" class="btn-agregar">+ Agregar registro</button>
+    <div class="fila-encabezado-lista">
+      <button type="button" id="btn-mostrar-form" class="btn-agregar">+ Agregar registro</button>
+      <div class="filtro-resumen-facturacion">
+        <div class="chip-select">
+          <span class="chip-select-etiqueta">Mes</span>
+          <select id="filtro-mes-facturacion">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="resumen-facturacion">
+          <span class="pista"><strong id="resumen-fact-cantidad">0</strong> registros</span>
+          <span class="pista">Ingresos <strong id="resumen-fact-ingresos">$0.00</strong></span>
+        </div>
+      </div>
+    </div>
 
     <form id="form-facturacion" hidden>
       <input type="hidden" id="facturacion-id-original" />

@@ -5048,6 +5048,48 @@ app.post('/api/facturacion/importar-excel-netsuite', requirePermiso('facturacion
   res.json({ total: registros.length, ...resultado });
 }));
 
+// ---------- Presupuesto de ventas ----------
+// Un monto por mes (formato 'YYYY-MM') que se captura a mano; se compara contra las ventas
+// reales de Facturacion de ese mismo mes (misma fuente que la tarjeta "Ventas del mes" del
+// panel) para saber que tanto se va cumpliendo la meta.
+app.get('/api/presupuesto-ventas', requirePermiso('facturacion', 'ver'), ar(async (req, res) => {
+  const filas = await db.prepare(`
+    SELECT COALESCE(p.anio_mes, v.anio_mes) anio_mes,
+           p.monto presupuesto,
+           COALESCE(v.ventas, 0) ventas
+    FROM presupuesto_ventas p
+    FULL OUTER JOIN (
+      SELECT SUBSTRING(fecha, 1, 7) anio_mes, SUM(ingresos) ventas
+      FROM facturacion
+      WHERE fecha IS NOT NULL
+      GROUP BY SUBSTRING(fecha, 1, 7)
+    ) v ON v.anio_mes = p.anio_mes
+    ORDER BY anio_mes DESC
+  `).all();
+  res.json(filas);
+}));
+
+app.post('/api/presupuesto-ventas', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
+  const anioMes = String(req.body.anio_mes || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(anioMes)) return res.status(400).json({ error: 'anio_mes debe tener formato AAAA-MM' });
+  const monto = numeroOpcional(req.body.monto);
+  if (monto === undefined || monto === null || monto < 0) return res.status(400).json({ error: 'monto debe ser un numero mayor o igual a 0' });
+
+  await db.prepare(`
+    INSERT INTO presupuesto_ventas (anio_mes, monto)
+    VALUES (?, ?)
+    ON CONFLICT (anio_mes) DO UPDATE SET monto = excluded.monto, actualizado_en = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+  `).run(anioMes, monto);
+
+  res.status(201).json({ anio_mes: anioMes, monto });
+}));
+
+app.delete('/api/presupuesto-ventas/:anioMes', requirePermiso('facturacion', 'borrar'), ar(async (req, res) => {
+  const info = await db.prepare('DELETE FROM presupuesto_ventas WHERE anio_mes = ?').run(req.params.anioMes);
+  if (info.changes === 0) return res.status(404).json({ error: 'Presupuesto no encontrado' });
+  res.status(204).end();
+}));
+
 // ---------- Buscador global ----------
 // Busca por nombre de Contacto, Destino o ID/nombre de Orden, y regresa junto con cada
 // coincidencia todos sus registros asociados (ordenes, cotizaciones, negocios).

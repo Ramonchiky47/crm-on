@@ -1682,13 +1682,13 @@ async function cargarSolicitudesProveedor() {
     <div class="panel-form panel-form-clicable" data-id="${escaparHtml(s.id_solicitud)}" data-token="${escaparHtml(s.token_publico)}" title="Clic para ver la pantalla que se le envió al proveedor">
       <div>
         <strong>${escaparHtml(s.proveedor_nombre || '')}</strong>
-        — ${escaparHtml((s.items || []).map((it) => `${it.codigo} (x${it.cantidad})`).join(', '))}
+        — ${escaparHtml((s.items || []).map((it) => `${it.codigo}${it.descripcion ? ` - ${it.descripcion}` : ''} (x${it.cantidad})`).join(', '))}
         ${pillEstatusSolicitud(s.estatus)}
         ${s.tiempo_respuesta ? `<span class="pista">Respondió en ${escaparHtml(s.tiempo_respuesta.texto)}</span>` : ''}
       </div>
       ${s.estatus === 'Respondida' ? `
         <div class="pista">
-          ${(s.items || []).map((it) => `${escaparHtml(it.codigo)}: ${it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio'} — ${escaparHtml(it.tiempo_entrega || 'sin tiempo de entrega')}${it.comentarios ? ` (${escaparHtml(it.comentarios)})` : ''}`).join('<br>')}
+          ${(s.items || []).map((it) => `${escaparHtml(it.codigo)}${it.descripcion ? ` - ${escaparHtml(it.descripcion)}` : ''}: ${it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio'} — ${escaparHtml(it.tiempo_entrega || 'sin tiempo de entrega')}${it.comentarios ? ` (${escaparHtml(it.comentarios)})` : ''}`).join('<br>')}
           ${s.comentarios ? `<br><strong>Comentarios del proveedor:</strong> ${escaparHtml(s.comentarios)}` : ''}
         </div>
       ` : ''}
@@ -1774,11 +1774,13 @@ let solicitudesProveedorGlobalCache = [];
 // verdad importa ver en este catalogo una vez contestada.
 function resumenProductosSolicitud(s) {
   return (s.items || []).map((it) => {
-    const base = `${escaparHtml(it.codigo)} (x${escaparHtml(it.cantidad)})`;
+    const producto = it.descripcion ? ` - ${escaparHtml(it.descripcion)}` : '';
+    const base = `${escaparHtml(it.codigo)}${producto} (x${escaparHtml(it.cantidad)})`;
     if (s.estatus !== 'Respondida') return base;
     const precio = it.precio_venta != null ? formatoImporte(it.precio_venta) : 'sin precio';
     const tiempo = escaparHtml(it.tiempo_entrega || 'sin tiempo de entrega');
-    return `${base}: ${precio} — ${tiempo}`;
+    const comentarios = it.comentarios ? ` (${escaparHtml(it.comentarios)})` : '';
+    return `${base}: ${precio} — ${tiempo}${comentarios}`;
   }).join('<br>');
 }
 

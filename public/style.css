@@ -566,6 +566,9 @@ body.con-barra-lateral {
    de una sola lista mezclada y ordenada solo por dias de retraso. */
 .tarjeta-hoy { border-left: 3px solid var(--peligro); }
 
+.texto-bueno { color: var(--exito); font-weight: 600; }
+.texto-critico { color: var(--peligro); font-weight: 600; }
+
 .lista__grupo-titulo {
   font-size: 0.7rem;
   font-weight: 700;

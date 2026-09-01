@@ -94,6 +94,7 @@ const NAV_LATERAL = [
   { grupo: null, texto: 'Órdenes', href: 'ordenes.html', permiso: (p) => p.ordenes.ver },
   { grupo: null, texto: 'Detalle de compra', href: 'detalle.html', permiso: (p) => p.detalle_compra.ver },
   { grupo: null, texto: 'Facturación', href: 'facturacion.html', permiso: (p) => p.facturacion.ver },
+  { grupo: null, texto: 'Presupuesto de ventas', href: 'presupuesto.html', permiso: (p) => p.facturacion.ver },
   { grupo: null, texto: 'Cotizaciones', href: 'cotizaciones.html?tab=visualizacion', permiso: (p) => p.catalogos.ver },
   { grupo: null, texto: 'Solicitudes de compra', href: 'cotizaciones.html?tab=solicitudes-proveedor', permiso: (p) => p.catalogos.ver },
   { grupo: null, texto: 'Carga inicial', href: 'carga.html', permiso: (p) => p.ordenes.editar || p.detalle_compra.editar },

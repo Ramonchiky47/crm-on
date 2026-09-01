@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Presupuesto de ventas · CRM-ON</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="contenedor">
+    <h1>Presupuesto de ventas</h1>
+    <p class="pista">Captura la meta de venta (MXN) de cada mes; se compara contra la venta ya registrada en Facturación de ese mismo mes.</p>
+
+    <form id="form-presupuesto">
+      <input type="hidden" id="presupuesto-mes-original" />
+      <div class="fila">
+        <label>
+          Mes
+          <input type="month" id="mes" required />
+        </label>
+        <label>
+          Presupuesto (MXN)
+          <input type="number" id="monto" step="0.01" min="0" required />
+        </label>
+      </div>
+      <div class="acciones-form">
+        <button type="submit" id="btn-guardar">Guardar</button>
+        <button type="button" id="btn-cancelar" hidden>Cancelar</button>
+      </div>
+    </form>
+
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Mes</th>
+            <th>Presupuesto (MXN)</th>
+            <th>Venta registrada (MXN)</th>
+            <th>Diferencia (MXN)</th>
+            <th>% cumplido</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-presupuesto"></tbody>
+      </table>
+    </div>
+
+    <p id="estado-vacio" hidden>No hay presupuestos ni ventas capturadas todavía.</p>
+  </div>
+
+  <script src="auth.js"></script>
+  <script src="presupuesto.js"></script>
+</body>
+</html>

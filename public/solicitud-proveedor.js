@@ -37,21 +37,21 @@ const solicitudComentariosRespondida = document.getElementById('solicitud-coment
 function renderizarItems(items, soloLectura) {
   tablaItemsSolicitud.innerHTML = items.map((it) => `
     <tr data-id="${it.id}">
-      <td>${escaparHtml(it.codigo)}</td>
-      <td>${escaparHtml(it.descripcion)}</td>
-      <td>${escaparHtml(it.marca)}</td>
-      <td class="num">${escaparHtml(it.cantidad)}</td>
-      <td>
+      <td data-label="Código">${escaparHtml(it.codigo)}</td>
+      <td data-label="Descripción">${escaparHtml(it.descripcion)}</td>
+      <td data-label="Marca">${escaparHtml(it.marca)}</td>
+      <td class="num" data-label="Cantidad">${escaparHtml(it.cantidad)}</td>
+      <td data-label="Precio de venta">
         ${soloLectura
           ? escaparHtml(formatoImporte(it.precio_venta) || 'Sin capturar')
           : `<input type="number" class="item-precio-venta" step="0.01" min="0" value="${it.precio_venta ?? ''}" required />`}
       </td>
-      <td>
+      <td data-label="Tiempo de entrega">
         ${soloLectura
           ? escaparHtml(it.tiempo_entrega || 'Sin capturar')
           : `<input type="text" class="item-tiempo-entrega" placeholder="Ej. 2 a 3 semanas" value="${escaparHtml(it.tiempo_entrega || '')}" required />`}
       </td>
-      <td>
+      <td data-label="Comentarios">
         ${soloLectura
           ? escaparHtml(it.comentarios || '')
           : `<input type="text" class="item-comentarios" placeholder="Opcional" value="${escaparHtml(it.comentarios || '')}" />`}

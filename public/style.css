@@ -2291,9 +2291,9 @@ td.celda-check {
   font-weight: 600;
 }
 
-.detalle-cotizacion-info .tarjeta, .detalle-orden .tarjeta, .detalle-negocio .tarjeta { margin-bottom: 0.9rem; }
-.detalle-cotizacion-info .tarjeta:last-child, .detalle-orden .tarjeta:last-child, .detalle-negocio .tarjeta:last-child { margin-bottom: 0; }
-.detalle-cotizacion-info .tarjeta h3, .detalle-orden .tarjeta h3, .detalle-negocio .tarjeta h3 {
+.detalle-cotizacion-info .tarjeta, .detalle-cotizacion .tarjeta, .detalle-orden .tarjeta, .detalle-negocio .tarjeta { margin-bottom: 0.9rem; }
+.detalle-cotizacion-info .tarjeta:last-child, .detalle-cotizacion .tarjeta:last-child, .detalle-orden .tarjeta:last-child, .detalle-negocio .tarjeta:last-child { margin-bottom: 0; }
+.detalle-cotizacion-info .tarjeta h3, .detalle-cotizacion .tarjeta h3, .detalle-orden .tarjeta h3, .detalle-negocio .tarjeta h3 {
   margin: 0 0 0.75rem;
   font-size: 0.7rem;
   font-weight: 600;
@@ -2301,17 +2301,36 @@ td.celda-check {
   text-transform: uppercase;
   color: #9b9b9b;
 }
-.detalle-cotizacion-info .tarjeta .campo-cot { margin-bottom: 0.7rem; }
-.detalle-cotizacion-info .tarjeta .campo-cot:last-child { margin-bottom: 0; }
-.detalle-cotizacion-info .tarjeta .campo-cot .etiqueta-cot {
+/* etiqueta-cot/valor-cot son un par label+valor de proposito general (se usa dentro de
+   .tarjeta en los formularios de captura de cotizacion, pero tambien sueltos en las pantallas
+   publicas de proveedor: liga de solicitud y portal). Regla base sin ancestro especifico para
+   que se vea igual de cuidado en cualquiera de los dos contextos. */
+.campo-cot { margin-bottom: 0.7rem; }
+.campo-cot:last-child { margin-bottom: 0; }
+.campo-cot .etiqueta-cot {
   display: block;
   font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
   color: #9b9b9b;
-  margin-bottom: 0.1rem;
+  margin-bottom: 0.15rem;
 }
-.detalle-cotizacion-info .tarjeta .campo-cot .valor-cot {
+.campo-cot .valor-cot {
+  margin: 0;
   font-size: 0.92rem;
   font-weight: 500;
+}
+
+/* "Datos generales" en las pantallas publicas de proveedor (liga de solicitud y portal): dos
+   columnas para que no se sienta como una lista larga de renglones sueltos. Colapsa a una
+   columna en pantallas angostas (el mismo link se abre seguido desde el celular). */
+.datos-generales-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem 1.3rem;
+}
+@media (max-width: 480px) {
+  .datos-generales-grid { grid-template-columns: 1fr; }
 }
 
 .tarjeta-productos-cot {
@@ -2365,6 +2384,42 @@ td.celda-check {
   border-top: 1px solid var(--borde);
 }
 
+/* Tabla de producto en la liga publica de solicitud a proveedor: en pantallas angostas (se abre
+   seguido desde el celular) 7 columnas no caben sin scroll horizontal incomodo, asi que cada
+   partida se convierte en una tarjeta con "Etiqueta: valor" por renglon en vez de forzar la
+   tabla completa. */
+@media (max-width: 640px) {
+  .tabla-productos-solicitud thead { display: none; }
+  .tabla-productos-solicitud, .tabla-productos-solicitud tbody, .tabla-productos-solicitud tr, .tabla-productos-solicitud td {
+    display: block;
+    width: 100%;
+  }
+  .tabla-productos-solicitud tr {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--borde);
+  }
+  .tabla-productos-solicitud tr:last-child { border-bottom: none; }
+  .tabla-productos-solicitud td {
+    padding: 0.25rem 0 !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    text-align: right;
+  }
+  .tabla-productos-solicitud td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    text-align: left;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #9b9b9b;
+  }
+  .tabla-productos-solicitud td:empty::before { content: none; }
+  .tabla-productos-solicitud td input { text-align: right; width: auto; flex: 1; }
+}
+
 .opcion-orden-candidata {
   display: flex;
   flex-direction: row;
@@ -2414,7 +2469,8 @@ td.celda-check {
   .pill-estatus.estatus-vencido { background: #33211d; }
   .grupo-etapa-cot .etiqueta-etapa-cot,
   .detalle-cotizacion-info .tarjeta h3,
-  .detalle-cotizacion-info .tarjeta .campo-cot .etiqueta-cot,
+  .detalle-cotizacion .tarjeta h3,
+  .campo-cot .etiqueta-cot,
   .tarjeta-productos-cot thead th,
   .tarjeta-productos-cot .item-desc {
     color: #a9a49c;

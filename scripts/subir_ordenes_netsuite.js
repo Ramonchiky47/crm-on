@@ -85,9 +85,13 @@ async function subirArchivo(baseUrl, cookie, endpoint, rutaArchivo) {
 
     const resultado = await subirArchivo(baseUrl, cookie, reporte.endpoint, rutaArchivo);
     console.log(`Total procesadas: ${resultado.total}`);
-    console.log(`Nuevas: ${resultado.insertadas}`);
-    if ('actualizadas' in resultado) console.log(`Actualizadas: ${resultado.actualizadas}`);
-    if ('omitidas' in resultado) console.log(`Ya existian: ${resultado.omitidas}`);
+    if ('reemplazo' in resultado) {
+      console.log(resultado.reemplazo ? `Tabla reemplazada, ${resultado.insertadas} registros` : 'No se reemplazo nada (0 filas validas)');
+    } else {
+      console.log(`Nuevas: ${resultado.insertadas}`);
+      if ('actualizadas' in resultado) console.log(`Actualizadas: ${resultado.actualizadas}`);
+      if ('omitidas' in resultado) console.log(`Ya existian: ${resultado.omitidas}`);
+    }
     console.log(`Errores: ${resultado.errores.length}`);
     if (resultado.errores.length) console.log(JSON.stringify(resultado.errores, null, 2));
   }

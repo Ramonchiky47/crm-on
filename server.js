@@ -4782,7 +4782,15 @@ app.post('/api/detalle-compra/importar-excel-netsuite', requirePermiso('detalle_
 // "id" (numero de documento, ej. INV8237, CM180) enlaza conceptualmente con una factura o nota de
 // credito de NetSuite; NO es unico aqui: una factura puede tener varios articulos.
 
-const SELECT_FACTURACION = `SELECT * FROM facturacion`;
+// pedido_id vive en su propia tabla (facturacion_pedido_id, keyed por el "id" de factura/nota de
+// credito): la carga de NetSuite reemplaza el contenido de "facturacion" por completo cada vez
+// (es un reporte que cambia), asi que cualquier dato que deba sobrevivir a esa carga no puede
+// vivir en esa tabla. Un LEFT JOIN lo trae de vuelta al leer.
+const SELECT_FACTURACION = `
+  SELECT f.*, fp.pedido_id
+  FROM facturacion f
+  LEFT JOIN facturacion_pedido_id fp ON fp.id = f.id
+`;
 
 function validarFacturacion(body, { parcial = false } = {}) {
   const errores = [];
@@ -4808,32 +4816,49 @@ app.get('/api/facturacion', requirePermiso('facturacion', 'ver'), ar(async (req,
   const { id, q } = req.query;
   let rows;
   if (id) {
-    rows = await db.prepare(`${SELECT_FACTURACION} WHERE id = ? ORDER BY id_facturacion`).all(id);
+    rows = await db.prepare(`${SELECT_FACTURACION} WHERE f.id = ? ORDER BY f.id_facturacion`).all(id);
   } else if (q) {
-    rows = await db.prepare(`${SELECT_FACTURACION} WHERE id ILIKE ? OR articulo ILIKE ? OR numero_serie ILIKE ? ORDER BY fecha DESC`)
+    rows = await db.prepare(`${SELECT_FACTURACION} WHERE f.id ILIKE ? OR f.articulo ILIKE ? OR f.numero_serie ILIKE ? ORDER BY f.fecha DESC`)
       .all(`%${q}%`, `%${q}%`, `%${q}%`);
   } else {
-    rows = await db.prepare(`${SELECT_FACTURACION} ORDER BY fecha DESC`).all();
+    rows = await db.prepare(`${SELECT_FACTURACION} ORDER BY f.fecha DESC`).all();
   }
   res.json(rows);
 }));
 
 app.get('/api/facturacion/:idFacturacion', requirePermiso('facturacion', 'ver'), ar(async (req, res) => {
-  const row = await db.prepare(`${SELECT_FACTURACION} WHERE id_facturacion = ?`).get(req.params.idFacturacion);
+  const row = await db.prepare(`${SELECT_FACTURACION} WHERE f.id_facturacion = ?`).get(req.params.idFacturacion);
   if (!row) return res.status(404).json({ error: 'Registro de facturacion no encontrado' });
   res.json(row);
 }));
+
+// Guarda o borra la asociacion de pedido_id para un "id" de factura/nota de credito. Vive en su
+// propia tabla (ver comentario de SELECT_FACTURACION) para sobrevivir al reemplazo total de
+// "facturacion" en cada carga de NetSuite. pedido_id vacio/null borra la asociacion si existia.
+async function asociarPedidoId(db, id, pedidoId) {
+  if (!id) return;
+  if (!pedidoId) {
+    await db.prepare('DELETE FROM facturacion_pedido_id WHERE id = ?').run(id);
+    return;
+  }
+  await db.prepare(`
+    INSERT INTO facturacion_pedido_id (id, pedido_id)
+    VALUES (?, ?)
+    ON CONFLICT (id) DO UPDATE SET pedido_id = excluded.pedido_id, actualizado_en = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+  `).run(id, pedidoId);
+}
 
 app.post('/api/facturacion', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
   const errores = validarFacturacion(req.body);
   if (errores.length) return res.status(400).json({ errores });
 
   const b = req.body;
+  const id = quitarAcentos(b.id.trim());
   const info = await db.prepare(`
-    INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos, pedido_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    quitarAcentos(b.id.trim()),
+    id,
     quitarAcentos(b.articulo) || null,
     quitarAcentos(b.tipo) || null,
     normalizarFecha(b.fecha) || null,
@@ -4841,11 +4866,11 @@ app.post('/api/facturacion', requirePermiso('facturacion', 'editar'), ar(async (
     quitarAcentos(b.numero_serie) || null,
     numeroOpcional(b.cantidad_vendida),
     numeroOpcional(b.precio_venta),
-    numeroOpcional(b.ingresos),
-    quitarAcentos(b.pedido_id) || null
+    numeroOpcional(b.ingresos)
   );
+  await asociarPedidoId(db, id, quitarAcentos(b.pedido_id) || null);
 
-  res.status(201).json(await db.prepare(`${SELECT_FACTURACION} WHERE id_facturacion = ?`).get(info.lastInsertRowid));
+  res.status(201).json(await db.prepare(`${SELECT_FACTURACION} WHERE f.id_facturacion = ?`).get(info.lastInsertRowid));
 }));
 
 app.put('/api/facturacion/:idFacturacion', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
@@ -4857,18 +4882,20 @@ app.put('/api/facturacion/:idFacturacion', requirePermiso('facturacion', 'editar
 
   const b = req.body;
   const campo = (nombre, transform = quitarAcentos) => (b[nombre] !== undefined ? transform(b[nombre]) : existente[nombre]);
+  const id = campo('id');
 
   await db.prepare(`
     UPDATE facturacion SET
-      id = ?, articulo = ?, tipo = ?, fecha = ?, descripcion = ?, numero_serie = ?, cantidad_vendida = ?, precio_venta = ?, ingresos = ?, pedido_id = ?
+      id = ?, articulo = ?, tipo = ?, fecha = ?, descripcion = ?, numero_serie = ?, cantidad_vendida = ?, precio_venta = ?, ingresos = ?
     WHERE id_facturacion = ?
   `).run(
-    campo('id'), campo('articulo'), campo('tipo'), campo('fecha', normalizarFecha), campo('descripcion'), campo('numero_serie'),
-    campo('cantidad_vendida', numeroOpcional), campo('precio_venta', numeroOpcional), campo('ingresos', numeroOpcional), campo('pedido_id'),
+    id, campo('articulo'), campo('tipo'), campo('fecha', normalizarFecha), campo('descripcion'), campo('numero_serie'),
+    campo('cantidad_vendida', numeroOpcional), campo('precio_venta', numeroOpcional), campo('ingresos', numeroOpcional),
     req.params.idFacturacion
   );
+  if (b.pedido_id !== undefined) await asociarPedidoId(db, id, quitarAcentos(b.pedido_id) || null);
 
-  res.json(await db.prepare(`${SELECT_FACTURACION} WHERE id_facturacion = ?`).get(req.params.idFacturacion));
+  res.json(await db.prepare(`${SELECT_FACTURACION} WHERE f.id_facturacion = ?`).get(req.params.idFacturacion));
 }));
 
 app.delete('/api/facturacion/:idFacturacion', requirePermiso('facturacion', 'borrar'), ar(async (req, res) => {
@@ -4904,8 +4931,8 @@ app.post('/api/facturacion/importar-csv', requirePermiso('facturacion', 'editar'
         if (ingresos === undefined) throw new Error('ingresos debe ser numerico');
 
         await db.prepare(`
-          INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos, pedido_id)
-          VALUES (@id, @articulo, @tipo, @fecha, @descripcion, @numero_serie, @cantidad_vendida, @precio_venta, @ingresos, @pedido_id)
+          INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos)
+          VALUES (@id, @articulo, @tipo, @fecha, @descripcion, @numero_serie, @cantidad_vendida, @precio_venta, @ingresos)
         `).run({
           id: registro.id,
           articulo: registro.articulo || null,
@@ -4916,8 +4943,8 @@ app.post('/api/facturacion/importar-csv', requirePermiso('facturacion', 'editar'
           cantidad_vendida: cantidadVendida,
           precio_venta: precioVenta,
           ingresos,
-          pedido_id: registro.pedido_id || null,
         });
+        if (registro.pedido_id) await asociarPedidoId(db, registro.id, registro.pedido_id);
 
         insertadas++;
       } catch (e) {
@@ -4979,15 +5006,16 @@ async function netsuiteFacturacionXlsxARegistros(buffer) {
   return registros;
 }
 
-// Igual criterio que procesarRegistrosDetalleCompra: el reporte trae el historial completo cada
-// vez que se descarga, asi que una linea solo se inserta si no existe ya una identica (mismo id,
-// articulo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta e ingresos). Nunca se
-// actualiza una fila existente, asi que el pedido_id que ya se haya asociado a mano jamas se toca
-// (el reporte de NetSuite no trae esa columna, solo se llena manualmente desde el detalle).
+// A diferencia del resto de las cargas de NetSuite (que solo agregan lo nuevo), este reporte es
+// la fuente de verdad completa de Facturacion: cada carga reemplaza el contenido entero de la
+// tabla por lo que trae el archivo (TRUNCATE + insert) en vez de acumular historial, para que
+// correcciones o cancelaciones hechas en NetSuite tambien se reflejen aqui. El pedido_id
+// asociado a mano vive aparte, en facturacion_pedido_id (ver SELECT_FACTURACION), asi que
+// sobrevive intacto al reemplazo. Precaucion: si el archivo no trae ninguna fila valida no se
+// trunca nada (evita vaciar la tabla por un archivo equivocado o vacio).
 async function procesarRegistrosFacturacion(db, registros) {
   const errores = [];
-  let insertadas = 0;
-  let omitidas = 0;
+  const validos = [];
 
   for (let indice = 0; indice < registros.length; indice++) {
     const registro = registros[indice];
@@ -5002,34 +5030,33 @@ async function procesarRegistrosFacturacion(db, registros) {
       const ingresos = registro.ingresos ? numeroOpcional(registro.ingresos) : null;
       if (ingresos === undefined) throw new Error('ingresos debe ser numerico');
 
-      const fecha = registro.fecha ? normalizarFecha(registro.fecha) : null;
-      const articulo = registro.articulo || null;
-      const tipo = registro.tipo || null;
-      const descripcion = registro.descripcion || null;
-      const numeroSerie = registro.numero_serie || null;
-
-      const existente = await db.prepare(`
-        SELECT COUNT(*) c FROM facturacion
-        WHERE id = ? AND articulo IS NOT DISTINCT FROM ? AND fecha IS NOT DISTINCT FROM ?
-          AND descripcion IS NOT DISTINCT FROM ? AND numero_serie IS NOT DISTINCT FROM ?
-          AND cantidad_vendida IS NOT DISTINCT FROM ? AND precio_venta IS NOT DISTINCT FROM ?
-          AND ingresos IS NOT DISTINCT FROM ?
-      `).get(registro.id, articulo, fecha, descripcion, numeroSerie, cantidadVendida, precioVenta, ingresos);
-
-      if (Number(existente.c) > 0) { omitidas++; continue; }
-
-      await db.prepare(`
-        INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(registro.id, articulo, tipo, fecha, descripcion, numeroSerie, cantidadVendida, precioVenta, ingresos);
-
-      insertadas++;
+      validos.push({
+        id: registro.id,
+        articulo: registro.articulo || null,
+        tipo: registro.tipo || null,
+        fecha: registro.fecha ? normalizarFecha(registro.fecha) : null,
+        descripcion: registro.descripcion || null,
+        numero_serie: registro.numero_serie || null,
+        cantidad_vendida: cantidadVendida,
+        precio_venta: precioVenta,
+        ingresos,
+      });
     } catch (e) {
       errores.push({ fila: numeroFila, id: registro.id || '(sin id)', error: e.message });
     }
   }
 
-  return { insertadas, omitidas, errores };
+  if (!validos.length) return { insertadas: 0, errores, reemplazo: false };
+
+  await db.prepare('TRUNCATE TABLE facturacion RESTART IDENTITY').run();
+  for (const r of validos) {
+    await db.prepare(`
+      INSERT INTO facturacion (id, articulo, tipo, fecha, descripcion, numero_serie, cantidad_vendida, precio_venta, ingresos)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(r.id, r.articulo, r.tipo, r.fecha, r.descripcion, r.numero_serie, r.cantidad_vendida, r.precio_venta, r.ingresos);
+  }
+
+  return { insertadas: validos.length, errores, reemplazo: true };
 }
 
 app.post('/api/facturacion/importar-excel-netsuite', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {

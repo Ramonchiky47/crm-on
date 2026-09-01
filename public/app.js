@@ -791,9 +791,11 @@ inputActualizarOrdenesNetsuite.addEventListener('change', async () => {
         resumen.push(`${archivo.name}: error - ${data.error || res.statusText}`);
         continue;
       }
-      const detalle = 'omitidas' in data
-        ? `nuevas ${data.insertadas}, ya existian ${data.omitidas}, errores ${data.errores.length}`
-        : `nuevas ${data.insertadas}, actualizadas ${data.actualizadas}, errores ${data.errores.length}`;
+      const detalle = 'reemplazo' in data
+        ? (data.reemplazo ? `tabla reemplazada, ${data.insertadas} registros, errores ${data.errores.length}` : `no se reemplazo nada (0 filas validas), errores ${data.errores.length}`)
+        : ('omitidas' in data
+          ? `nuevas ${data.insertadas}, ya existian ${data.omitidas}, errores ${data.errores.length}`
+          : `nuevas ${data.insertadas}, actualizadas ${data.actualizadas}, errores ${data.errores.length}`);
       resumen.push(`${archivo.name} -> ${reporte.destino}: procesadas ${data.total}, ${detalle}`);
     }
     alert(resumen.join('\n'));

@@ -2326,8 +2326,8 @@ td.celda-check {
    columna en pantallas angostas (el mismo link se abre seguido desde el celular). */
 .datos-generales-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.9rem 1.3rem;
+  grid-template-columns: minmax(0, 260px) minmax(0, 260px);
+  gap: 0.9rem 2.2rem;
 }
 @media (max-width: 480px) {
   .datos-generales-grid { grid-template-columns: 1fr; }

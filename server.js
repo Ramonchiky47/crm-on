@@ -5522,18 +5522,19 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
     // real de Facturacion, asi que el ranking de hoteles tiene que ser consistente con eso).
     // Facturacion no trae el hotel directamente, solo llega via el pedido_id ya asociado a mano
     // (facturacion_pedido_id -> ordenes -> destino). La asociacion se hace poco a poco, asi que
-    // en vez de excluir las facturas sin asociar (subestimando el total sin avisar), se suman
-    // aparte como "Sin pedido asociado" y se agregan siempre al final de la lista - asi se ve el
-    // 100% de la venta facturada, con el bloque pendiente encogiendose conforme se va asociando.
+    // la lista siempre debe sumar el 100% de la venta del periodo, sin dejar nada fuera en
+    // silencio: los nombrados 11+ se agrupan en "Otros hoteles" y lo no asociado en "Sin pedido
+    // asociado", ambos siempre al final - asi el bloque pendiente se ve encoger conforme se va
+    // asociando, en vez de que la lista simplemente subestime el total.
     const topHoteles = async (condicionFecha, parametro) => {
-      const nombrados = await db.prepare(`
+      const todos = await db.prepare(`
         SELECT d.destino nombre, SUM(f.ingresos) venta
         FROM facturacion f
         JOIN facturacion_pedido_id fp ON fp.id = f.id
         JOIN ordenes o ON o.id = fp.pedido_id
         JOIN destinos d ON d.id_destino = o.destino_id
         WHERE ${condicionFecha}
-        GROUP BY d.destino ORDER BY venta DESC LIMIT 10
+        GROUP BY d.destino ORDER BY venta DESC
       `).all(...parametro);
       const sinAsociar = await db.prepare(`
         SELECT COALESCE(SUM(f.ingresos), 0) venta
@@ -5541,7 +5542,9 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
         WHERE ${condicionFecha} AND f.id NOT IN (SELECT id FROM facturacion_pedido_id)
       `).get(...parametro);
 
-      const filas = nombrados.map((f) => ({ nombre: f.nombre, venta: Number(f.venta) }));
+      const filas = todos.slice(0, 10).map((f) => ({ nombre: f.nombre, venta: Number(f.venta) }));
+      const ventaOtrosNombrados = todos.slice(10).reduce((acc, f) => acc + Number(f.venta), 0);
+      if (ventaOtrosNombrados > 0) filas.push({ nombre: 'Otros hoteles', venta: ventaOtrosNombrados, sinAsociar: true });
       const ventaSinAsociar = Number(sinAsociar.venta);
       if (ventaSinAsociar > 0) filas.push({ nombre: 'Sin pedido asociado', venta: ventaSinAsociar, sinAsociar: true });
       return filas;

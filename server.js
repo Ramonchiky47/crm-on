@@ -5521,32 +5521,34 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
     // Top 10 hoteles por venta FACTURADA (no por ordenes cargadas: toda la pagina reporta venta
     // real de Facturacion, asi que el ranking de hoteles tiene que ser consistente con eso).
     // Facturacion no trae el hotel directamente, solo llega via el pedido_id ya asociado a mano
-    // (facturacion_pedido_id -> ordenes -> destino). La asociacion se hace poco a poco, asi que
-    // la lista siempre debe sumar el 100% de la venta del periodo, sin dejar nada fuera en
-    // silencio: los nombrados 11+ se agrupan en "Otros hoteles" y lo no asociado en "Sin pedido
-    // asociado", ambos siempre al final - asi el bloque pendiente se ve encoger conforme se va
-    // asociando, en vez de que la lista simplemente subestime el total.
+    // (facturacion_pedido_id -> ordenes -> destino). Todo LEFT JOIN + CASE en una sola consulta
+    // (no INNER JOIN) para no perder filas en silencio por ninguno de los dos motivos posibles de
+    // "sin hotel": la factura no tiene pedido_id asociado, o si lo tiene, ese pedido no tiene
+    // destino_id capturado. La lista siempre debe sumar el 100% de la venta del periodo.
     const topHoteles = async (condicionFecha, parametro) => {
       const todos = await db.prepare(`
-        SELECT d.destino nombre, SUM(f.ingresos) venta
+        SELECT
+          CASE WHEN fp.id IS NULL THEN 'Sin pedido asociado'
+               WHEN d.id_destino IS NULL THEN 'Pedido sin hotel asignado'
+               ELSE d.destino END nombre,
+          SUM(f.ingresos) venta
         FROM facturacion f
-        JOIN facturacion_pedido_id fp ON fp.id = f.id
-        JOIN ordenes o ON o.id = fp.pedido_id
-        JOIN destinos d ON d.id_destino = o.destino_id
+        LEFT JOIN facturacion_pedido_id fp ON fp.id = f.id
+        LEFT JOIN ordenes o ON o.id = fp.pedido_id
+        LEFT JOIN destinos d ON d.id_destino = o.destino_id
         WHERE ${condicionFecha}
-        GROUP BY d.destino ORDER BY venta DESC
+        GROUP BY 1 ORDER BY venta DESC
       `).all(...parametro);
-      const sinAsociar = await db.prepare(`
-        SELECT COALESCE(SUM(f.ingresos), 0) venta
-        FROM facturacion f
-        WHERE ${condicionFecha} AND f.id NOT IN (SELECT id FROM facturacion_pedido_id)
-      `).get(...parametro);
 
-      const filas = todos.slice(0, 10).map((f) => ({ nombre: f.nombre, venta: Number(f.venta) }));
-      const ventaOtrosNombrados = todos.slice(10).reduce((acc, f) => acc + Number(f.venta), 0);
+      const especiales = ['Sin pedido asociado', 'Pedido sin hotel asignado'];
+      const nombrados = todos.filter((f) => !especiales.includes(f.nombre));
+      const filas = nombrados.slice(0, 10).map((f) => ({ nombre: f.nombre, venta: Number(f.venta) }));
+      const ventaOtrosNombrados = nombrados.slice(10).reduce((acc, f) => acc + Number(f.venta), 0);
       if (ventaOtrosNombrados > 0) filas.push({ nombre: 'Otros hoteles', venta: ventaOtrosNombrados, sinAsociar: true });
-      const ventaSinAsociar = Number(sinAsociar.venta);
-      if (ventaSinAsociar > 0) filas.push({ nombre: 'Sin pedido asociado', venta: ventaSinAsociar, sinAsociar: true });
+      for (const etiqueta of especiales) {
+        const fila = todos.find((f) => f.nombre === etiqueta);
+        if (fila) filas.push({ nombre: etiqueta, venta: Number(fila.venta), sinAsociar: true });
+      }
       return filas;
     };
 

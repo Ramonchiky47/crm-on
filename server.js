@@ -5556,6 +5556,14 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
     resultado.topHotelesMes = await topHoteles('f.fecha LIKE ?', [`${anioMes}-%`]);
   }
 
+  // "Ordenes cargadas en el mes" del mes SELECCIONADO (por creado_en, cuando se registro en el
+  // CRM), a diferencia de la misma tarjeta en el Panel General que siempre es el mes calendario
+  // real en curso. Aqui debe moverse con el filtro Mes de Resultados, no quedarse fijo.
+  if (permisos.ordenes.ver) {
+    const ventasOrdenesCargadasMes = await db.prepare('SELECT COALESCE(SUM(importe), 0) v FROM ordenes WHERE creado_en LIKE ?').get(`${anioMes}-%`);
+    resultado.ventasOrdenesCargadasMes = Number(ventasOrdenesCargadasMes.v);
+  }
+
   res.json(resultado);
 }));
 

@@ -260,6 +260,7 @@ async function cargarResultados() {
   if (d.topProductosMes) {
     renderizarListaVenta('lista-productos-mes', d.topProductosMes.map((f) => ({ nombre: escaparHtml(f.codigo), cantidad: f.cantidad, venta: f.venta })));
   }
+  renderizarIndicadoresGenerales(d.ventasOrdenesCargadasMes);
 }
 
 // Reusa /api/panel/resumen (mismo calculo de creadas/ganadas/perdidas + delta vs periodo
@@ -308,13 +309,19 @@ async function cargarCotizacionesDelMes(anioMes) {
   document.getElementById('resultados-ganadas-importe').textContent = importes.join(' · ');
 }
 
-// Mismos indicadores generales que el Panel General (Inicio), menos "Ventas del mes" (ya cubierto
-// arriba por Facturacion vs presupuesto, en mas detalle).
-async function cargarIndicadoresGenerales() {
+// Negocios activos / Cotizaciones vigentes / Ordenes pendientes son "estado actual", no dependen
+// del filtro Mes de Resultados: se piden una sola vez a /api/panel/resumen y se guardan aqui.
+let indicadoresEstaticos = null;
+async function cargarIndicadoresEstaticos() {
   const res = await fetch('/api/panel/resumen');
-  if (!res.ok) return;
-  const d = await res.json();
+  if (res.ok) indicadoresEstaticos = await res.json();
+}
 
+// "Ordenes cargadas en el mes" si depende del filtro (viene de /api/resultados/resumen, ya
+// calculado para el mes seleccionado), asi que se vuelve a pintar cada vez que cambian los
+// filtros, combinado con los indicadores estaticos ya cacheados.
+function renderizarIndicadoresGenerales(ventasOrdenesCargadasMes) {
+  const d = indicadoresEstaticos || {};
   const kpis = [];
   if (d.negociosActivos !== undefined) {
     kpis.push(tarjetaKpi('Negocios activos', d.negociosActivos, d.negociosCerradosMes ? `${d.negociosCerradosMes} cerrado(s) este mes` : null, 'es-neutro'));
@@ -330,8 +337,8 @@ async function cargarIndicadoresGenerales() {
   if (d.ordenesPendientes !== undefined) {
     kpis.push(tarjetaKpi('Órdenes pendientes', d.ordenesPendientes, null));
   }
-  if (d.ventasOrdenesCargadasMes !== undefined) {
-    kpis.push(tarjetaKpi('Órdenes cargadas en el mes (MXN)', `$${formatoImporte(d.ventasOrdenesCargadasMes)}`, null));
+  if (ventasOrdenesCargadasMes !== undefined) {
+    kpis.push(tarjetaKpi('Órdenes cargadas en el mes (MXN)', `$${formatoImporte(ventasOrdenesCargadasMes)}`, null));
   }
   document.getElementById('resultados-kpis').innerHTML = kpis.join('');
 }
@@ -341,8 +348,8 @@ filtroMes.addEventListener('change', cargarResultados);
 
 poblarFiltros();
 
-promesaAuth.then((sesion) => {
+promesaAuth.then(async (sesion) => {
   if (!sesion) return;
+  await cargarIndicadoresEstaticos();
   cargarResultados();
-  cargarIndicadoresGenerales();
 });

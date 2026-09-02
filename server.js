@@ -3316,8 +3316,27 @@ app.post('/api/ordenes', requirePermiso('ordenes', 'editar'), ar(async (req, res
     enteroOpcional(b.destino_id), enteroOpcional(b.contacto_id), enteroOpcional(b.estado_entrega_id)
   );
 
-  res.status(201).json(await db.prepare(`${SELECT_ORDENES} WHERE o.id = ?`).get(idLimpio));
+  const ordenesActualizadasPorNombre = await propagarContactoDestinoPorNombre(
+    idLimpio, quitarAcentos(b.nombre) || null, enteroOpcional(b.contacto_id), enteroOpcional(b.destino_id)
+  );
+
+  res.status(201).json({ ...await db.prepare(`${SELECT_ORDENES} WHERE o.id = ?`).get(idLimpio), ordenesActualizadasPorNombre });
 }));
+
+// Muchas ordenes cargadas de NetSuite comparten el mismo "nombre" (texto libre del cliente/hotel)
+// pero llegan sin contacto_id/destino_id (NetSuite no trae esa relacion). En vez de asociarlas
+// una por una, al capturar Contacto/Hotel en UNA orden se replica a las demas ordenes con el
+// mismo nombre que todavia no tengan alguno de los dos capturado. Nunca sobreescribe: si una
+// orden hermana ya tiene su propio contacto o destino, ese campo se deja intacto (COALESCE).
+async function propagarContactoDestinoPorNombre(ordenId, nombre, contactoId, destinoId) {
+  if (!nombre || (!contactoId && !destinoId)) return 0;
+  const info = await db.prepare(`
+    UPDATE ordenes
+    SET contacto_id = COALESCE(contacto_id, ?), destino_id = COALESCE(destino_id, ?)
+    WHERE nombre = ? AND id != ? AND (contacto_id IS NULL OR destino_id IS NULL)
+  `).run(contactoId, destinoId, nombre, ordenId);
+  return info.changes;
+}
 
 app.put('/api/ordenes/:id', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
   const existente = await db.prepare('SELECT * FROM ordenes WHERE id = ?').get(req.params.id);
@@ -3328,6 +3347,9 @@ app.put('/api/ordenes/:id', requirePermiso('ordenes', 'editar'), ar(async (req, 
 
   const b = req.body;
   const campo = (nombre, transform = quitarAcentos) => (b[nombre] !== undefined ? transform(b[nombre]) : existente[nombre]);
+  const nombreFinal = campo('nombre');
+  const contactoIdFinal = campo('contacto_id', enteroOpcional);
+  const destinoIdFinal = campo('destino_id', enteroOpcional);
 
   await db.prepare(`
     UPDATE ordenes SET
@@ -3336,15 +3358,17 @@ app.put('/api/ordenes/:id', requirePermiso('ordenes', 'editar'), ar(async (req, 
       destino_id = ?, contacto_id = ?, estado_entrega_id = ?
     WHERE id = ?
   `).run(
-    campo('fecha', normalizarFecha), campo('imprimir'), campo('nombre'), campo('numero_oc'), campo('estatus_sistema'),
+    campo('fecha', normalizarFecha), campo('imprimir'), nombreFinal, campo('numero_oc'), campo('estatus_sistema'),
     campo('numero_seguimiento'), campo('nota'),
     campo('moneda', (v) => textoOpcional(quitarAcentos(v), 5)), campo('importe_moneda_extranjera', numeroOpcional), campo('importe', numeroOpcional),
     campo('estatus_id', enteroOpcional), campo('observaciones'),
-    campo('destino_id', enteroOpcional), campo('contacto_id', enteroOpcional), campo('estado_entrega_id', enteroOpcional),
+    destinoIdFinal, contactoIdFinal, campo('estado_entrega_id', enteroOpcional),
     req.params.id
   );
 
-  res.json(await db.prepare(`${SELECT_ORDENES} WHERE o.id = ?`).get(req.params.id));
+  const ordenesActualizadasPorNombre = await propagarContactoDestinoPorNombre(req.params.id, nombreFinal, contactoIdFinal, destinoIdFinal);
+
+  res.json({ ...await db.prepare(`${SELECT_ORDENES} WHERE o.id = ?`).get(req.params.id), ordenesActualizadasPorNombre });
 }));
 
 app.delete('/api/ordenes/:id', requirePermiso('ordenes', 'borrar'), ar(async (req, res) => {

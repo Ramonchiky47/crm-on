@@ -801,6 +801,13 @@ form.addEventListener('submit', async (e) => {
     return;
   }
 
+  // Contacto/Hotel capturados aqui se replican a otras ordenes con el mismo "Nombre" que aun no
+  // los tuvieran (ver propagarContactoDestinoPorNombre en el servidor); avisa cuantas se llenaron.
+  const data = await res.json();
+  if (data.ordenesActualizadasPorNombre) {
+    alert(`También se completó Contacto/Hotel en ${data.ordenesActualizadasPorNombre} otra(s) orden(es) con el mismo nombre "${payload.nombre}".`);
+  }
+
   cerrarFormulario();
   cargarOrdenes();
 });

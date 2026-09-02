@@ -1998,6 +1998,7 @@ td.celda-check {
   grid-template-columns: 1fr 1fr;
   gap: 1.1rem;
   align-items: start;
+  min-width: 0;
 }
 
 .col-datos {

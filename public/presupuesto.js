@@ -52,6 +52,26 @@ function poblarSelectoresFecha() {
 poblarSelectoresFecha();
 
 let permisosPresupuesto = { ver: true, editar: true, borrar: true };
+let ultimaListaPresupuesto = [];
+
+const filtroMesTabla = document.getElementById('filtro-mes-presupuesto');
+// Fijo (Enero..Diciembre), no derivado de los datos: filtra por mes CALENDARIO cruzando años
+// (ej. "Agosto" muestra 2025-08 y 2026-08 juntos), para comparar el mismo mes año contra año en
+// vez de aislar un solo renglon YYYY-MM (para eso ya esta la tabla ordenada).
+MESES.forEach((nombre, indice) => {
+  const option = document.createElement('option');
+  option.value = String(indice + 1).padStart(2, '0');
+  option.textContent = nombre;
+  filtroMesTabla.appendChild(option);
+});
+
+function aplicarFiltroYRenderizar() {
+  const lista = filtroMesTabla.value
+    ? ultimaListaPresupuesto.filter((f) => f.anio_mes.slice(5, 7) === filtroMesTabla.value)
+    : ultimaListaPresupuesto;
+  renderizar(lista);
+}
+filtroMesTabla.addEventListener('change', aplicarFiltroYRenderizar);
 
 function renderizar(lista) {
   tabla.innerHTML = '';
@@ -81,8 +101,8 @@ function renderizar(lista) {
 
 async function cargarPresupuesto() {
   const res = await fetch('/api/presupuesto-ventas');
-  const lista = res.ok ? await res.json() : [];
-  renderizar(lista);
+  ultimaListaPresupuesto = res.ok ? await res.json() : [];
+  aplicarFiltroYRenderizar();
 }
 
 function limpiarFormulario() {

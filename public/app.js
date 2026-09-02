@@ -689,6 +689,13 @@ function renderizar(ordenes) {
 function limpiarFormulario() {
   inputIdOriginal.value = '';
   form.reset();
+  // reset() solo regresa los VALORES a su default; si Contacto o Destino habian quedado
+  // filtrados por un cruce anterior (filtrarDestinosPorContacto/filtrarContactosPorDestino), sus
+  // <option> siguen siendo el subconjunto angosto. Se regresan aqui al catalogo completo para
+  // que una orden nueva siempre arranque sin ese filtro heredado.
+  filtrarSelectAsociado(campos.destino_id, listaDestinos, 'id_destino', 'destino', null);
+  filtrarSelectAsociado(campos.contacto_id, listaContactos, 'id_contacto', 'nombre_completo', null);
+  actualizarPistaAsociar();
   campos.id.disabled = false;
   btnGuardar.textContent = 'Agregar orden';
   tituloFormOrden.textContent = 'Nueva orden';
@@ -834,8 +841,18 @@ function cargarOrdenEnFormulario(o) {
   campos.importe_moneda_extranjera.value = o.importe_moneda_extranjera ?? '';
   campos.importe.value = o.importe ?? '';
   campos.estado_entrega_id.value = o.estado_entrega_id ?? '';
+  // Contacto/Hotel siempre se restauran al catalogo completo antes de asignar el valor real de
+  // esta orden: si mientras se editaba una orden anterior se toco alguno de los dos selects, eso
+  // dispara filtrarDestinosPorContacto/filtrarContactosPorDestino y deja al OTRO select angosto
+  // (solo con las opciones asociadas). Esa lista angosta sobrevive a cerrar el formulario (reset()
+  // solo regresa el VALOR, no el catalogo de <option>), asi que si el destino_id/contacto_id real
+  // de esta orden no estaba en ese subconjunto, la asignacion de abajo fallaba en silencio y se
+  // quedaba viendo lo que hubiera seleccionado en la edicion anterior.
+  filtrarSelectAsociado(campos.destino_id, listaDestinos, 'id_destino', 'destino', null);
+  filtrarSelectAsociado(campos.contacto_id, listaContactos, 'id_contacto', 'nombre_completo', null);
   campos.destino_id.value = o.destino_id ?? '';
   campos.contacto_id.value = o.contacto_id ?? '';
+  actualizarPistaAsociar();
   campos.nota.value = o.nota || '';
   campos.observaciones.value = o.observaciones || '';
 

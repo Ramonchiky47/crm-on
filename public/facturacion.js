@@ -259,6 +259,12 @@ promesaAuth.then((sesion) => {
   if (!sesion) return;
   permisosFacturacion = sesion.permisos.facturacion;
   if (!permisosFacturacion.editar) btnMostrarForm.hidden = true;
+
+  // Se llego desde el detalle de una orden ("Facturas asociadas"): precarga el buscador con ese
+  // ID de documento para llegar directo a esa factura en vez de la lista completa.
+  const idUrl = new URLSearchParams(window.location.search).get('id');
+  if (idUrl) buscar.value = idUrl;
+
   cargarFacturacion();
 
   suscribirTiempoReal(['facturacion'], cargarFacturacion);

@@ -57,6 +57,13 @@ const modalCaja = document.getElementById('modal-caja');
 const modalContenido = document.getElementById('modal-contenido');
 const modalCerrar = document.getElementById('modal-cerrar');
 
+// Filas clicables dentro del detalle (ej. "Facturas asociadas"): un solo listener delegado en
+// vez de uno por fila, ya que el contenido se reescribe por completo en cada abrirDetalle().
+modalContenido.addEventListener('click', (e) => {
+  const fila = e.target.closest('[data-href]');
+  if (fila) window.location.href = fila.dataset.href;
+});
+
 function campoFicha(etiqueta, valor) {
   return `<div><span>${escaparHtml(etiqueta)}</span><p>${valor !== null && valor !== undefined && valor !== '' ? escaparHtml(String(valor)) : '-'}</p></div>`;
 }
@@ -81,9 +88,10 @@ function pillEstatusOrden(nombre) {
 }
 
 async function abrirDetalle(id) {
-  const [orden, articulos] = await Promise.all([
+  const [orden, articulos, facturas] = await Promise.all([
     fetch(`/api/ordenes/${encodeURIComponent(id)}`).then((r) => r.json()),
     fetch(`/api/detalle-compra?id=${encodeURIComponent(id)}`).then((r) => r.json()),
+    fetch(`/api/ordenes/${encodeURIComponent(id)}/facturas`).then((r) => r.json()),
   ]);
 
   modalContenido.innerHTML = `
@@ -185,6 +193,34 @@ async function abrirDetalle(id) {
               </table>
             </div>
           ` : '<p class="vacio-articulos-orden">Esta orden no tiene artículos capturados en Detalle de compra.</p>'}
+        </div>
+        <div class="tarjeta-productos-cot" style="margin-top: 1.1rem;">
+          <div class="tarjeta-articulos-encabezado">
+            <h3>Facturas</h3>
+            <span>${facturas.length} factura${facturas.length === 1 ? '' : 's'}</span>
+          </div>
+          ${facturas.length ? `
+            <div class="tabla-scroll">
+              <table>
+                <thead><tr>
+                  <th>ID</th><th>Artículo</th><th>Tipo</th><th>Fecha</th>
+                  <th class="num">Cantidad</th><th class="num">Ingresos</th>
+                </tr></thead>
+                <tbody>
+                  ${facturas.map((f) => `
+                    <tr class="fila-clicable" data-href="facturacion.html?id=${encodeURIComponent(f.id)}">
+                      <td>${escaparHtml(f.id)}</td>
+                      <td>${escaparHtml(f.articulo || '')}</td>
+                      <td>${escaparHtml(f.tipo || '')}</td>
+                      <td>${escaparHtml(f.fecha || '')}</td>
+                      <td class="num">${f.cantidad_vendida ?? ''}</td>
+                      <td class="num">${formatoImporte(f.ingresos)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : '<p class="vacio-articulos-orden">Esta orden no tiene facturas asociadas todavía.</p>'}
         </div>
       </div>
     </div>
@@ -677,6 +713,7 @@ function renderizar(ordenes) {
       <td>${escaparHtml(o.destino_nombre || '')}</td>
       <td>${escaparHtml(o.contacto_nombre || '')}</td>
       <td>${escaparHtml(o.estado_entrega_nombre || '')}</td>
+      <td>${o.tiene_facturas ? '<span class="pill-estatus estatus-vigente">Sí</span>' : ''}</td>
       <td class="acciones">
         ${permisosOrdenes.borrar ? `<button class="btn-borrar btn-icono" data-id="${escaparHtml(o.id)}" title="Borrar" aria-label="Borrar">🗑️</button>` : ''}
       </td>

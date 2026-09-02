@@ -3149,7 +3149,8 @@ const SELECT_ORDENES = `
   SELECT o.*, d.destino AS destino_nombre, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre,
     ec.estatus AS estatus_nombre, ee.estado_entrega AS estado_entrega_nombre,
     q.nombre AS cotizacion_nombre,
-    EXISTS(SELECT 1 FROM pendientes p WHERE p.orden_id = o.id) AS tiene_tarea_activa
+    EXISTS(SELECT 1 FROM pendientes p WHERE p.orden_id = o.id) AS tiene_tarea_activa,
+    EXISTS(SELECT 1 FROM facturacion_pedido_id fp WHERE fp.pedido_id = o.id) AS tiene_facturas
   FROM ordenes o
   LEFT JOIN destinos d ON d.id_destino = o.destino_id
   LEFT JOIN contactos c ON c.id_contacto = o.contacto_id
@@ -3235,6 +3236,19 @@ app.get('/api/ordenes/:id', requirePermiso('ordenes', 'ver'), ar(async (req, res
   const row = await db.prepare(`${SELECT_ORDENES} WHERE o.id = ?`).get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Orden no encontrada' });
   res.json(row);
+}));
+
+// Facturas (Facturacion) asociadas a esta orden via el pedido_id capturado a mano en
+// facturacion_pedido_id. Gate por permiso de Ordenes (no de Facturacion): quien administra
+// ordenes puede ver que se facturo de ellas aunque no tenga acceso al modulo de Facturacion.
+app.get('/api/ordenes/:id/facturas', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const rows = await db.prepare(`
+    SELECT f.* FROM facturacion f
+    JOIN facturacion_pedido_id fp ON fp.id = f.id
+    WHERE fp.pedido_id = ?
+    ORDER BY f.fecha DESC
+  `).all(req.params.id);
+  res.json(rows);
 }));
 
 // Cotizaciones candidatas para asociar a esta orden (la direccion inversa de "Marcar como

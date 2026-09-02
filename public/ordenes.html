@@ -25,6 +25,12 @@
         <span class="chip-select-etiqueta">Año</span>
         <select id="filtro-anio"></select>
       </div>
+      <div class="chip-select">
+        <span class="chip-select-etiqueta">Mes</span>
+        <select id="filtro-mes-ordenes">
+          <option value="">Todos</option>
+        </select>
+      </div>
     </div>
 
     <div id="modal-orden-overlay" class="modal-overlay" hidden>
@@ -137,6 +143,10 @@
         <button type="button" id="filtro-estatus-btn" class="multi-select-btn">Todos los estatus</button>
         <div id="filtro-estatus-panel" class="multi-select-panel" hidden></div>
       </div>
+      <label class="check-filtro-inline">
+        <input type="checkbox" id="filtro-sin-factura" />
+        Solo sin factura
+      </label>
     </div>
 
     <div class="acciones-form">

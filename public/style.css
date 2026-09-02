@@ -1129,7 +1129,7 @@ th.num, td.num {
   min-width: 160px;
 }
 
-.check-filtro-sin-pedido {
+.check-filtro-inline {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -1138,7 +1138,7 @@ th.num, td.num {
   white-space: nowrap;
   cursor: pointer;
 }
-.check-filtro-sin-pedido input { width: auto; }
+.check-filtro-inline input { width: auto; }
 
 .multi-select {
   position: relative;

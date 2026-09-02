@@ -30,6 +30,8 @@ const filtroEstatusBtn = document.getElementById('filtro-estatus-btn');
 const filtroEstatusPanel = document.getElementById('filtro-estatus-panel');
 const estatusSeleccionados = new Set();
 const filtroAnio = document.getElementById('filtro-anio');
+const filtroMesOrdenes = document.getElementById('filtro-mes-ordenes');
+const filtroSinFactura = document.getElementById('filtro-sin-factura');
 const checkTodosOrdenes = document.getElementById('check-todos-ordenes');
 const btnEnviarTareasOrdenes = document.getElementById('btn-enviar-tareas-ordenes');
 const ordenesSeleccionadas = new Set();
@@ -382,7 +384,12 @@ function comparar(va, vb) {
 }
 
 function ordenarYRenderizar() {
-  const lista = [...ultimaListaOrdenes].sort((a, b) => {
+  let filtrada = filtroMesOrdenes.value
+    ? ultimaListaOrdenes.filter((o) => (o.fecha || '').slice(5, 7) === filtroMesOrdenes.value)
+    : ultimaListaOrdenes;
+  if (filtroSinFactura.checked) filtrada = filtrada.filter((o) => !o.tiene_facturas);
+
+  const lista = [...filtrada].sort((a, b) => {
     const cmp = comparar(a[orden.campo], b[orden.campo]);
     return orden.direccion === 'asc' ? cmp : -cmp;
   });
@@ -643,6 +650,18 @@ async function cargarFiltroAnio() {
 }
 
 filtroAnio.addEventListener('change', cargarOrdenes);
+
+// Mes es fijo (Enero..Diciembre) y se filtra en el cliente sobre lo que ya trajo el Año (server-
+// side); no hace falta volver a pedir nada al servidor al cambiarlo.
+const MESES_ORDENES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+MESES_ORDENES.forEach((nombre, indice) => {
+  const option = document.createElement('option');
+  option.value = String(indice + 1).padStart(2, '0');
+  option.textContent = nombre;
+  filtroMesOrdenes.appendChild(option);
+});
+filtroMesOrdenes.addEventListener('change', ordenarYRenderizar);
+filtroSinFactura.addEventListener('change', ordenarYRenderizar);
 
 function actualizarBotonFiltroEstatus() {
   filtroEstatusBtn.textContent = estatusSeleccionados.size

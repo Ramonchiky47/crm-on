@@ -14,19 +14,67 @@
         <div class="chip-select">
           <span class="chip-select-etiqueta">Año</span>
           <select id="filtro-anio-resultados">
-            <option value="">Todos</option>
+            <option value="">Último cerrado</option>
           </select>
         </div>
         <div class="chip-select">
           <span class="chip-select-etiqueta">Mes</span>
           <select id="filtro-mes-resultados">
-            <option value="">Todos</option>
+            <option value="">Último cerrado</option>
           </select>
         </div>
       </div>
     </div>
 
-    <section class="kpis" id="resultados-kpis" aria-label="Indicadores de resultados"></section>
+    <section class="tarjeta tarjeta-resultado">
+      <div class="tarjeta__cabecera">
+        <h2 class="tarjeta__titulo">Acumulado del año</h2>
+        <span class="tarjeta__subtitulo" id="ytd-periodo"></span>
+      </div>
+      <div class="resultado-metricas">
+        <div class="resultado-metrica">
+          <span class="resultado-metrica__etiqueta">Venta</span>
+          <span class="resultado-metrica__valor" id="ytd-venta"></span>
+        </div>
+        <div class="resultado-metrica">
+          <span class="resultado-metrica__etiqueta">Presupuesto</span>
+          <span class="resultado-metrica__valor" id="ytd-presupuesto"></span>
+        </div>
+        <div class="resultado-metrica">
+          <span class="resultado-metrica__etiqueta">Alcance</span>
+          <span class="resultado-metrica__valor" id="ytd-alcance"></span>
+        </div>
+        <div class="resultado-metrica">
+          <span class="resultado-metrica__etiqueta">Diferencia</span>
+          <span class="resultado-metrica__valor" id="ytd-diferencia"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="tarjeta tarjeta-resultado">
+      <div class="tarjeta__cabecera">
+        <h2 class="tarjeta__titulo">Mes seleccionado</h2>
+        <span class="tarjeta__subtitulo" id="mes-periodo"></span>
+      </div>
+      <div class="resultado-metricas">
+        <div class="resultado-metrica">
+          <span class="resultado-metrica__etiqueta">Venta</span>
+          <span class="resultado-metrica__valor" id="mes-venta"></span>
+        </div>
+        <div class="resultado-metrica">
+          <span class="resultado-metrica__etiqueta">Presupuesto</span>
+          <span class="resultado-metrica__valor" id="mes-presupuesto"></span>
+        </div>
+        <div class="resultado-metrica">
+          <span class="resultado-metrica__etiqueta">Alcance</span>
+          <span class="resultado-metrica__valor" id="mes-alcance"></span>
+        </div>
+        <div class="resultado-metrica">
+          <span class="resultado-metrica__etiqueta">Diferencia</span>
+          <span class="resultado-metrica__valor" id="mes-diferencia"></span>
+        </div>
+      </div>
+    </section>
   </div>
 
   <script src="auth.js"></script>

@@ -569,6 +569,31 @@ body.con-barra-lateral {
 .texto-bueno { color: var(--exito); font-weight: 600; }
 .texto-critico { color: var(--peligro); font-weight: 600; }
 
+/* Pestaña Resultados: venta real vs presupuesto, 4 cifras relacionadas por tarjeta (Venta,
+   Presupuesto, Alcance, Diferencia) en vez de tarjetas KPI sueltas sin relacion entre si. */
+.tarjeta-resultado { margin-top: 1.1rem; }
+.resultado-metricas {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem 1.3rem;
+}
+.resultado-metrica { display: flex; flex-direction: column; gap: 0.25rem; }
+.resultado-metrica__etiqueta {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9b9b9b;
+}
+.resultado-metrica__valor {
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .resultado-metricas { grid-template-columns: repeat(2, 1fr); }
+}
+
 .lista__grupo-titulo {
   font-size: 0.7rem;
   font-weight: 700;

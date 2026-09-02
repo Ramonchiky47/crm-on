@@ -5401,36 +5401,64 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
   res.json(resultado);
 }));
 
-// Pestaña "Resultados": a diferencia del Panel General (siempre "este mes"), aqui el periodo lo
-// elige el usuario con dos filtros independientes (anio, mes) que se pueden combinar o dejar en
-// blanco por separado: solo anio = todo ese anio, solo mes = ese mes en todos los anios, ambos =
-// ese mes de ese anio, ninguno = historico completo.
+// Pestaña "Resultados": venta real de Facturacion contra el Presupuesto de ventas, en dos
+// vistas. "Acumulado del anio" siempre es el anio en curso, de enero al ultimo mes ya cerrado
+// (ej. si hoy es 1 de septiembre, considera hasta agosto; septiembre sigue en curso y no cuenta
+// todavia) - no se ve afectado por los filtros, es un pulso fijo de "como vamos este anio". "Mes
+// seleccionado" si usa los filtros Año/Mes (con anio/mes del ultimo mes cerrado como default si
+// no se especifican), para revisar el detalle de un mes puntual.
 app.get('/api/resultados/resumen', ar(async (req, res) => {
   if (!req.session.usuarioId) return res.status(401).json({ error: 'No autenticado' });
   const permisos = await permisosDe(req.session.usuarioId, req.session.esAdmin);
-
-  const anio = (req.query.anio || '').trim();
-  const mes = (req.query.mes || '').trim();
   const resultado = {};
 
   if (permisos.facturacion.ver) {
-    const condiciones = [];
-    const params = [];
-    if (anio) { condiciones.push('fecha LIKE ?'); params.push(`${anio}-%`); }
-    if (mes) { condiciones.push('SUBSTRING(fecha, 6, 2) = ?'); params.push(mes); }
-    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
-    const ventas = await db.prepare(`SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion ${where}`).get(...params);
-    resultado.ventasFacturacion = Number(ventas.v);
-  }
+    // CURRENT_DATE de Postgres (America/Mexico_City) en vez de new Date() de Node (UTC), mismo
+    // motivo que en /api/panel/resumen: evita que "hoy" se adelante por la tarde/noche en Mexico.
+    const fechasBase = await db.prepare(`
+      SELECT
+        to_char(date_trunc('month', CURRENT_DATE), 'YYYY-MM-DD') inicio_mes_actual,
+        to_char(date_trunc('month', CURRENT_DATE) - interval '1 day', 'YYYY-MM') ultimo_mes_cerrado
+    `).get();
+    const inicioMesActual = fechasBase.inicio_mes_actual;
+    const ultimoMesCerrado = fechasBase.ultimo_mes_cerrado;
 
-  if (permisos.ordenes.ver) {
-    const condiciones = [];
-    const params = [];
-    if (anio) { condiciones.push('creado_en LIKE ?'); params.push(`${anio}-%`); }
-    if (mes) { condiciones.push('SUBSTRING(creado_en, 6, 2) = ?'); params.push(mes); }
-    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
-    const ventas = await db.prepare(`SELECT COALESCE(SUM(importe), 0) v FROM ordenes ${where}`).get(...params);
-    resultado.ventasOrdenesCargadas = Number(ventas.v);
+    const anioActual = inicioMesActual.slice(0, 4);
+    const inicioAnioActual = `${anioActual}-01-01`;
+
+    const ventaYtd = await db.prepare('SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion WHERE fecha >= ? AND fecha < ?')
+      .get(inicioAnioActual, inicioMesActual);
+    const presupuestoYtd = await db.prepare('SELECT COALESCE(SUM(monto), 0) p FROM presupuesto_ventas WHERE anio_mes >= ? AND anio_mes < ?')
+      .get(`${anioActual}-01`, `${anioActual}-${inicioMesActual.slice(5, 7)}`);
+
+    const ventaYtdNum = Number(ventaYtd.v);
+    const presupuestoYtdNum = Number(presupuestoYtd.p);
+    resultado.ytd = {
+      anio: anioActual,
+      desde: '01',
+      hasta: ultimoMesCerrado.slice(5, 7),
+      venta: ventaYtdNum,
+      presupuesto: presupuestoYtdNum || null,
+      alcance: presupuestoYtdNum ? (ventaYtdNum / presupuestoYtdNum) * 100 : null,
+      diferencia: presupuestoYtdNum ? ventaYtdNum - presupuestoYtdNum : null,
+    };
+
+    const anio = (req.query.anio || '').trim() || ultimoMesCerrado.slice(0, 4);
+    const mes = (req.query.mes || '').trim() || ultimoMesCerrado.slice(5, 7);
+    const anioMes = `${anio}-${mes}`;
+
+    const ventaMes = await db.prepare('SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion WHERE fecha LIKE ?').get(`${anioMes}-%`);
+    const presupuestoMes = await db.prepare('SELECT monto FROM presupuesto_ventas WHERE anio_mes = ?').get(anioMes);
+
+    const ventaMesNum = Number(ventaMes.v);
+    const presupuestoMesNum = presupuestoMes ? Number(presupuestoMes.monto) : null;
+    resultado.mesSeleccionado = {
+      anioMes,
+      venta: ventaMesNum,
+      presupuesto: presupuestoMesNum,
+      alcance: presupuestoMesNum ? (ventaMesNum / presupuestoMesNum) * 100 : null,
+      diferencia: presupuestoMesNum !== null ? ventaMesNum - presupuestoMesNum : null,
+    };
   }
 
   res.json(resultado);

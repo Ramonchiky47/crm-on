@@ -1,30 +1,20 @@
-function escaparHtml(texto) {
-  const div = document.createElement('div');
-  div.textContent = texto == null ? '' : String(texto);
-  return div.innerHTML;
-}
-
 function formatoImporte(valor) {
   if (valor === null || valor === undefined) return '';
   return Number(valor).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function tarjetaKpi(etiqueta, valor) {
-  return `
-    <article class="kpi">
-      <div class="kpi__etiqueta">${escaparHtml(etiqueta)}</div>
-      <div class="kpi__valor">${valor}</div>
-    </article>
-  `;
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+function nombreMes(mesNumero) {
+  return MESES[Number(mesNumero) - 1] || mesNumero;
 }
 
 const filtroAnio = document.getElementById('filtro-anio-resultados');
 const filtroMes = document.getElementById('filtro-mes-resultados');
 
-const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
-// Los dos filtros son independientes entre si (ver comentario en /api/resultados/resumen): se
-// puede dejar cualquiera de los dos en "Todos" sin afectar al otro.
+// Los dos filtros son independientes entre si y solo afectan la tarjeta "Mes seleccionado": si
+// se dejan en blanco, el servidor usa el ultimo mes ya cerrado como default. "Acumulado del año"
+// no se ve afectado por estos filtros, siempre es el año en curso.
 function poblarFiltros() {
   const anioActual = new Date().getFullYear();
   for (let anio = anioActual; anio >= anioActual - 3; anio--) {
@@ -41,6 +31,28 @@ function poblarFiltros() {
   });
 }
 
+// Colorea alcance (>=100% bien, si no critico) y diferencia (>=0 bien, si no critico); null (sin
+// presupuesto capturado para ese periodo) se muestra como texto neutro en vez de $0.00 enganoso.
+function pintarMetrica(idValor, valor, formateador, positivo) {
+  const el = document.getElementById(idValor);
+  if (valor === null || valor === undefined) {
+    el.textContent = 'Sin presupuesto';
+    el.className = 'resultado-metrica__valor pista';
+    return;
+  }
+  el.textContent = formateador(valor);
+  el.className = `resultado-metrica__valor ${positivo(valor) ? 'texto-bueno' : 'texto-critico'}`;
+}
+
+function pintarGrupo(prefijo, datos) {
+  document.getElementById(`${prefijo}-venta`).textContent = `$${formatoImporte(datos.venta)}`;
+  document.getElementById(`${prefijo}-presupuesto`).textContent = datos.presupuesto === null
+    ? 'Sin capturar'
+    : `$${formatoImporte(datos.presupuesto)}`;
+  pintarMetrica(`${prefijo}-alcance`, datos.alcance, (v) => `${formatoImporte(v)}%`, (v) => v >= 100);
+  pintarMetrica(`${prefijo}-diferencia`, datos.diferencia, (v) => `${v >= 0 ? '+' : ''}$${formatoImporte(v)}`, (v) => v >= 0);
+}
+
 async function cargarResultados() {
   const params = new URLSearchParams();
   if (filtroAnio.value) params.set('anio', filtroAnio.value);
@@ -50,14 +62,15 @@ async function cargarResultados() {
   if (!res.ok) return;
   const d = await res.json();
 
-  const kpis = [];
-  if (d.ventasFacturacion !== undefined) {
-    kpis.push(tarjetaKpi('Ventas (Facturación) MXN', `$${formatoImporte(d.ventasFacturacion)}`));
+  if (d.ytd) {
+    document.getElementById('ytd-periodo').textContent = `Enero - ${nombreMes(d.ytd.hasta)} ${d.ytd.anio}`;
+    pintarGrupo('ytd', d.ytd);
   }
-  if (d.ventasOrdenesCargadas !== undefined) {
-    kpis.push(tarjetaKpi('Órdenes cargadas MXN', `$${formatoImporte(d.ventasOrdenesCargadas)}`));
+  if (d.mesSeleccionado) {
+    const [anio, mes] = d.mesSeleccionado.anioMes.split('-');
+    document.getElementById('mes-periodo').textContent = `${nombreMes(mes)} ${anio}`;
+    pintarGrupo('mes', d.mesSeleccionado);
   }
-  document.getElementById('resultados-kpis').innerHTML = kpis.join('');
 }
 
 filtroAnio.addEventListener('change', cargarResultados);

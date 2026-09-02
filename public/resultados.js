@@ -150,26 +150,47 @@ function poblarFiltros() {
   });
 }
 
-// Colorea alcance (>=100% bien, si no critico) y diferencia (>=0 bien, si no critico); null (sin
-// presupuesto capturado para ese periodo) se muestra como texto neutro en vez de $0.00 enganoso.
-function pintarMetrica(idValor, valor, formateador, positivo) {
-  const el = document.getElementById(idValor);
-  if (valor === null || valor === undefined) {
-    el.textContent = 'Sin presupuesto';
-    el.className = 'resultado-metrica__valor pista';
+// "vs. Presupuesto": en vez de mostrar Alcance como "114%" (que hay que restarle 100 de cabeza),
+// se muestra ya como +/-14% sobre la meta, con flecha y color, igual lenguaje visual que la
+// comparativa anual de al lado. La nota debajo trae el presupuesto y la diferencia en pesos.
+function pintarComparativaPresupuesto(prefijo, datos) {
+  const elValor = document.getElementById(`${prefijo}-alcance`);
+  const elNota = document.getElementById(`${prefijo}-presupuesto-nota`);
+  if (datos.presupuesto === null) {
+    elValor.textContent = 'Sin presupuesto';
+    elValor.className = 'hero-comparativa__valor pista';
+    elNota.textContent = '';
     return;
   }
-  el.textContent = formateador(valor);
-  el.className = `resultado-metrica__valor ${positivo(valor) ? 'texto-bueno' : 'texto-critico'}`;
+  const puntos = datos.alcance - 100;
+  const positivo = puntos >= 0;
+  elValor.textContent = `${positivo ? '▲' : '▼'} ${formatoImporte(Math.abs(puntos))}%`;
+  elValor.className = `hero-comparativa__valor ${positivo ? 'texto-bueno' : 'texto-critico'}`;
+  elNota.textContent = `$${formatoImporte(datos.presupuesto)} presupuestado · ${datos.diferencia >= 0 ? '+' : ''}$${formatoImporte(datos.diferencia)}`;
 }
 
-function pintarGrupo(prefijo, datos) {
+// "vs. año anterior": crecimiento/caida interanual (2026 vs 2025, tomando 2026 como medicion),
+// mismo lenguaje visual (flecha + color) que la comparativa de presupuesto.
+function pintarComparativaAnual(prefijo, datos, anioAnterior) {
+  const elValor = document.getElementById(`${prefijo}-yoy`);
+  const elNota = document.getElementById(`${prefijo}-yoy-nota`);
+  document.getElementById(`${prefijo}-yoy-etiqueta`).textContent = `vs. ${anioAnterior}`;
+  if (datos.cambioAnual === null) {
+    elValor.textContent = `Sin venta en ${anioAnterior}`;
+    elValor.className = 'hero-comparativa__valor pista';
+    elNota.textContent = '';
+    return;
+  }
+  const positivo = datos.cambioAnual >= 0;
+  elValor.textContent = `${positivo ? '▲' : '▼'} ${formatoImporte(Math.abs(datos.cambioAnual))}%`;
+  elValor.className = `hero-comparativa__valor ${positivo ? 'texto-bueno' : 'texto-critico'}`;
+  elNota.textContent = `$${formatoImporte(datos.ventaAnioAnterior)} en ${anioAnterior}`;
+}
+
+function pintarGrupo(prefijo, datos, anioAnterior) {
   document.getElementById(`${prefijo}-venta`).textContent = `$${formatoImporte(datos.venta)}`;
-  document.getElementById(`${prefijo}-presupuesto`).textContent = datos.presupuesto === null
-    ? 'Sin capturar'
-    : `$${formatoImporte(datos.presupuesto)}`;
-  pintarMetrica(`${prefijo}-alcance`, datos.alcance, (v) => `${formatoImporte(v)}%`, (v) => v >= 100);
-  pintarMetrica(`${prefijo}-diferencia`, datos.diferencia, (v) => `${v >= 0 ? '+' : ''}$${formatoImporte(v)}`, (v) => v >= 0);
+  pintarComparativaPresupuesto(prefijo, datos);
+  pintarComparativaAnual(prefijo, datos, anioAnterior);
 }
 
 // Reutilizada para las 4 listas (hoteles/productos x acumulado/mes): "nombre" ya viene resuelto
@@ -199,13 +220,13 @@ async function cargarResultados() {
 
   if (d.ytd) {
     document.getElementById('ytd-periodo').textContent = `Enero - ${nombreMes(d.ytd.hasta)} ${d.ytd.anio}`;
-    pintarGrupo('ytd', d.ytd);
+    pintarGrupo('ytd', d.ytd, Number(d.ytd.anio) - 1);
   }
   if (d.mesSeleccionado) {
     const [anio, mes] = d.mesSeleccionado.anioMes.split('-');
     const etiquetaMes = `${nombreMes(mes)} ${anio}`;
     document.getElementById('mes-periodo').textContent = etiquetaMes;
-    pintarGrupo('mes', d.mesSeleccionado);
+    pintarGrupo('mes', d.mesSeleccionado, Number(anio) - 1);
     document.getElementById('hoteles-mes-periodo').textContent = etiquetaMes;
     document.getElementById('productos-mes-periodo').textContent = etiquetaMes;
     cargarCotizacionesDelMes(d.mesSeleccionado.anioMes);

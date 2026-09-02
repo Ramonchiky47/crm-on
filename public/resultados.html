@@ -26,55 +26,47 @@
       </div>
     </div>
 
-    <section class="tarjeta tarjeta-resultado">
-      <div class="tarjeta__cabecera">
-        <h2 class="tarjeta__titulo">Acumulado del año</h2>
-        <span class="tarjeta__subtitulo" id="ytd-periodo"></span>
-      </div>
-      <div class="resultado-metricas">
-        <div class="resultado-metrica">
-          <span class="resultado-metrica__etiqueta">Venta</span>
-          <span class="resultado-metrica__valor" id="ytd-venta"></span>
+    <div class="resultado-listas-par">
+      <section class="tarjeta tarjeta-resultado tarjeta-hero-resultado" style="margin-top: 0;">
+        <div class="tarjeta__cabecera">
+          <h2 class="tarjeta__titulo">Acumulado del año</h2>
+          <span class="tarjeta__subtitulo" id="ytd-periodo"></span>
         </div>
-        <div class="resultado-metrica">
-          <span class="resultado-metrica__etiqueta">Presupuesto</span>
-          <span class="resultado-metrica__valor" id="ytd-presupuesto"></span>
+        <div class="hero-venta"><span class="hero-venta__cifra" id="ytd-venta">$0.00</span></div>
+        <div class="hero-comparativas">
+          <div class="hero-comparativa">
+            <span class="hero-comparativa__etiqueta">vs. Presupuesto</span>
+            <span class="hero-comparativa__valor" id="ytd-alcance"></span>
+            <span class="hero-comparativa__nota" id="ytd-presupuesto-nota"></span>
+          </div>
+          <div class="hero-comparativa">
+            <span class="hero-comparativa__etiqueta" id="ytd-yoy-etiqueta">vs. año anterior</span>
+            <span class="hero-comparativa__valor" id="ytd-yoy"></span>
+            <span class="hero-comparativa__nota" id="ytd-yoy-nota"></span>
+          </div>
         </div>
-        <div class="resultado-metrica">
-          <span class="resultado-metrica__etiqueta">Alcance</span>
-          <span class="resultado-metrica__valor" id="ytd-alcance"></span>
-        </div>
-        <div class="resultado-metrica">
-          <span class="resultado-metrica__etiqueta">Diferencia</span>
-          <span class="resultado-metrica__valor" id="ytd-diferencia"></span>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="tarjeta tarjeta-resultado">
-      <div class="tarjeta__cabecera">
-        <h2 class="tarjeta__titulo">Mes seleccionado</h2>
-        <span class="tarjeta__subtitulo" id="mes-periodo"></span>
-      </div>
-      <div class="resultado-metricas">
-        <div class="resultado-metrica">
-          <span class="resultado-metrica__etiqueta">Venta</span>
-          <span class="resultado-metrica__valor" id="mes-venta"></span>
+      <section class="tarjeta tarjeta-resultado tarjeta-hero-resultado" style="margin-top: 0;">
+        <div class="tarjeta__cabecera">
+          <h2 class="tarjeta__titulo">Mes seleccionado</h2>
+          <span class="tarjeta__subtitulo" id="mes-periodo"></span>
         </div>
-        <div class="resultado-metrica">
-          <span class="resultado-metrica__etiqueta">Presupuesto</span>
-          <span class="resultado-metrica__valor" id="mes-presupuesto"></span>
+        <div class="hero-venta"><span class="hero-venta__cifra" id="mes-venta">$0.00</span></div>
+        <div class="hero-comparativas">
+          <div class="hero-comparativa">
+            <span class="hero-comparativa__etiqueta">vs. Presupuesto</span>
+            <span class="hero-comparativa__valor" id="mes-alcance"></span>
+            <span class="hero-comparativa__nota" id="mes-presupuesto-nota"></span>
+          </div>
+          <div class="hero-comparativa">
+            <span class="hero-comparativa__etiqueta" id="mes-yoy-etiqueta">vs. año anterior</span>
+            <span class="hero-comparativa__valor" id="mes-yoy"></span>
+            <span class="hero-comparativa__nota" id="mes-yoy-nota"></span>
+          </div>
         </div>
-        <div class="resultado-metrica">
-          <span class="resultado-metrica__etiqueta">Alcance</span>
-          <span class="resultado-metrica__valor" id="mes-alcance"></span>
-        </div>
-        <div class="resultado-metrica">
-          <span class="resultado-metrica__etiqueta">Diferencia</span>
-          <span class="resultado-metrica__valor" id="mes-diferencia"></span>
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
     <section class="tarjeta tarjeta-resultado grafica-anual" aria-label="Venta vs presupuesto por mes">
       <div class="tarjeta__cabecera">

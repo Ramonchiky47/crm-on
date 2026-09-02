@@ -5427,21 +5427,36 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
   const anio = (req.query.anio || '').trim() || ultimoMesCerrado.slice(0, 4);
   const mes = (req.query.mes || '').trim() || ultimoMesCerrado.slice(5, 7);
   const anioMes = `${anio}-${mes}`;
-  const inicioAnioSeleccionado = `${anio}-01-01`;
-  // Primer dia del mes siguiente al seleccionado: limite superior EXCLUSIVO que cubre el mes
-  // seleccionado completo sin importar cuantos dias tenga (28/29/30/31).
-  const mesSiguiente = Number(mes) === 12 ? 1 : Number(mes) + 1;
-  const anioMesSiguiente = Number(mes) === 12 ? Number(anio) + 1 : Number(anio);
-  const finAcumuladoExclusivo = `${anioMesSiguiente}-${String(mesSiguiente).padStart(2, '0')}-01`;
+  // Rango [inicio, fin) de "enero a `mes` inclusive" de un anio dado. Se usa tanto para el anio
+  // seleccionado como, desplazado un anio atras, para la comparativa año contra año.
+  function rangoAcumulado(anioBase, mesBase) {
+    const inicio = `${anioBase}-01-01`;
+    const mesSig = Number(mesBase) === 12 ? 1 : Number(mesBase) + 1;
+    const anioSig = Number(mesBase) === 12 ? Number(anioBase) + 1 : Number(anioBase);
+    return { inicio, fin: `${anioSig}-${String(mesSig).padStart(2, '0')}-01` };
+  }
+  const anioAnterior = String(Number(anio) - 1);
+  const { inicio: inicioAnioSeleccionado, fin: finAcumuladoExclusivo } = rangoAcumulado(anio, mes);
+  const { inicio: inicioAnioAnterior, fin: finAcumuladoAnteriorExclusivo } = rangoAcumulado(anioAnterior, mes);
+  const anioMesAnterior = `${anioAnterior}-${mes}`;
+
+  // % de crecimiento/caida (positivo = crecio, negativo = cayo) de "actual" contra "anterior".
+  // null si no hay venta del anio anterior con que comparar (division entre cero sin sentido).
+  function cambioAnual(actual, anterior) {
+    return anterior ? ((actual - anterior) / anterior) * 100 : null;
+  }
 
   if (permisos.facturacion.ver) {
     const ventaYtd = await db.prepare('SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion WHERE fecha >= ? AND fecha < ?')
       .get(inicioAnioSeleccionado, finAcumuladoExclusivo);
     const presupuestoYtd = await db.prepare('SELECT COALESCE(SUM(monto), 0) p FROM presupuesto_ventas WHERE anio_mes >= ? AND anio_mes <= ?')
       .get(`${anio}-01`, anioMes);
+    const ventaYtdAnioAnterior = await db.prepare('SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion WHERE fecha >= ? AND fecha < ?')
+      .get(inicioAnioAnterior, finAcumuladoAnteriorExclusivo);
 
     const ventaYtdNum = Number(ventaYtd.v);
     const presupuestoYtdNum = Number(presupuestoYtd.p);
+    const ventaYtdAnioAnteriorNum = Number(ventaYtdAnioAnterior.v);
     resultado.ytd = {
       anio,
       desde: '01',
@@ -5450,19 +5465,25 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
       presupuesto: presupuestoYtdNum || null,
       alcance: presupuestoYtdNum ? (ventaYtdNum / presupuestoYtdNum) * 100 : null,
       diferencia: presupuestoYtdNum ? ventaYtdNum - presupuestoYtdNum : null,
+      ventaAnioAnterior: ventaYtdAnioAnteriorNum || null,
+      cambioAnual: cambioAnual(ventaYtdNum, ventaYtdAnioAnteriorNum),
     };
 
     const ventaMes = await db.prepare('SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion WHERE fecha LIKE ?').get(`${anioMes}-%`);
     const presupuestoMes = await db.prepare('SELECT monto FROM presupuesto_ventas WHERE anio_mes = ?').get(anioMes);
+    const ventaMesAnioAnterior = await db.prepare('SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion WHERE fecha LIKE ?').get(`${anioMesAnterior}-%`);
 
     const ventaMesNum = Number(ventaMes.v);
     const presupuestoMesNum = presupuestoMes ? Number(presupuestoMes.monto) : null;
+    const ventaMesAnioAnteriorNum = Number(ventaMesAnioAnterior.v);
     resultado.mesSeleccionado = {
       anioMes,
       venta: ventaMesNum,
       presupuesto: presupuestoMesNum,
       alcance: presupuestoMesNum ? (ventaMesNum / presupuestoMesNum) * 100 : null,
       diferencia: presupuestoMesNum !== null ? ventaMesNum - presupuestoMesNum : null,
+      ventaAnioAnterior: ventaMesAnioAnteriorNum || null,
+      cambioAnual: cambioAnual(ventaMesNum, ventaMesAnioAnteriorNum),
     };
 
     // Serie de los 12 meses (enero a diciembre) del anio seleccionado, para graficar venta vs

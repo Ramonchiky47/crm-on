@@ -19,6 +19,7 @@ const tabla = document.getElementById('tabla-facturacion');
 const estadoVacio = document.getElementById('estado-vacio');
 const buscar = document.getElementById('buscar');
 const filtroMes = document.getElementById('filtro-mes-facturacion');
+const filtroSinPedido = document.getElementById('filtro-sin-pedido');
 const resumenCantidad = document.getElementById('resumen-fact-cantidad');
 const resumenIngresos = document.getElementById('resumen-fact-ingresos');
 
@@ -68,9 +69,13 @@ function actualizarResumen(lista) {
 }
 
 function ordenarYRenderizar() {
-  const filtrada = filtroMes.value
+  let filtrada = filtroMes.value
     ? ultimaLista.filter((f) => (f.fecha || '').startsWith(filtroMes.value))
     : ultimaLista;
+  // "Solo sin pedido asociado": para ir resolviendo poco a poco las facturas que todavia no
+  // tienen un pedido_id capturado (ver Resultados, donde estas se agrupan aparte del ranking
+  // de hoteles por venta).
+  if (filtroSinPedido.checked) filtrada = filtrada.filter((f) => !f.pedido_id);
   const lista = [...filtrada].sort((a, b) => {
     const cmp = comparar(a[orden.campo], b[orden.campo]);
     return orden.direccion === 'asc' ? cmp : -cmp;
@@ -113,6 +118,7 @@ async function cargarFacturacion() {
 }
 
 filtroMes.addEventListener('change', ordenarYRenderizar);
+filtroSinPedido.addEventListener('change', ordenarYRenderizar);
 
 let permisosFacturacion = { ver: true, editar: true, borrar: true };
 

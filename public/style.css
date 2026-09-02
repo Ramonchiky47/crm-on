@@ -1129,6 +1129,17 @@ th.num, td.num {
   min-width: 160px;
 }
 
+.check-filtro-sin-pedido {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #555;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.check-filtro-sin-pedido input { width: auto; }
+
 .multi-select {
   position: relative;
   flex-shrink: 0;

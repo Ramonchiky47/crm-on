@@ -548,6 +548,9 @@ body.con-barra-lateral {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.fila-lista__valor.pista { font-weight: 600; }
+
+.fila-lista__principal--pendiente { font-style: italic; color: #757575; }
 
 /* Pares de listas en Resultados (hoteles/productos, acumulado y mes lado a lado). */
 .resultado-listas-par {

@@ -5521,27 +5521,34 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
     // Top 10 hoteles por venta FACTURADA (no por ordenes cargadas: toda la pagina reporta venta
     // real de Facturacion, asi que el ranking de hoteles tiene que ser consistente con eso).
     // Facturacion no trae el hotel directamente, solo llega via el pedido_id ya asociado a mano
-    // (facturacion_pedido_id -> ordenes -> destino), asi que este ranking solo cubre las facturas
-    // ya asociadas a un pedido - hoy es una minoria del total, crece conforme se van asociando.
-    resultado.topHotelesYtd = await db.prepare(`
-      SELECT d.destino nombre, SUM(f.ingresos) venta
-      FROM facturacion f
-      JOIN facturacion_pedido_id fp ON fp.id = f.id
-      JOIN ordenes o ON o.id = fp.pedido_id
-      JOIN destinos d ON d.id_destino = o.destino_id
-      WHERE f.fecha >= ? AND f.fecha < ?
-      GROUP BY d.destino ORDER BY venta DESC LIMIT 10
-    `).all(inicioAnioSeleccionado, finAcumuladoExclusivo).then((filas) => filas.map((f) => ({ ...f, venta: Number(f.venta) })));
+    // (facturacion_pedido_id -> ordenes -> destino). La asociacion se hace poco a poco, asi que
+    // en vez de excluir las facturas sin asociar (subestimando el total sin avisar), se suman
+    // aparte como "Sin pedido asociado" y se agregan siempre al final de la lista - asi se ve el
+    // 100% de la venta facturada, con el bloque pendiente encogiendose conforme se va asociando.
+    const topHoteles = async (condicionFecha, parametro) => {
+      const nombrados = await db.prepare(`
+        SELECT d.destino nombre, SUM(f.ingresos) venta
+        FROM facturacion f
+        JOIN facturacion_pedido_id fp ON fp.id = f.id
+        JOIN ordenes o ON o.id = fp.pedido_id
+        JOIN destinos d ON d.id_destino = o.destino_id
+        WHERE ${condicionFecha}
+        GROUP BY d.destino ORDER BY venta DESC LIMIT 10
+      `).all(...parametro);
+      const sinAsociar = await db.prepare(`
+        SELECT COALESCE(SUM(f.ingresos), 0) venta
+        FROM facturacion f
+        WHERE ${condicionFecha} AND f.id NOT IN (SELECT id FROM facturacion_pedido_id)
+      `).get(...parametro);
 
-    resultado.topHotelesMes = await db.prepare(`
-      SELECT d.destino nombre, SUM(f.ingresos) venta
-      FROM facturacion f
-      JOIN facturacion_pedido_id fp ON fp.id = f.id
-      JOIN ordenes o ON o.id = fp.pedido_id
-      JOIN destinos d ON d.id_destino = o.destino_id
-      WHERE f.fecha LIKE ?
-      GROUP BY d.destino ORDER BY venta DESC LIMIT 10
-    `).all(`${anioMes}-%`).then((filas) => filas.map((f) => ({ ...f, venta: Number(f.venta) })));
+      const filas = nombrados.map((f) => ({ nombre: f.nombre, venta: Number(f.venta) }));
+      const ventaSinAsociar = Number(sinAsociar.venta);
+      if (ventaSinAsociar > 0) filas.push({ nombre: 'Sin pedido asociado', venta: ventaSinAsociar, sinAsociar: true });
+      return filas;
+    };
+
+    resultado.topHotelesYtd = await topHoteles('f.fecha >= ? AND f.fecha < ?', [inicioAnioSeleccionado, finAcumuladoExclusivo]);
+    resultado.topHotelesMes = await topHoteles('f.fecha LIKE ?', [`${anioMes}-%`]);
   }
 
   res.json(resultado);

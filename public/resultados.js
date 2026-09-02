@@ -9,6 +9,11 @@ function formatoImporte(valor) {
   return Number(valor).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatoEntero(valor) {
+  if (valor === null || valor === undefined) return '';
+  return Number(valor).toLocaleString('es-MX', { maximumFractionDigits: 0 });
+}
+
 function diasHasta(fechaIso) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
@@ -195,19 +200,25 @@ function pintarGrupo(prefijo, datos, anioAnterior) {
 
 // Reutilizada para las 4 listas (hoteles/productos x acumulado/mes): "nombre" ya viene resuelto
 // (nombre de hotel, o codigo de producto) para no bifurcar la logica de pintado. "cantidad" es
-// opcional (solo aplica a productos, no a hoteles).
+// opcional (solo aplica a productos). "sinAsociar" (solo hoteles): el bloque de facturas sin
+// pedido asociado va siempre al final, sin numero de ranking (no compite por un lugar, es lo que
+// falta por clasificar).
 function renderizarListaVenta(idContenedor, filas) {
   const contenedor = document.getElementById(idContenedor);
+  let numeroRanking = 0;
   contenedor.innerHTML = filas.length
-    ? filas.map((f, indice) => `
+    ? filas.map((f) => {
+        const etiqueta = f.sinAsociar ? f.nombre : `#${++numeroRanking} ${f.nombre}`;
+        return `
         <div class="fila-lista">
           <div class="fila-lista__texto">
-            <div class="fila-lista__principal">#${indice + 1} ${f.nombre}</div>
-            ${f.cantidad !== undefined ? `<div class="fila-lista__secundario">Cantidad: ${formatoImporte(f.cantidad)}</div>` : ''}
+            <div class="fila-lista__principal${f.sinAsociar ? ' fila-lista__principal--pendiente' : ''}">${etiqueta}</div>
+            ${f.cantidad !== undefined ? `<div class="fila-lista__secundario">Cantidad: ${formatoEntero(f.cantidad)} unidades</div>` : ''}
           </div>
-          <div class="fila-lista__valor">$${formatoImporte(f.venta)}</div>
+          <div class="fila-lista__valor${f.sinAsociar ? ' pista' : ''}">$${formatoImporte(f.venta)}</div>
         </div>
-      `).join('')
+      `;
+      }).join('')
     : '<p class="tarjeta-vacio">Sin ventas en este periodo.</p>';
 }
 
@@ -241,8 +252,8 @@ async function cargarResultados() {
   if (d.serieAnual) {
     renderizarGraficaAnual(d.serieAnual);
   }
-  if (d.topHotelesYtd) renderizarListaVenta('lista-hoteles-ytd', d.topHotelesYtd.map((f) => ({ nombre: escaparHtml(f.nombre), venta: f.venta })));
-  if (d.topHotelesMes) renderizarListaVenta('lista-hoteles-mes', d.topHotelesMes.map((f) => ({ nombre: escaparHtml(f.nombre), venta: f.venta })));
+  if (d.topHotelesYtd) renderizarListaVenta('lista-hoteles-ytd', d.topHotelesYtd.map((f) => ({ nombre: escaparHtml(f.nombre), venta: f.venta, sinAsociar: f.sinAsociar })));
+  if (d.topHotelesMes) renderizarListaVenta('lista-hoteles-mes', d.topHotelesMes.map((f) => ({ nombre: escaparHtml(f.nombre), venta: f.venta, sinAsociar: f.sinAsociar })));
   if (d.topProductosYtd) {
     renderizarListaVenta('lista-productos-ytd', d.topProductosYtd.map((f) => ({ nombre: escaparHtml(f.codigo), cantidad: f.cantidad, venta: f.venta })));
   }

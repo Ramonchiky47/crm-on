@@ -1,11 +1,14 @@
 const form = document.getElementById('form-presupuesto');
 const inputMesOriginal = document.getElementById('presupuesto-mes-original');
+const campoAnio = document.getElementById('anio');
 const campoMes = document.getElementById('mes');
 const campoMonto = document.getElementById('monto');
 const btnGuardar = document.getElementById('btn-guardar');
 const btnCancelar = document.getElementById('btn-cancelar');
 const tabla = document.getElementById('tabla-presupuesto');
 const estadoVacio = document.getElementById('estado-vacio');
+
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 function escaparHtml(texto) {
   const div = document.createElement('div');
@@ -20,10 +23,33 @@ function formatoImporte(valor) {
 
 function nombreMes(anioMes) {
   const [anio, mes] = anioMes.split('-');
-  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-  const nombre = meses[Number(mes) - 1] || mes;
-  return `${nombre.charAt(0).toUpperCase()}${nombre.slice(1)} ${anio}`;
+  const nombre = MESES[Number(mes) - 1] || mes;
+  return `${nombre} ${anio}`;
 }
+
+// Año/Mes como dos <select> en vez de un <input type="month">: el picker nativo del navegador
+// a veces complica navegar a meses futuros (reportado: no dejaba ir mas alla del mes en curso).
+// El rango cubre 1 año atras y 2 adelante, suficiente para capturar el resto del año en curso o
+// planear el siguiente sin quedar corto.
+function poblarSelectoresFecha() {
+  const hoy = new Date();
+  const anioActual = hoy.getFullYear();
+  for (let anio = anioActual - 1; anio <= anioActual + 2; anio++) {
+    const option = document.createElement('option');
+    option.value = String(anio);
+    option.textContent = String(anio);
+    campoAnio.appendChild(option);
+  }
+  MESES.forEach((nombre, indice) => {
+    const option = document.createElement('option');
+    option.value = String(indice + 1).padStart(2, '0');
+    option.textContent = nombre;
+    campoMes.appendChild(option);
+  });
+  campoAnio.value = String(anioActual);
+  campoMes.value = String(hoy.getMonth() + 1).padStart(2, '0');
+}
+poblarSelectoresFecha();
 
 let permisosPresupuesto = { ver: true, editar: true, borrar: true };
 
@@ -62,6 +88,13 @@ async function cargarPresupuesto() {
 function limpiarFormulario() {
   inputMesOriginal.value = '';
   form.reset();
+  // form.reset() regresa los <select> a la PRIMERA <option> (enero del año mas viejo del rango),
+  // no al mes en curso: se reafirma aqui para que "Guardar" repetido siga siendo util sin tener
+  // que re-seleccionar año/mes cada vez. (No se vuelve a llamar poblarSelectoresFecha aqui:
+  // duplicaria las <option> ya creadas).
+  const hoy = new Date();
+  campoAnio.value = String(hoy.getFullYear());
+  campoMes.value = String(hoy.getMonth() + 1).padStart(2, '0');
   btnGuardar.textContent = 'Guardar';
   btnCancelar.hidden = true;
 }
@@ -69,7 +102,7 @@ function limpiarFormulario() {
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
 
-  const payload = { anio_mes: campoMes.value, monto: campoMonto.value };
+  const payload = { anio_mes: `${campoAnio.value}-${campoMes.value}`, monto: campoMonto.value };
 
   const res = await fetch('/api/presupuesto-ventas', {
     method: 'POST',
@@ -100,8 +133,10 @@ tabla.addEventListener('click', async (e) => {
 
   if (e.target.classList.contains('btn-editar')) {
     const mes = e.target.dataset.mes;
+    const [anio, mesNumero] = mes.split('-');
     inputMesOriginal.value = mes;
-    campoMes.value = mes;
+    campoAnio.value = anio;
+    campoMes.value = mesNumero;
     campoMonto.value = e.target.dataset.monto || '';
     btnGuardar.textContent = 'Guardar cambios';
     btnCancelar.hidden = false;

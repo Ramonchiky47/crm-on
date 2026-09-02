@@ -5459,6 +5459,25 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
       alcance: presupuestoMesNum ? (ventaMesNum / presupuestoMesNum) * 100 : null,
       diferencia: presupuestoMesNum !== null ? ventaMesNum - presupuestoMesNum : null,
     };
+
+    // Serie de los 12 meses (enero a diciembre) del anio del filtro, o el anio en curso si no se
+    // especifico: a diferencia de "mes seleccionado" (un solo mes), esto siempre es el anio
+    // completo para graficar venta vs presupuesto mes a mes.
+    const anioSerie = (req.query.anio || '').trim() || anioActual;
+    const filasVenta = await db.prepare("SELECT SUBSTRING(fecha, 6, 2) mes, SUM(ingresos) v FROM facturacion WHERE fecha LIKE ? GROUP BY 1")
+      .all(`${anioSerie}-%`);
+    const filasPresupuesto = await db.prepare('SELECT SUBSTRING(anio_mes, 6, 2) mes, monto FROM presupuesto_ventas WHERE anio_mes LIKE ?')
+      .all(`${anioSerie}-%`);
+    const ventaPorMes = new Map(filasVenta.map((f) => [f.mes, Number(f.v)]));
+    const presupuestoPorMes = new Map(filasPresupuesto.map((f) => [f.mes, Number(f.monto)]));
+
+    resultado.serieAnual = {
+      anio: anioSerie,
+      meses: Array.from({ length: 12 }, (_, indice) => {
+        const mes = String(indice + 1).padStart(2, '0');
+        return { mes, venta: ventaPorMes.get(mes) || 0, presupuesto: presupuestoPorMes.has(mes) ? presupuestoPorMes.get(mes) : null };
+      }),
+    };
   }
 
   res.json(resultado);

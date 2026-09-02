@@ -594,6 +594,58 @@ body.con-barra-lateral {
   .resultado-metricas { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* Grafica de barras "Venta vs presupuesto por mes": paleta categorica validada (ver skill de
+   dataviz) contra confusion de daltonismo y contraste, con sus propios tokens para poder
+   redefinirlos en modo oscuro sin tocar el resto de la tarjeta. */
+.grafica-anual {
+  --serie-venta: #2a78d6;
+  --serie-presupuesto: #eb6834;
+  --grafica-grid: var(--borde);
+  --grafica-eje: #9b9b9b;
+}
+@media (prefers-color-scheme: dark) {
+  .grafica-anual {
+    --serie-venta: #3987e5;
+    --serie-presupuesto: #d95926;
+  }
+}
+.grafica-leyenda {
+  display: flex;
+  gap: 1.2rem;
+  margin-bottom: 0.8rem;
+  font-size: 0.8rem;
+  color: #757575;
+}
+.grafica-leyenda__item { display: inline-flex; align-items: center; gap: 0.4rem; }
+.grafica-leyenda__punto {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.grafica-leyenda__punto--venta { background: var(--serie-venta); }
+.grafica-leyenda__punto--presupuesto { background: var(--serie-presupuesto); }
+.grafica-contenedor { overflow-x: auto; }
+.grafica-contenedor svg { width: 100%; min-width: 640px; height: auto; display: block; }
+.grafica-barra-venta { fill: var(--serie-venta); }
+.grafica-barra-presupuesto { fill: var(--serie-presupuesto); }
+.grafica-barra-venta:hover, .grafica-barra-presupuesto:hover { opacity: 0.82; }
+.grafica-linea-grid { stroke: var(--grafica-grid); stroke-width: 1; }
+.grafica-texto-eje { fill: var(--grafica-eje); font-size: 11px; font-family: inherit; }
+.grafica-tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: var(--fondo-modal);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.78rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+  z-index: 5;
+}
+.grafica-tooltip strong { font-variant-numeric: tabular-nums; }
+
 .lista__grupo-titulo {
   font-size: 0.7rem;
   font-weight: 700;

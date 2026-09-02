@@ -1911,10 +1911,12 @@ function limpiarFormCotizacion() {
   cotizacionPanelEtapa.hidden = true;
   ocultarMarcarPerdidaForm();
   ocultarMarcarGanadaPanel();
-  if (filtroNegocioId) {
-    cotizacionNegocio.value = filtroNegocioId;
-    replicarContactoYDestinoDeNegocio(filtroNegocioId);
-  }
+  // Replicar Contacto/Destino de un Negocio es responsabilidad de quien abre el formulario para
+  // ESE negocio en concreto (el boton "+ Nueva cotizacion" de su tarjeta ya lo hace explicito,
+  // justo despues de llamar aqui). No debe repetirse aqui por el simple hecho de que la lista
+  // siga filtrada por un Negocio: si no, cada "+ Agregar cotizacion" generico reaparecia con el
+  // contacto/hotel de la ULTIMA cotizacion filtrada, en vez de arrancar en blanco.
+  cotizacionNegocio.value = '';
 
   cotizacionFechaCreacion.value = hoyISO();
   cotizacionVencimientoOpcion.value = '30';

@@ -194,7 +194,8 @@ function pintarGrupo(prefijo, datos, anioAnterior) {
 }
 
 // Reutilizada para las 4 listas (hoteles/productos x acumulado/mes): "nombre" ya viene resuelto
-// (nombre de hotel, o "codigo — descripcion" de producto) para no bifurcar la logica de pintado.
+// (nombre de hotel, o codigo de producto) para no bifurcar la logica de pintado. "cantidad" es
+// opcional (solo aplica a productos, no a hoteles).
 function renderizarListaVenta(idContenedor, filas) {
   const contenedor = document.getElementById(idContenedor);
   contenedor.innerHTML = filas.length
@@ -202,6 +203,7 @@ function renderizarListaVenta(idContenedor, filas) {
         <div class="fila-lista">
           <div class="fila-lista__texto">
             <div class="fila-lista__principal">#${indice + 1} ${f.nombre}</div>
+            ${f.cantidad !== undefined ? `<div class="fila-lista__secundario">Cantidad: ${formatoImporte(f.cantidad)}</div>` : ''}
           </div>
           <div class="fila-lista__valor">$${formatoImporte(f.venta)}</div>
         </div>
@@ -242,10 +244,10 @@ async function cargarResultados() {
   if (d.topHotelesYtd) renderizarListaVenta('lista-hoteles-ytd', d.topHotelesYtd.map((f) => ({ nombre: escaparHtml(f.nombre), venta: f.venta })));
   if (d.topHotelesMes) renderizarListaVenta('lista-hoteles-mes', d.topHotelesMes.map((f) => ({ nombre: escaparHtml(f.nombre), venta: f.venta })));
   if (d.topProductosYtd) {
-    renderizarListaVenta('lista-productos-ytd', d.topProductosYtd.map((f) => ({ nombre: `${escaparHtml(f.codigo)} — ${escaparHtml(f.descripcion || '')}`, venta: f.venta })));
+    renderizarListaVenta('lista-productos-ytd', d.topProductosYtd.map((f) => ({ nombre: escaparHtml(f.codigo), cantidad: f.cantidad, venta: f.venta })));
   }
   if (d.topProductosMes) {
-    renderizarListaVenta('lista-productos-mes', d.topProductosMes.map((f) => ({ nombre: `${escaparHtml(f.codigo)} — ${escaparHtml(f.descripcion || '')}`, venta: f.venta })));
+    renderizarListaVenta('lista-productos-mes', d.topProductosMes.map((f) => ({ nombre: escaparHtml(f.codigo), cantidad: f.cantidad, venta: f.venta })));
   }
 }
 

@@ -5504,19 +5504,19 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
       }),
     };
 
-    // Top 10 productos por venta (Facturacion trae codigo/descripcion de articulo, a diferencia
-    // de Ordenes que no desglosa por producto). "Acumulado" = mismo rango que resultado.ytd.
+    // Top 10 productos por venta (Facturacion trae codigo/cantidad de articulo, a diferencia de
+    // Ordenes que no desglosa por producto). "Acumulado" = mismo rango que resultado.ytd.
     resultado.topProductosYtd = await db.prepare(`
-      SELECT articulo codigo, MAX(descripcion) descripcion, SUM(ingresos) venta
+      SELECT articulo codigo, SUM(cantidad_vendida) cantidad, SUM(ingresos) venta
       FROM facturacion WHERE fecha >= ? AND fecha < ? AND articulo IS NOT NULL
       GROUP BY articulo ORDER BY venta DESC LIMIT 10
-    `).all(inicioAnioSeleccionado, finAcumuladoExclusivo).then((filas) => filas.map((f) => ({ ...f, venta: Number(f.venta) })));
+    `).all(inicioAnioSeleccionado, finAcumuladoExclusivo).then((filas) => filas.map((f) => ({ ...f, cantidad: Number(f.cantidad), venta: Number(f.venta) })));
 
     resultado.topProductosMes = await db.prepare(`
-      SELECT articulo codigo, MAX(descripcion) descripcion, SUM(ingresos) venta
+      SELECT articulo codigo, SUM(cantidad_vendida) cantidad, SUM(ingresos) venta
       FROM facturacion WHERE fecha LIKE ? AND articulo IS NOT NULL
       GROUP BY articulo ORDER BY venta DESC LIMIT 10
-    `).all(`${anioMes}-%`).then((filas) => filas.map((f) => ({ ...f, venta: Number(f.venta) })));
+    `).all(`${anioMes}-%`).then((filas) => filas.map((f) => ({ ...f, cantidad: Number(f.cantidad), venta: Number(f.venta) })));
   }
 
   // Top 10 hoteles por venta. Facturacion no trae el hotel (solo llega si se asocio pedido_id a

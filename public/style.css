@@ -543,6 +543,22 @@ body.con-barra-lateral {
   text-overflow: ellipsis;
 }
 
+.fila-lista__valor {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pares de listas en Resultados (hoteles/productos, acumulado y mes lado a lado). */
+.resultado-listas-par {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 780px) {
+  .resultado-listas-par { grid-template-columns: 1fr; }
+}
+
 .chip {
   flex-shrink: 0;
   display: inline-flex;

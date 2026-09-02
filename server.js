@@ -5412,40 +5412,45 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
   const permisos = await permisosDe(req.session.usuarioId, req.session.esAdmin);
   const resultado = {};
 
+  // CURRENT_DATE de Postgres (America/Mexico_City) en vez de new Date() de Node (UTC), mismo
+  // motivo que en /api/panel/resumen: evita que "hoy" se adelante por la tarde/noche en Mexico.
+  // Se calcula una sola vez, fuera de los bloques de permisos, porque tanto Facturacion (venta)
+  // como Ordenes (ranking de hoteles) lo necesitan.
+  const fechasBase = await db.prepare(`
+    SELECT to_char(date_trunc('month', CURRENT_DATE) - interval '1 day', 'YYYY-MM') ultimo_mes_cerrado
+  `).get();
+  const ultimoMesCerrado = fechasBase.ultimo_mes_cerrado;
+  // Ambos filtros son independientes en la URL, pero por default resuelven al mismo periodo: el
+  // anio en curso y su ultimo mes ya cerrado (ej. hoy 1-sep -> anio 2026, mes agosto). "Acumulado"
+  // y "Mes seleccionado" comparten este mismo anio/mes resuelto - no son dos periodos distintos,
+  // "Acumulado" es simplemente enero hasta ese mes (inclusive) del mismo anio.
+  const anio = (req.query.anio || '').trim() || ultimoMesCerrado.slice(0, 4);
+  const mes = (req.query.mes || '').trim() || ultimoMesCerrado.slice(5, 7);
+  const anioMes = `${anio}-${mes}`;
+  const inicioAnioSeleccionado = `${anio}-01-01`;
+  // Primer dia del mes siguiente al seleccionado: limite superior EXCLUSIVO que cubre el mes
+  // seleccionado completo sin importar cuantos dias tenga (28/29/30/31).
+  const mesSiguiente = Number(mes) === 12 ? 1 : Number(mes) + 1;
+  const anioMesSiguiente = Number(mes) === 12 ? Number(anio) + 1 : Number(anio);
+  const finAcumuladoExclusivo = `${anioMesSiguiente}-${String(mesSiguiente).padStart(2, '0')}-01`;
+
   if (permisos.facturacion.ver) {
-    // CURRENT_DATE de Postgres (America/Mexico_City) en vez de new Date() de Node (UTC), mismo
-    // motivo que en /api/panel/resumen: evita que "hoy" se adelante por la tarde/noche en Mexico.
-    const fechasBase = await db.prepare(`
-      SELECT
-        to_char(date_trunc('month', CURRENT_DATE), 'YYYY-MM-DD') inicio_mes_actual,
-        to_char(date_trunc('month', CURRENT_DATE) - interval '1 day', 'YYYY-MM') ultimo_mes_cerrado
-    `).get();
-    const inicioMesActual = fechasBase.inicio_mes_actual;
-    const ultimoMesCerrado = fechasBase.ultimo_mes_cerrado;
-
-    const anioActual = inicioMesActual.slice(0, 4);
-    const inicioAnioActual = `${anioActual}-01-01`;
-
     const ventaYtd = await db.prepare('SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion WHERE fecha >= ? AND fecha < ?')
-      .get(inicioAnioActual, inicioMesActual);
-    const presupuestoYtd = await db.prepare('SELECT COALESCE(SUM(monto), 0) p FROM presupuesto_ventas WHERE anio_mes >= ? AND anio_mes < ?')
-      .get(`${anioActual}-01`, `${anioActual}-${inicioMesActual.slice(5, 7)}`);
+      .get(inicioAnioSeleccionado, finAcumuladoExclusivo);
+    const presupuestoYtd = await db.prepare('SELECT COALESCE(SUM(monto), 0) p FROM presupuesto_ventas WHERE anio_mes >= ? AND anio_mes <= ?')
+      .get(`${anio}-01`, anioMes);
 
     const ventaYtdNum = Number(ventaYtd.v);
     const presupuestoYtdNum = Number(presupuestoYtd.p);
     resultado.ytd = {
-      anio: anioActual,
+      anio,
       desde: '01',
-      hasta: ultimoMesCerrado.slice(5, 7),
+      hasta: mes,
       venta: ventaYtdNum,
       presupuesto: presupuestoYtdNum || null,
       alcance: presupuestoYtdNum ? (ventaYtdNum / presupuestoYtdNum) * 100 : null,
       diferencia: presupuestoYtdNum ? ventaYtdNum - presupuestoYtdNum : null,
     };
-
-    const anio = (req.query.anio || '').trim() || ultimoMesCerrado.slice(0, 4);
-    const mes = (req.query.mes || '').trim() || ultimoMesCerrado.slice(5, 7);
-    const anioMes = `${anio}-${mes}`;
 
     const ventaMes = await db.prepare('SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion WHERE fecha LIKE ?').get(`${anioMes}-%`);
     const presupuestoMes = await db.prepare('SELECT monto FROM presupuesto_ventas WHERE anio_mes = ?').get(anioMes);
@@ -5460,24 +5465,56 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
       diferencia: presupuestoMesNum !== null ? ventaMesNum - presupuestoMesNum : null,
     };
 
-    // Serie de los 12 meses (enero a diciembre) del anio del filtro, o el anio en curso si no se
-    // especifico: a diferencia de "mes seleccionado" (un solo mes), esto siempre es el anio
-    // completo para graficar venta vs presupuesto mes a mes.
-    const anioSerie = (req.query.anio || '').trim() || anioActual;
+    // Serie de los 12 meses (enero a diciembre) del anio seleccionado, para graficar venta vs
+    // presupuesto mes a mes (a diferencia de "Acumulado", que solo llega hasta el mes elegido,
+    // aqui se muestran los 12 aunque los que sigan al mes elegido salgan en 0/sin presupuesto).
     const filasVenta = await db.prepare("SELECT SUBSTRING(fecha, 6, 2) mes, SUM(ingresos) v FROM facturacion WHERE fecha LIKE ? GROUP BY 1")
-      .all(`${anioSerie}-%`);
+      .all(`${anio}-%`);
     const filasPresupuesto = await db.prepare('SELECT SUBSTRING(anio_mes, 6, 2) mes, monto FROM presupuesto_ventas WHERE anio_mes LIKE ?')
-      .all(`${anioSerie}-%`);
+      .all(`${anio}-%`);
     const ventaPorMes = new Map(filasVenta.map((f) => [f.mes, Number(f.v)]));
     const presupuestoPorMes = new Map(filasPresupuesto.map((f) => [f.mes, Number(f.monto)]));
 
     resultado.serieAnual = {
-      anio: anioSerie,
+      anio,
       meses: Array.from({ length: 12 }, (_, indice) => {
-        const mes = String(indice + 1).padStart(2, '0');
-        return { mes, venta: ventaPorMes.get(mes) || 0, presupuesto: presupuestoPorMes.has(mes) ? presupuestoPorMes.get(mes) : null };
+        const mesIndice = String(indice + 1).padStart(2, '0');
+        return { mes: mesIndice, venta: ventaPorMes.get(mesIndice) || 0, presupuesto: presupuestoPorMes.has(mesIndice) ? presupuestoPorMes.get(mesIndice) : null };
       }),
     };
+
+    // Top 10 productos por venta (Facturacion trae codigo/descripcion de articulo, a diferencia
+    // de Ordenes que no desglosa por producto). "Acumulado" = mismo rango que resultado.ytd.
+    resultado.topProductosYtd = await db.prepare(`
+      SELECT articulo codigo, MAX(descripcion) descripcion, SUM(ingresos) venta
+      FROM facturacion WHERE fecha >= ? AND fecha < ? AND articulo IS NOT NULL
+      GROUP BY articulo ORDER BY venta DESC LIMIT 10
+    `).all(inicioAnioSeleccionado, finAcumuladoExclusivo).then((filas) => filas.map((f) => ({ ...f, venta: Number(f.venta) })));
+
+    resultado.topProductosMes = await db.prepare(`
+      SELECT articulo codigo, MAX(descripcion) descripcion, SUM(ingresos) venta
+      FROM facturacion WHERE fecha LIKE ? AND articulo IS NOT NULL
+      GROUP BY articulo ORDER BY venta DESC LIMIT 10
+    `).all(`${anioMes}-%`).then((filas) => filas.map((f) => ({ ...f, venta: Number(f.venta) })));
+  }
+
+  // Top 10 hoteles por venta. Facturacion no trae el hotel (solo llega si se asocio pedido_id a
+  // mano, y hoy eso cubre una minoria de las filas), asi que se usa Ordenes (importe por
+  // destino_id), que si trae hotel en cada fila desde que se cargan.
+  if (permisos.ordenes.ver) {
+    resultado.topHotelesYtd = await db.prepare(`
+      SELECT d.destino nombre, SUM(o.importe) venta
+      FROM ordenes o JOIN destinos d ON d.id_destino = o.destino_id
+      WHERE o.fecha >= ? AND o.fecha < ?
+      GROUP BY d.destino ORDER BY venta DESC LIMIT 10
+    `).all(inicioAnioSeleccionado, finAcumuladoExclusivo).then((filas) => filas.map((f) => ({ ...f, venta: Number(f.venta) })));
+
+    resultado.topHotelesMes = await db.prepare(`
+      SELECT d.destino nombre, SUM(o.importe) venta
+      FROM ordenes o JOIN destinos d ON d.id_destino = o.destino_id
+      WHERE o.fecha LIKE ?
+      GROUP BY d.destino ORDER BY venta DESC LIMIT 10
+    `).all(`${anioMes}-%`).then((filas) => filas.map((f) => ({ ...f, venta: Number(f.venta) })));
   }
 
   res.json(resultado);

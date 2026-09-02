@@ -88,7 +88,66 @@
       <div class="grafica-contenedor" id="grafica-anual-contenedor"></div>
     </section>
 
+    <section class="tarjeta tarjeta-resultado">
+      <div class="tarjeta__cabecera">
+        <h2 class="tarjeta__titulo">Cotizaciones del mes</h2>
+        <span class="tarjeta__subtitulo" id="cotizaciones-mes-periodo"></span>
+      </div>
+      <div class="resumen-cot-dia">
+        <div class="resumen-cot-dia__grupo">
+          <span class="resumen-cot-dia__etiqueta">Cotizaciones creadas</span>
+          <span class="resumen-cot-dia__valor" id="resultados-creadas">0</span>
+          <span class="resumen-cot-dia__delta" id="resultados-creadas-delta"></span>
+        </div>
+        <div class="resumen-cot-dia__grupo es-bueno">
+          <span class="resumen-cot-dia__etiqueta">Cotizaciones ganadas</span>
+          <span class="resumen-cot-dia__valor" id="resultados-ganadas">0</span>
+          <span class="resumen-cot-dia__delta" id="resultados-ganadas-delta"></span>
+          <span class="resumen-cot-dia__importe" id="resultados-ganadas-importe"></span>
+        </div>
+        <div class="resumen-cot-dia__grupo es-critico">
+          <span class="resumen-cot-dia__etiqueta">Cotizaciones perdidas</span>
+          <span class="resumen-cot-dia__valor" id="resultados-perdidas">0</span>
+          <span class="resumen-cot-dia__delta" id="resultados-perdidas-delta"></span>
+        </div>
+      </div>
+    </section>
+
     <section class="kpis" id="resultados-kpis" aria-label="Indicadores generales" style="margin-top: 1.1rem;"></section>
+
+    <div class="resultado-listas-par" style="margin-top: 1.1rem;">
+      <section class="tarjeta tarjeta-resultado" style="margin-top: 0;">
+        <div class="tarjeta__cabecera">
+          <h2 class="tarjeta__titulo">Hoteles · venta acumulada</h2>
+          <span class="tarjeta__subtitulo" id="hoteles-ytd-periodo"></span>
+        </div>
+        <div class="lista" id="lista-hoteles-ytd"></div>
+      </section>
+      <section class="tarjeta tarjeta-resultado" style="margin-top: 0;">
+        <div class="tarjeta__cabecera">
+          <h2 class="tarjeta__titulo">Hoteles · venta del mes</h2>
+          <span class="tarjeta__subtitulo" id="hoteles-mes-periodo"></span>
+        </div>
+        <div class="lista" id="lista-hoteles-mes"></div>
+      </section>
+    </div>
+
+    <div class="resultado-listas-par" style="margin-top: 1.1rem;">
+      <section class="tarjeta tarjeta-resultado" style="margin-top: 0;">
+        <div class="tarjeta__cabecera">
+          <h2 class="tarjeta__titulo">Productos · venta acumulada</h2>
+          <span class="tarjeta__subtitulo" id="productos-ytd-periodo"></span>
+        </div>
+        <div class="lista" id="lista-productos-ytd"></div>
+      </section>
+      <section class="tarjeta tarjeta-resultado" style="margin-top: 0;">
+        <div class="tarjeta__cabecera">
+          <h2 class="tarjeta__titulo">Productos · venta del mes</h2>
+          <span class="tarjeta__subtitulo" id="productos-mes-periodo"></span>
+        </div>
+        <div class="lista" id="lista-productos-mes"></div>
+      </section>
+    </div>
   </div>
 
   <script src="auth.js"></script>

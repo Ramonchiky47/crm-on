@@ -131,9 +131,9 @@ function renderizarGraficaAnual(serie) {
 const filtroAnio = document.getElementById('filtro-anio-resultados');
 const filtroMes = document.getElementById('filtro-mes-resultados');
 
-// Los dos filtros son independientes entre si y solo afectan la tarjeta "Mes seleccionado": si
-// se dejan en blanco, el servidor usa el ultimo mes ya cerrado como default. "Acumulado del año"
-// no se ve afectado por estos filtros, siempre es el año en curso.
+// Año y Mes son independientes en la URL, pero ambas tarjetas ("Acumulado" y "Mes seleccionado")
+// comparten el mismo anio/mes resuelto por el servidor: si se dejan en blanco, usa el anio en
+// curso y su ultimo mes ya cerrado. "Acumulado" es enero hasta ese mes (inclusive) del mismo anio.
 function poblarFiltros() {
   const anioActual = new Date().getFullYear();
   for (let anio = anioActual; anio >= anioActual - 3; anio--) {
@@ -172,6 +172,22 @@ function pintarGrupo(prefijo, datos) {
   pintarMetrica(`${prefijo}-diferencia`, datos.diferencia, (v) => `${v >= 0 ? '+' : ''}$${formatoImporte(v)}`, (v) => v >= 0);
 }
 
+// Reutilizada para las 4 listas (hoteles/productos x acumulado/mes): "nombre" ya viene resuelto
+// (nombre de hotel, o "codigo — descripcion" de producto) para no bifurcar la logica de pintado.
+function renderizarListaVenta(idContenedor, filas) {
+  const contenedor = document.getElementById(idContenedor);
+  contenedor.innerHTML = filas.length
+    ? filas.map((f, indice) => `
+        <div class="fila-lista">
+          <div class="fila-lista__texto">
+            <div class="fila-lista__principal">#${indice + 1} ${f.nombre}</div>
+          </div>
+          <div class="fila-lista__valor">$${formatoImporte(f.venta)}</div>
+        </div>
+      `).join('')
+    : '<p class="tarjeta-vacio">Sin ventas en este periodo.</p>';
+}
+
 async function cargarResultados() {
   const params = new URLSearchParams();
   if (filtroAnio.value) params.set('anio', filtroAnio.value);
@@ -187,12 +203,75 @@ async function cargarResultados() {
   }
   if (d.mesSeleccionado) {
     const [anio, mes] = d.mesSeleccionado.anioMes.split('-');
-    document.getElementById('mes-periodo').textContent = `${nombreMes(mes)} ${anio}`;
+    const etiquetaMes = `${nombreMes(mes)} ${anio}`;
+    document.getElementById('mes-periodo').textContent = etiquetaMes;
     pintarGrupo('mes', d.mesSeleccionado);
+    document.getElementById('hoteles-mes-periodo').textContent = etiquetaMes;
+    document.getElementById('productos-mes-periodo').textContent = etiquetaMes;
+    cargarCotizacionesDelMes(d.mesSeleccionado.anioMes);
+  }
+  if (d.ytd) {
+    const etiquetaYtd = `Enero - ${nombreMes(d.ytd.hasta)} ${d.ytd.anio}`;
+    document.getElementById('hoteles-ytd-periodo').textContent = etiquetaYtd;
+    document.getElementById('productos-ytd-periodo').textContent = etiquetaYtd;
   }
   if (d.serieAnual) {
     renderizarGraficaAnual(d.serieAnual);
   }
+  if (d.topHotelesYtd) renderizarListaVenta('lista-hoteles-ytd', d.topHotelesYtd.map((f) => ({ nombre: escaparHtml(f.nombre), venta: f.venta })));
+  if (d.topHotelesMes) renderizarListaVenta('lista-hoteles-mes', d.topHotelesMes.map((f) => ({ nombre: escaparHtml(f.nombre), venta: f.venta })));
+  if (d.topProductosYtd) {
+    renderizarListaVenta('lista-productos-ytd', d.topProductosYtd.map((f) => ({ nombre: `${escaparHtml(f.codigo)} — ${escaparHtml(f.descripcion || '')}`, venta: f.venta })));
+  }
+  if (d.topProductosMes) {
+    renderizarListaVenta('lista-productos-mes', d.topProductosMes.map((f) => ({ nombre: `${escaparHtml(f.codigo)} — ${escaparHtml(f.descripcion || '')}`, venta: f.venta })));
+  }
+}
+
+// Reusa /api/panel/resumen (mismo calculo de creadas/ganadas/perdidas + delta vs periodo
+// anterior que el Panel General), pasando como rango el mes calendario completo del anio/mes
+// resuelto en Resultados, en vez del selector Hoy/Semana/Mes/Personalizado que aqui no existe.
+async function cargarCotizacionesDelMes(anioMes) {
+  const [anio, mes] = anioMes.split('-');
+  const desde = `${anioMes}-01`;
+  const ultimoDia = new Date(Number(anio), Number(mes), 0).getDate();
+  const hasta = `${anioMes}-${String(ultimoDia).padStart(2, '0')}`;
+
+  const res = await fetch(`/api/panel/resumen?desde=${desde}&hasta=${hasta}`);
+  if (!res.ok) return;
+  const d = await res.json();
+  if (!d.resumenPeriodo) return;
+  const rp = d.resumenPeriodo;
+
+  document.getElementById('cotizaciones-mes-periodo').textContent = `${nombreMes(mes)} ${anio}`;
+
+  function pintar(idValor, idDelta, valor, previo, positivoEsBueno) {
+    document.getElementById(idValor).textContent = valor;
+    const el = document.getElementById(idDelta);
+    if (!previo) {
+      el.textContent = valor ? `${previo} el mes anterior` : 'Sin cambio vs. mes anterior';
+      el.className = 'resumen-cot-dia__delta';
+      return;
+    }
+    const cambio = valor - previo;
+    if (cambio === 0) {
+      el.textContent = `${previo} el mes anterior`;
+      el.className = 'resumen-cot-dia__delta';
+      return;
+    }
+    const pct = Math.round((cambio / previo) * 100);
+    const flecha = cambio > 0 ? '↑' : '↓';
+    el.textContent = `${flecha} ${Math.abs(pct)}% · ${previo} el mes anterior`;
+    el.className = `resumen-cot-dia__delta ${(cambio > 0) === positivoEsBueno ? 'es-bueno' : 'es-alerta'}`;
+  }
+
+  pintar('resultados-creadas', 'resultados-creadas-delta', rp.creadas, rp.creadasPrevio, true);
+  pintar('resultados-ganadas', 'resultados-ganadas-delta', rp.ganadas, rp.ganadasPrevio, true);
+  pintar('resultados-perdidas', 'resultados-perdidas-delta', rp.perdidas, rp.perdidasPrevio, false);
+  const importes = [];
+  if (rp.ganadasImporteUsd) importes.push(`USD ${formatoImporte(rp.ganadasImporteUsd)}`);
+  if (rp.ganadasImporteMxn) importes.push(`MXN ${formatoImporte(rp.ganadasImporteMxn)}`);
+  document.getElementById('resultados-ganadas-importe').textContent = importes.join(' · ');
 }
 
 // Mismos indicadores generales que el Panel General (Inicio), menos "Ventas del mes" (ya cubierto

@@ -5517,23 +5517,29 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
       FROM facturacion WHERE fecha LIKE ? AND articulo IS NOT NULL
       GROUP BY articulo ORDER BY venta DESC LIMIT 10
     `).all(`${anioMes}-%`).then((filas) => filas.map((f) => ({ ...f, cantidad: Number(f.cantidad), venta: Number(f.venta) })));
-  }
 
-  // Top 10 hoteles por venta. Facturacion no trae el hotel (solo llega si se asocio pedido_id a
-  // mano, y hoy eso cubre una minoria de las filas), asi que se usa Ordenes (importe por
-  // destino_id), que si trae hotel en cada fila desde que se cargan.
-  if (permisos.ordenes.ver) {
+    // Top 10 hoteles por venta FACTURADA (no por ordenes cargadas: toda la pagina reporta venta
+    // real de Facturacion, asi que el ranking de hoteles tiene que ser consistente con eso).
+    // Facturacion no trae el hotel directamente, solo llega via el pedido_id ya asociado a mano
+    // (facturacion_pedido_id -> ordenes -> destino), asi que este ranking solo cubre las facturas
+    // ya asociadas a un pedido - hoy es una minoria del total, crece conforme se van asociando.
     resultado.topHotelesYtd = await db.prepare(`
-      SELECT d.destino nombre, SUM(o.importe) venta
-      FROM ordenes o JOIN destinos d ON d.id_destino = o.destino_id
-      WHERE o.fecha >= ? AND o.fecha < ?
+      SELECT d.destino nombre, SUM(f.ingresos) venta
+      FROM facturacion f
+      JOIN facturacion_pedido_id fp ON fp.id = f.id
+      JOIN ordenes o ON o.id = fp.pedido_id
+      JOIN destinos d ON d.id_destino = o.destino_id
+      WHERE f.fecha >= ? AND f.fecha < ?
       GROUP BY d.destino ORDER BY venta DESC LIMIT 10
     `).all(inicioAnioSeleccionado, finAcumuladoExclusivo).then((filas) => filas.map((f) => ({ ...f, venta: Number(f.venta) })));
 
     resultado.topHotelesMes = await db.prepare(`
-      SELECT d.destino nombre, SUM(o.importe) venta
-      FROM ordenes o JOIN destinos d ON d.id_destino = o.destino_id
-      WHERE o.fecha LIKE ?
+      SELECT d.destino nombre, SUM(f.ingresos) venta
+      FROM facturacion f
+      JOIN facturacion_pedido_id fp ON fp.id = f.id
+      JOIN ordenes o ON o.id = fp.pedido_id
+      JOIN destinos d ON d.id_destino = o.destino_id
+      WHERE f.fecha LIKE ?
       GROUP BY d.destino ORDER BY venta DESC LIMIT 10
     `).all(`${anioMes}-%`).then((filas) => filas.map((f) => ({ ...f, venta: Number(f.venta) })));
   }

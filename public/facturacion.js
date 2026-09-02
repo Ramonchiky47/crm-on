@@ -139,6 +139,7 @@ function renderizar(lista) {
       <td>${formatoImporte(f.precio_venta)}</td>
       <td>${formatoImporte(f.ingresos)}</td>
       <td>${escaparHtml(f.pedido_id || '')}</td>
+      <td>${escaparHtml(f.hotel_nombre || '')}</td>
       <td class="acciones">
         ${permisosFacturacion.editar ? `<button class="btn-editar" data-id="${f.id_facturacion}">Editar</button>` : ''}
         ${permisosFacturacion.borrar ? `<button class="btn-borrar" data-id="${f.id_facturacion}">Borrar</button>` : ''}

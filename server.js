@@ -4787,9 +4787,11 @@ app.post('/api/detalle-compra/importar-excel-netsuite', requirePermiso('detalle_
 // (es un reporte que cambia), asi que cualquier dato que deba sobrevivir a esa carga no puede
 // vivir en esa tabla. Un LEFT JOIN lo trae de vuelta al leer.
 const SELECT_FACTURACION = `
-  SELECT f.*, fp.pedido_id
+  SELECT f.*, fp.pedido_id, d.destino hotel_nombre
   FROM facturacion f
   LEFT JOIN facturacion_pedido_id fp ON fp.id = f.id
+  LEFT JOIN ordenes o ON o.id = fp.pedido_id
+  LEFT JOIN destinos d ON d.id_destino = o.destino_id
 `;
 
 function validarFacturacion(body, { parcial = false } = {}) {

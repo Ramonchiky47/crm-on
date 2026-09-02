@@ -5401,6 +5401,41 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
   res.json(resultado);
 }));
 
+// Pestaña "Resultados": a diferencia del Panel General (siempre "este mes"), aqui el periodo lo
+// elige el usuario con dos filtros independientes (anio, mes) que se pueden combinar o dejar en
+// blanco por separado: solo anio = todo ese anio, solo mes = ese mes en todos los anios, ambos =
+// ese mes de ese anio, ninguno = historico completo.
+app.get('/api/resultados/resumen', ar(async (req, res) => {
+  if (!req.session.usuarioId) return res.status(401).json({ error: 'No autenticado' });
+  const permisos = await permisosDe(req.session.usuarioId, req.session.esAdmin);
+
+  const anio = (req.query.anio || '').trim();
+  const mes = (req.query.mes || '').trim();
+  const resultado = {};
+
+  if (permisos.facturacion.ver) {
+    const condiciones = [];
+    const params = [];
+    if (anio) { condiciones.push('fecha LIKE ?'); params.push(`${anio}-%`); }
+    if (mes) { condiciones.push('SUBSTRING(fecha, 6, 2) = ?'); params.push(mes); }
+    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+    const ventas = await db.prepare(`SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion ${where}`).get(...params);
+    resultado.ventasFacturacion = Number(ventas.v);
+  }
+
+  if (permisos.ordenes.ver) {
+    const condiciones = [];
+    const params = [];
+    if (anio) { condiciones.push('creado_en LIKE ?'); params.push(`${anio}-%`); }
+    if (mes) { condiciones.push('SUBSTRING(creado_en, 6, 2) = ?'); params.push(mes); }
+    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+    const ventas = await db.prepare(`SELECT COALESCE(SUM(importe), 0) v FROM ordenes ${where}`).get(...params);
+    resultado.ventasOrdenesCargadas = Number(ventas.v);
+  }
+
+  res.json(resultado);
+}));
+
 // ---------- Agente de seguimiento proactivo (Vercel Cron, 1x al dia) ----------
 // Revisa negocios activos sin actividad reciente y cotizaciones vigentes por vencer, y crea
 // una Tarea (actividad "Seguimiento") para que el vendedor la trabaje. No hace nada hacia

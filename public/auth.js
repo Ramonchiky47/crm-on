@@ -90,6 +90,7 @@ function ajustarNavegacion(datos) {
 // el layout propio de cada pantalla.
 const NAV_LATERAL = [
   { grupo: null, texto: 'Inicio', href: 'panel.html', permiso: () => true },
+  { grupo: null, texto: 'Resultados', href: 'resultados.html', permiso: () => true },
   { grupo: null, texto: 'Negocios', href: 'cotizaciones.html?tab=negocios', permiso: (p) => p.catalogos.ver },
   { grupo: null, texto: 'Órdenes', href: 'ordenes.html', permiso: (p) => p.ordenes.ver },
   { grupo: null, texto: 'Detalle de compra', href: 'detalle.html', permiso: (p) => p.detalle_compra.ver },

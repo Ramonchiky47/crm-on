@@ -33,6 +33,12 @@ const estatusSeleccionados = new Set();
 let todosLosEstatusIds = new Set();
 let idEstatusCancelado = null;
 let catalogoEstatusChips = [];
+// Sentinela para agrupar ordenes sin estatus asignado (estatus_id NULL) como una opcion mas del
+// filtro/chips, en vez de que desaparezcan silenciosamente de la lista.
+const ID_ESTATUS_VACIO = '__vacio__';
+function idEstatusDe(o) {
+  return o.estatus_id === null || o.estatus_id === undefined ? ID_ESTATUS_VACIO : String(o.estatus_id);
+}
 const filtroAnio = document.getElementById('filtro-anio');
 const filtroMesOrdenes = document.getElementById('filtro-mes-ordenes');
 const filtroSinFactura = document.getElementById('filtro-sin-factura');
@@ -399,7 +405,7 @@ function ordenarYRenderizar() {
   renderizarChipsEstatus(filtrada);
 
   const filtradaPorEstatus = (estatusSeleccionados.size && estatusSeleccionados.size !== todosLosEstatusIds.size)
-    ? filtrada.filter((o) => estatusSeleccionados.has(String(o.estatus_id)))
+    ? filtrada.filter((o) => estatusSeleccionados.has(idEstatusDe(o)))
     : filtrada;
 
   const lista = [...filtradaPorEstatus].sort((a, b) => {
@@ -417,7 +423,7 @@ function ordenarYRenderizar() {
 function renderizarChipsEstatus(baseLista) {
   chipsEstatus.innerHTML = catalogoEstatusChips.map((e) => {
     const id = String(e.id_estatus);
-    const conteo = baseLista.filter((o) => String(o.estatus_id) === id).length;
+    const conteo = baseLista.filter((o) => idEstatusDe(o) === id).length;
     const activo = !estatusSeleccionados.size || estatusSeleccionados.has(id);
     return `
       <button type="button" class="chip-estatus${activo ? ' chip-estatus-activo' : ''}" data-id="${id}">
@@ -676,6 +682,10 @@ async function cargarFiltroEstatus() {
     filtroEstatusPanel.innerHTML = '<p class="pista">No hay estatus capturados.</p>';
     return;
   }
+
+  // "Vacías" agrupa las ordenes sin estatus_id (huecos que dejan cargas de NetSuite u ordenes
+  // capturadas a mano sin ese dato); se agrega al final, fuera del catalogo real.
+  lista.push({ id_estatus: ID_ESTATUS_VACIO, estatus: 'Vacías' });
 
   todosLosEstatusIds = new Set(lista.map((e) => String(e.id_estatus)));
   const cancelado = lista.find((e) => e.estatus === 'Cancelado');

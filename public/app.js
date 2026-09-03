@@ -29,6 +29,8 @@ const buscar = document.getElementById('buscar');
 const filtroEstatusBtn = document.getElementById('filtro-estatus-btn');
 const filtroEstatusPanel = document.getElementById('filtro-estatus-panel');
 const estatusSeleccionados = new Set();
+let todosLosEstatusIds = new Set();
+let idEstatusCancelado = null;
 const filtroAnio = document.getElementById('filtro-anio');
 const filtroMesOrdenes = document.getElementById('filtro-mes-ordenes');
 const filtroSinFactura = document.getElementById('filtro-sin-factura');
@@ -625,15 +627,31 @@ async function cargarFiltroEstatus() {
     return;
   }
 
+  todosLosEstatusIds = new Set(lista.map((e) => String(e.id_estatus)));
+  const cancelado = lista.find((e) => e.estatus === 'Cancelado');
+  idEstatusCancelado = cancelado ? String(cancelado.id_estatus) : null;
+
+  // Por default se ocultan las ordenes Canceladas (rara vez interesan en el dia a dia); se
+  // puede reactivar desde este mismo filtro si se necesitan ver.
+  estatusSeleccionados.clear();
+  todosLosEstatusIds.forEach((id) => {
+    if (id !== idEstatusCancelado) estatusSeleccionados.add(id);
+  });
+
   filtroEstatusPanel.innerHTML = `
     <label class="multi-select-opcion multi-select-todos">
       <input type="checkbox" id="filtro-estatus-todos" /><span class="multi-select-texto">Seleccionar todos</span>
     </label>
   ` + lista.map((e) => `
     <label class="multi-select-opcion">
-      <input type="checkbox" value="${e.id_estatus}" /><span class="multi-select-texto">${escaparHtml(e.estatus)}</span>
+      <input type="checkbox" value="${e.id_estatus}" ${estatusSeleccionados.has(String(e.id_estatus)) ? 'checked' : ''} /><span class="multi-select-texto">${escaparHtml(e.estatus)}</span>
     </label>
   `).join('');
+
+  document.getElementById('filtro-estatus-todos').checked = estatusSeleccionados.size === todosLosEstatusIds.size;
+
+  actualizarBotonFiltroEstatus();
+  cargarOrdenes();
 }
 
 // Filtro de Año: por default solo se ve el año en curso (la mayoria de las consultas del dia a
@@ -664,9 +682,17 @@ filtroMesOrdenes.addEventListener('change', ordenarYRenderizar);
 filtroSinFactura.addEventListener('change', ordenarYRenderizar);
 
 function actualizarBotonFiltroEstatus() {
-  filtroEstatusBtn.textContent = estatusSeleccionados.size
-    ? `${estatusSeleccionados.size} estatus seleccionado(s)`
-    : 'Todos los estatus';
+  if (!estatusSeleccionados.size || estatusSeleccionados.size === todosLosEstatusIds.size) {
+    filtroEstatusBtn.textContent = 'Todos los estatus';
+  } else if (
+    idEstatusCancelado
+    && estatusSeleccionados.size === todosLosEstatusIds.size - 1
+    && !estatusSeleccionados.has(idEstatusCancelado)
+  ) {
+    filtroEstatusBtn.textContent = 'Todos excepto Cancelado';
+  } else {
+    filtroEstatusBtn.textContent = `${estatusSeleccionados.size} estatus seleccionado(s)`;
+  }
 }
 
 filtroEstatusBtn.addEventListener('click', () => {

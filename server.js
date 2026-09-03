@@ -3150,7 +3150,11 @@ const SELECT_ORDENES = `
     ec.estatus AS estatus_nombre, ee.estado_entrega AS estado_entrega_nombre,
     q.nombre AS cotizacion_nombre,
     EXISTS(SELECT 1 FROM pendientes p WHERE p.orden_id = o.id) AS tiene_tarea_activa,
-    EXISTS(SELECT 1 FROM facturacion_pedido_id fp WHERE fp.pedido_id = o.id) AS tiene_facturas
+    EXISTS(
+      SELECT 1 FROM facturacion_pedido_id fp
+      JOIN facturacion f ON f.id = fp.id
+      WHERE fp.pedido_id = o.id
+    ) AS tiene_facturas
   FROM ordenes o
   LEFT JOIN destinos d ON d.id_destino = o.destino_id
   LEFT JOIN contactos c ON c.id_contacto = o.contacto_id

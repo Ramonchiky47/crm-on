@@ -28,9 +28,11 @@ const estadoVacio = document.getElementById('estado-vacio');
 const buscar = document.getElementById('buscar');
 const filtroEstatusBtn = document.getElementById('filtro-estatus-btn');
 const filtroEstatusPanel = document.getElementById('filtro-estatus-panel');
+const chipsEstatus = document.getElementById('chips-estatus-ordenes');
 const estatusSeleccionados = new Set();
 let todosLosEstatusIds = new Set();
 let idEstatusCancelado = null;
+let catalogoEstatusChips = [];
 const filtroAnio = document.getElementById('filtro-anio');
 const filtroMesOrdenes = document.getElementById('filtro-mes-ordenes');
 const filtroSinFactura = document.getElementById('filtro-sin-factura');
@@ -391,13 +393,61 @@ function ordenarYRenderizar() {
     : ultimaListaOrdenes;
   if (filtroSinFactura.checked) filtrada = filtrada.filter((o) => !o.tiene_facturas);
 
-  const lista = [...filtrada].sort((a, b) => {
+  // Los chips se calculan sobre lo que ya paso Mes/Sin factura pero ANTES del propio filtro de
+  // estatus, para que muestren el conteo real de cada estatus (incluyendo los que dan 0) sin
+  // importar cuales esten activos en ese momento.
+  renderizarChipsEstatus(filtrada);
+
+  const filtradaPorEstatus = (estatusSeleccionados.size && estatusSeleccionados.size !== todosLosEstatusIds.size)
+    ? filtrada.filter((o) => estatusSeleccionados.has(String(o.estatus_id)))
+    : filtrada;
+
+  const lista = [...filtradaPorEstatus].sort((a, b) => {
     const cmp = comparar(a[orden.campo], b[orden.campo]);
     return orden.direccion === 'asc' ? cmp : -cmp;
   });
   renderizar(lista);
   actualizarIndicadoresOrden();
 }
+
+// Franja de chips por estatus arriba de la tabla: uno por cada estatus del catalogo (Cancelado
+// nunca aparece), con su conteo -incluyendo "(0)" si no tiene ordenes en el filtro actual- y
+// resaltado si esta activo. Comparte estado (estatusSeleccionados) con el multi-select de
+// estatus; clic en un chip prende/apaga ese estatus igual que su checkbox correspondiente.
+function renderizarChipsEstatus(baseLista) {
+  chipsEstatus.innerHTML = catalogoEstatusChips.map((e) => {
+    const id = String(e.id_estatus);
+    const conteo = baseLista.filter((o) => String(o.estatus_id) === id).length;
+    const activo = !estatusSeleccionados.size || estatusSeleccionados.has(id);
+    return `
+      <button type="button" class="chip-estatus${activo ? ' chip-estatus-activo' : ''}" data-id="${id}">
+        ${escaparHtml(e.estatus)} <span class="chip-estatus-conteo">(${conteo})</span>
+      </button>
+    `;
+  }).join('');
+}
+
+chipsEstatus.addEventListener('click', (e) => {
+  const chip = e.target.closest('.chip-estatus');
+  if (!chip) return;
+  const id = chip.dataset.id;
+
+  // "Ningun estatus seleccionado" equivale a "todos" (ver actualizarBotonFiltroEstatus); al
+  // apagar el primer chip desde ese estado hay que arrancar de "todos" en vez de sumar sobre un
+  // Set vacio, o se veria como si solo ese estatus quedara activo.
+  if (!estatusSeleccionados.size) todosLosEstatusIds.forEach((v) => estatusSeleccionados.add(v));
+
+  if (estatusSeleccionados.has(id)) estatusSeleccionados.delete(id);
+  else estatusSeleccionados.add(id);
+
+  const checkbox = filtroEstatusPanel.querySelector(`input[value="${id}"]`);
+  if (checkbox) checkbox.checked = estatusSeleccionados.has(id);
+  const todosCheckbox = document.getElementById('filtro-estatus-todos');
+  if (todosCheckbox) todosCheckbox.checked = estatusSeleccionados.size === todosLosEstatusIds.size;
+
+  actualizarBotonFiltroEstatus();
+  ordenarYRenderizar();
+});
 
 function actualizarIndicadoresOrden() {
   document.querySelectorAll('th[data-campo]').forEach((th) => {
@@ -630,6 +680,7 @@ async function cargarFiltroEstatus() {
   todosLosEstatusIds = new Set(lista.map((e) => String(e.id_estatus)));
   const cancelado = lista.find((e) => e.estatus === 'Cancelado');
   idEstatusCancelado = cancelado ? String(cancelado.id_estatus) : null;
+  catalogoEstatusChips = lista.filter((e) => e.estatus !== 'Cancelado');
 
   // Por default se ocultan las ordenes Canceladas (rara vez interesan en el dia a dia); se
   // puede reactivar desde este mismo filtro si se necesitan ver.
@@ -715,7 +766,7 @@ filtroEstatusPanel.addEventListener('change', (e) => {
   }
 
   actualizarBotonFiltroEstatus();
-  cargarOrdenes();
+  ordenarYRenderizar();
 });
 
 document.addEventListener('click', (e) => {
@@ -728,7 +779,6 @@ async function cargarOrdenes() {
   const parametros = new URLSearchParams();
   const q = buscar.value.trim();
   if (q) parametros.set('q', q);
-  if (estatusSeleccionados.size) parametros.set('estatus', [...estatusSeleccionados].join(','));
   if (filtroAnio.value) parametros.set('anio', filtroAnio.value);
 
   const url = parametros.toString() ? `/api/ordenes?${parametros}` : '/api/ordenes';

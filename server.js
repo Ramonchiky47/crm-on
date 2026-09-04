@@ -4857,10 +4857,12 @@ function validarFacturacion(body, { parcial = false } = {}) {
 }
 
 app.get('/api/facturacion', requirePermiso('facturacion', 'ver'), ar(async (req, res) => {
-  const { id, q } = req.query;
+  const { id, q, pedido } = req.query;
   let rows;
   if (id) {
     rows = await db.prepare(`${SELECT_FACTURACION} WHERE f.id = ? ORDER BY f.id_facturacion`).all(id);
+  } else if (pedido) {
+    rows = await db.prepare(`${SELECT_FACTURACION} WHERE fp.pedido_id = ? ORDER BY f.fecha DESC`).all(pedido);
   } else if (q) {
     rows = await db.prepare(`${SELECT_FACTURACION} WHERE f.id ILIKE ? OR f.articulo ILIKE ? OR f.numero_serie ILIKE ? ORDER BY f.fecha DESC`)
       .all(`%${q}%`, `%${q}%`, `%${q}%`);

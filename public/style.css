@@ -2363,6 +2363,13 @@ td.celda-check {
   padding: 0.28rem 0.65rem;
   border-radius: 999px;
 }
+
+.pill-clicable {
+  cursor: pointer;
+}
+.pill-clicable:hover {
+  filter: brightness(0.95);
+}
 .pill-estatus::before {
   content: "";
   width: 6px;

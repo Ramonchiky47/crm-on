@@ -35,6 +35,8 @@ function formatoImporte(valor) {
 }
 
 let ultimaLista = [];
+let filtroPedidoUrl = null;
+const bannerFiltroPedido = document.getElementById('banner-filtro-pedido');
 const orden = { campo: 'fecha', direccion: 'desc' };
 
 function comparar(va, vb) {
@@ -110,7 +112,9 @@ document.querySelectorAll('th[data-campo]').forEach((th) => {
 
 async function cargarFacturacion() {
   const q = buscar.value.trim();
-  const url = q ? `/api/facturacion?q=${encodeURIComponent(q)}` : '/api/facturacion';
+  const url = filtroPedidoUrl
+    ? `/api/facturacion?pedido=${encodeURIComponent(filtroPedidoUrl)}`
+    : (q ? `/api/facturacion?q=${encodeURIComponent(q)}` : '/api/facturacion');
   const res = await fetch(url);
   ultimaLista = await res.json();
   actualizarOpcionesMes();
@@ -264,6 +268,15 @@ promesaAuth.then((sesion) => {
   // ID de documento para llegar directo a esa factura en vez de la lista completa.
   const idUrl = new URLSearchParams(window.location.search).get('id');
   if (idUrl) buscar.value = idUrl;
+
+  // Se llego desde la columna "Facturas" de Ordenes: muestra solo las facturas de ese pedido
+  // (busqueda por texto no alcanza, no busca por pedido_id) y deja visible como quitarlo.
+  const pedidoUrl = new URLSearchParams(window.location.search).get('pedido');
+  if (pedidoUrl) {
+    filtroPedidoUrl = pedidoUrl;
+    bannerFiltroPedido.innerHTML = `Mostrando solo las facturas del pedido <strong>${escaparHtml(pedidoUrl)}</strong> · <a href="facturacion.html">Quitar filtro</a>`;
+    bannerFiltroPedido.hidden = false;
+  }
 
   cargarFacturacion();
 

@@ -818,7 +818,7 @@ function renderizar(ordenes) {
       <td>${escaparHtml(o.destino_nombre || '')}</td>
       <td>${escaparHtml(o.contacto_nombre || '')}</td>
       <td>${escaparHtml(o.estado_entrega_nombre || '')}</td>
-      <td>${o.tiene_facturas ? '<span class="pill-estatus estatus-vigente">Sí</span>' : ''}</td>
+      <td>${o.tiene_facturas ? `<span class="pill-estatus estatus-vigente pill-clicable" data-facturas-href="facturacion.html?pedido=${encodeURIComponent(o.id)}">Sí</span>` : ''}</td>
       <td class="acciones">
         ${permisosOrdenes.borrar ? `<button class="btn-borrar btn-icono" data-id="${escaparHtml(o.id)}" title="Borrar" aria-label="Borrar">🗑️</button>` : ''}
       </td>
@@ -1012,6 +1012,12 @@ function cargarOrdenEnFormulario(o) {
 }
 
 tabla.addEventListener('click', (e) => {
+  const pillFacturas = e.target.closest('[data-facturas-href]');
+  if (pillFacturas) {
+    window.location.href = pillFacturas.dataset.facturasHref;
+    return;
+  }
+
   if (e.target.closest('button') || e.target.classList.contains('check-orden')) return;
   const fila = e.target.closest('tr');
   if (!fila) return;

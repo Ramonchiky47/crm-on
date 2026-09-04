@@ -542,7 +542,7 @@ function filtrarDestinosPorContacto() {
 
 function filtrarContactosPorDestino() {
   const did = campos.destino_id.value;
-  filtrarSelectAsociado(campos.contacto_id, listaContactos, 'id_contacto', 'nombre_completo',
+  filtrarSelectAsociado(campos.contacto_id, listaContactos, 'id_contacto', 'nombre_completo_correo',
     did ? (contactosPorDestino.get(did) || new Set()) : null);
   actualizarPistaAsociar();
 }
@@ -598,7 +598,7 @@ function abrirModalAsociar(modo) {
   } else {
     modalAsociarTitulo.textContent = 'Asociar Contacto existente';
     modalAsociarEtiqueta.textContent = 'Contacto';
-    poblarSelect(modalAsociarSelect, listaContactos, 'id_contacto', 'nombre_completo');
+    poblarSelect(modalAsociarSelect, listaContactos, 'id_contacto', 'nombre_completo_correo');
   }
   modalAsociarOverlay.hidden = false;
   modalAsociarSelect.focus();
@@ -669,7 +669,7 @@ async function cargarCatalogos() {
   indexarContactoDestinos(contactos);
 
   poblarSelect(campos.destino_id, destinos, 'id_destino', 'destino');
-  poblarSelect(campos.contacto_id, contactos, 'id_contacto', 'nombre_completo');
+  poblarSelect(campos.contacto_id, contactos, 'id_contacto', 'nombre_completo_correo');
   poblarSelect(campos.estatus_id, estatusLista, 'id_estatus', 'estatus');
   poblarSelect(campos.estado_entrega_id, estadosEntrega, 'id_estado_entrega', 'estado_entrega');
 }
@@ -836,7 +836,7 @@ function limpiarFormulario() {
   // <option> siguen siendo el subconjunto angosto. Se regresan aqui al catalogo completo para
   // que una orden nueva siempre arranque sin ese filtro heredado.
   filtrarSelectAsociado(campos.destino_id, listaDestinos, 'id_destino', 'destino', null);
-  filtrarSelectAsociado(campos.contacto_id, listaContactos, 'id_contacto', 'nombre_completo', null);
+  filtrarSelectAsociado(campos.contacto_id, listaContactos, 'id_contacto', 'nombre_completo_correo', null);
   actualizarPistaAsociar();
   campos.id.disabled = false;
   btnGuardar.textContent = 'Agregar orden';
@@ -998,7 +998,7 @@ function cargarOrdenEnFormulario(o) {
   // de esta orden no estaba en ese subconjunto, la asignacion de abajo fallaba en silencio y se
   // quedaba viendo lo que hubiera seleccionado en la edicion anterior.
   filtrarSelectAsociado(campos.destino_id, listaDestinos, 'id_destino', 'destino', null);
-  filtrarSelectAsociado(campos.contacto_id, listaContactos, 'id_contacto', 'nombre_completo', null);
+  filtrarSelectAsociado(campos.contacto_id, listaContactos, 'id_contacto', 'nombre_completo_correo', null);
   campos.destino_id.value = o.destino_id ?? '';
   campos.contacto_id.value = o.contacto_id ?? '';
   actualizarPistaAsociar();

@@ -1161,12 +1161,18 @@ promesaAuth.then((sesion) => {
     btnActualizarOrdenesNetsuite.hidden = true;
   }
 
-  Promise.all([cargarCatalogos(), cargarFiltroAnio()]).then(cargarOrdenes).then(() => {
+  // cargarFiltroEstatus() dispara su propio cargarOrdenes() al final (linea ~775); si corriera en
+  // paralelo con cargarFiltroAnio() podria ganarle la carrera y pedir /api/ordenes ANTES de que
+  // el select de Año tenga valor, trayendo todos los años en vez de solo el actual. Por eso se
+  // encadena despues, no en paralelo.
+  Promise.all([cargarCatalogos(), cargarFiltroAnio()]).then(() => {
+    cargarFiltroEstatus();
+    return cargarOrdenes();
+  }).then(() => {
     // Se llego desde el detalle de un Contacto/Hotel-Local: abre directo esa orden.
     const ordenId = new URLSearchParams(window.location.search).get('orden');
     if (ordenId) abrirDetalle(ordenId);
   });
-  cargarFiltroEstatus();
 
   suscribirTiempoReal(['ordenes'], cargarOrdenes);
   suscribirTiempoReal(['destinos', 'contactos', 'estados_entrega'], cargarCatalogos);

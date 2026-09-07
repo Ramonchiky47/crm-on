@@ -2406,19 +2406,6 @@ td.celda-check {
    chip-pendientes-facturar, que es estatico y comparte esa misma fila). */
 .chips-estatus-dinamicos { display: contents; }
 
-/* Atajo de un clic para "no cancelada + sin factura asociada" (ver pendientesFacturarActivo en
-   app.js): combina el checkbox "Solo sin factura" con el estatus por default (todos menos
-   Cancelado). Acento distinto (ambar) al de los chips de estatus para no leerse como uno mas. */
-.chip-pendientes-facturar {
-  border-color: #d9a441;
-  color: #8a5a06;
-}
-.chip-pendientes-facturar.chip-estatus-activo {
-  background: #fbf0da;
-  border-color: #d9a441;
-  color: #8a5a06;
-}
-
 .chip-estatus {
   display: inline-flex;
   align-items: center;
@@ -2440,6 +2427,21 @@ td.celda-check {
   background: #eaf2fc;
   border-color: #2a78d6;
   color: #184f95;
+}
+
+/* Atajo de un clic para "no cancelada + sin factura asociada" (ver pendientesFacturarActivo en
+   app.js): combina el checkbox "Solo sin factura" con el estatus por default (todos menos
+   Cancelado). Acento distinto (ambar) al de los chips de estatus para no leerse como uno mas.
+   Van DESPUES de .chip-estatus/.chip-estatus-activo (misma especificidad: 1 sola clase cada uno)
+   para que estas reglas mas especificas de "Pendientes de facturar" ganen la cascada. */
+.chip-pendientes-facturar {
+  border-color: #d9a441;
+  color: #8a5a06;
+}
+.chip-pendientes-facturar.chip-estatus-activo {
+  background: #fbf0da;
+  border-color: #d9a441;
+  color: #8a5a06;
 }
 
 .chip-estatus-conteo { font-weight: 400; opacity: 0.7; }

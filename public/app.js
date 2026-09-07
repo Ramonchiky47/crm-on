@@ -42,6 +42,7 @@ function idEstatusDe(o) {
 const filtroAnio = document.getElementById('filtro-anio');
 const filtroMesOrdenes = document.getElementById('filtro-mes-ordenes');
 const filtroSinFactura = document.getElementById('filtro-sin-factura');
+const chipPendientesFacturar = document.getElementById('chip-pendientes-facturar');
 const checkTodosOrdenes = document.getElementById('check-todos-ordenes');
 const btnEnviarTareasOrdenes = document.getElementById('btn-enviar-tareas-ordenes');
 const ordenesSeleccionadas = new Set();
@@ -414,7 +415,41 @@ function ordenarYRenderizar() {
   });
   renderizar(lista);
   actualizarIndicadoresOrden();
+  actualizarChipPendientesFacturar();
 }
+
+// "Pendientes de facturar" = no Cancelada + sin factura asociada; no es un estatus nuevo, es un
+// atajo de un clic sobre dos controles que ya existen (el checkbox "Solo sin factura" y el
+// estatus por default de "todos menos Cancelado"), asi que no duplica esa logica de filtrado.
+function pendientesFacturarActivo() {
+  return filtroSinFactura.checked
+    && !!idEstatusCancelado
+    && !estatusSeleccionados.has(idEstatusCancelado)
+    && estatusSeleccionados.size === todosLosEstatusIds.size - 1;
+}
+
+function actualizarChipPendientesFacturar() {
+  chipPendientesFacturar.classList.toggle('chip-estatus-activo', pendientesFacturarActivo());
+}
+
+chipPendientesFacturar.addEventListener('click', () => {
+  if (pendientesFacturarActivo()) {
+    filtroSinFactura.checked = false;
+  } else {
+    filtroSinFactura.checked = true;
+    if (idEstatusCancelado) {
+      estatusSeleccionados.clear();
+      todosLosEstatusIds.forEach((id) => { if (id !== idEstatusCancelado) estatusSeleccionados.add(id); });
+      filtroEstatusPanel.querySelectorAll('input[type="checkbox"][value]').forEach((cb) => {
+        cb.checked = estatusSeleccionados.has(cb.value);
+      });
+      const todosCheckbox = document.getElementById('filtro-estatus-todos');
+      if (todosCheckbox) todosCheckbox.checked = estatusSeleccionados.size === todosLosEstatusIds.size;
+      actualizarBotonFiltroEstatus();
+    }
+  }
+  ordenarYRenderizar();
+});
 
 // Franja de chips por estatus arriba de la tabla: uno por cada estatus del catalogo (Cancelado
 // nunca aparece), con su conteo -incluyendo "(0)" si no tiene ordenes en el filtro actual- y

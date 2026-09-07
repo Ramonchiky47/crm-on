@@ -137,7 +137,10 @@
       </div>
     </div>
 
-    <div id="chips-estatus-ordenes" class="chips-estatus"></div>
+    <div class="chips-estatus">
+      <button type="button" id="chip-pendientes-facturar" class="chip-estatus chip-pendientes-facturar" title="No cancelada y sin factura de NetSuite asociada">Pendientes de facturar</button>
+      <div id="chips-estatus-ordenes" class="chips-estatus-dinamicos"></div>
+    </div>
 
     <div class="busqueda fila-filtros">
       <input type="text" autocomplete="off" id="buscar" placeholder="Buscar por ID, nombre, número de OC, hotel/local o artículo..." />

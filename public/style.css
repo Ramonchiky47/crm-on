@@ -2392,6 +2392,13 @@ td.celda-check {
   margin: 0.6rem 0;
 }
 
+.totales-ordenes {
+  font-size: 0.82rem;
+  color: #757575;
+  margin: 0 0 0.5rem;
+}
+.totales-ordenes strong { color: inherit; font-weight: 600; }
+
 /* Envuelve solo los chips que renderizarChipsEstatus regenera; display:contents para que sigan
    participando del flex del contenedor aunque ahora vivan un nivel mas adentro (ver
    chip-pendientes-facturar, que es estatico y comparte esa misma fila). */

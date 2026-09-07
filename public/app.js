@@ -416,6 +416,26 @@ function ordenarYRenderizar() {
   renderizar(lista);
   actualizarIndicadoresOrden();
   actualizarChipPendientesFacturar();
+  actualizarTotalesOrdenes(lista);
+}
+
+// Suma el Importe de lo que quedo visible en la tabla (mismos filtros: buscar/año ya aplicados en
+// el servidor sobre ultimaListaOrdenes, mes/sin-factura/estatus aplicados arriba), agrupado por
+// moneda porque MXN y USD no se pueden sumar juntos.
+const totalesOrdenes = document.getElementById('totales-ordenes');
+function actualizarTotalesOrdenes(lista) {
+  const totalesPorMoneda = {};
+  lista.forEach((o) => {
+    const moneda = o.moneda || '—';
+    totalesPorMoneda[moneda] = (totalesPorMoneda[moneda] || 0) + (Number(o.importe) || 0);
+  });
+  const monedas = Object.keys(totalesPorMoneda).sort();
+  if (!monedas.length) {
+    totalesOrdenes.innerHTML = '';
+    return;
+  }
+  totalesOrdenes.innerHTML = `${lista.length} orden(es) · Total `
+    + monedas.map((m) => `<strong>${formatoImporte(totalesPorMoneda[m])} ${escaparHtml(m)}</strong>`).join(' + ');
 }
 
 // "Pendientes de facturar" = no Cancelada + sin factura asociada; no es un estatus nuevo, es un

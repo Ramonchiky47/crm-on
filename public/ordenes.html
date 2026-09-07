@@ -158,8 +158,6 @@
       <button type="button" id="btn-enviar-tareas-ordenes" class="btn-mini" disabled>Enviar a tareas (0)</button>
     </div>
 
-    <div id="totales-ordenes" class="totales-ordenes"></div>
-
     <div class="tabla-scroll">
       <table>
         <thead>
@@ -177,6 +175,13 @@
           </tr>
         </thead>
         <tbody id="tabla-ordenes"></tbody>
+        <tfoot>
+          <tr class="fila-totales-ordenes">
+            <td colspan="4" id="total-ordenes-conteo"></td>
+            <td id="total-ordenes-importe"></td>
+            <td colspan="5"></td>
+          </tr>
+        </tfoot>
       </table>
     </div>
 

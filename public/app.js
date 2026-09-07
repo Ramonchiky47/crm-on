@@ -421,8 +421,10 @@ function ordenarYRenderizar() {
 
 // Suma el Importe de lo que quedo visible en la tabla (mismos filtros: buscar/año ya aplicados en
 // el servidor sobre ultimaListaOrdenes, mes/sin-factura/estatus aplicados arriba), agrupado por
-// moneda porque MXN y USD no se pueden sumar juntos.
-const totalesOrdenes = document.getElementById('totales-ordenes');
+// moneda porque MXN y USD no se pueden sumar juntos. Se pinta en el pie de la tabla, alineado con
+// la columna Importe, en vez de como una linea suelta arriba.
+const totalOrdenesConteo = document.getElementById('total-ordenes-conteo');
+const totalOrdenesImporte = document.getElementById('total-ordenes-importe');
 function actualizarTotalesOrdenes(lista) {
   const totalesPorMoneda = {};
   lista.forEach((o) => {
@@ -431,11 +433,14 @@ function actualizarTotalesOrdenes(lista) {
   });
   const monedas = Object.keys(totalesPorMoneda).sort();
   if (!monedas.length) {
-    totalesOrdenes.innerHTML = '';
+    totalOrdenesConteo.textContent = '';
+    totalOrdenesImporte.innerHTML = '';
     return;
   }
-  totalesOrdenes.innerHTML = `${lista.length} orden(es) · Total `
-    + monedas.map((m) => `<strong>${formatoImporte(totalesPorMoneda[m])} ${escaparHtml(m)}</strong>`).join(' + ');
+  totalOrdenesConteo.textContent = `${lista.length} orden(es)`;
+  totalOrdenesImporte.innerHTML = monedas
+    .map((m) => `${formatoImporte(totalesPorMoneda[m])} ${escaparHtml(m)}`)
+    .join('<br>');
 }
 
 // "Pendientes de facturar" = no Cancelada + sin factura asociada; no es un estatus nuevo, es un

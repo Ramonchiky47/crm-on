@@ -2392,12 +2392,14 @@ td.celda-check {
   margin: 0.6rem 0;
 }
 
-.totales-ordenes {
-  font-size: 0.82rem;
+.fila-totales-ordenes td {
+  border-bottom: none;
+  border-top: 2px solid var(--borde);
   color: #757575;
-  margin: 0 0 0.5rem;
+  font-weight: 600;
+  white-space: normal;
 }
-.totales-ordenes strong { color: inherit; font-weight: 600; }
+#total-ordenes-conteo { font-weight: 400; }
 
 /* Envuelve solo los chips que renderizarChipsEstatus regenera; display:contents para que sigan
    participando del flex del contenedor aunque ahora vivan un nivel mas adentro (ver

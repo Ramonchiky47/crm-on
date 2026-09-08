@@ -2643,34 +2643,39 @@ async function etapaCotizacionId() {
 formRapidoNegocio.addEventListener('submit', async (e) => {
   e.preventDefault();
   const nombre = modalRapidoNombre.value.trim();
-  if (!nombre || !modalRapidoContacto.value) return;
+  if (!nombre) return alert('Falta el nombre del negocio.');
+  if (!modalRapidoContacto.value) return alert('Elige un contacto para el negocio: sin uno, no se puede crear.');
 
-  const res = await fetch('/api/negocios', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      negocio: nombre,
-      contacto_id: modalRapidoContacto.value,
-      etapa_id: await etapaCotizacionId(),
-    }),
-  });
+  try {
+    const res = await fetch('/api/negocios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        negocio: nombre,
+        contacto_id: modalRapidoContacto.value,
+        etapa_id: await etapaCotizacionId(),
+      }),
+    });
 
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
-    return;
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
+      return;
+    }
+
+    const creado = await res.json();
+    const opt = document.createElement('option');
+    opt.value = creado.id_negocio;
+    opt.textContent = creado.negocio;
+    cotizacionNegocio.appendChild(opt);
+    cotizacionNegocio.value = creado.id_negocio;
+    cotizacionContacto.value = creado.contacto_id || '';
+
+    cerrarModalRapidoNegocio();
+    cargarNegocios();
+  } catch (err) {
+    alert('No se pudo crear el negocio: ' + err.message);
   }
-
-  const creado = await res.json();
-  const opt = document.createElement('option');
-  opt.value = creado.id_negocio;
-  opt.textContent = creado.negocio;
-  cotizacionNegocio.appendChild(opt);
-  cotizacionNegocio.value = creado.id_negocio;
-  cotizacionContacto.value = creado.contacto_id || '';
-
-  cerrarModalRapidoNegocio();
-  cargarNegocios();
 });
 
 // ---------- Alta rapida de Contacto (desde el formulario de Cotizacion) ----------
@@ -2704,39 +2709,43 @@ modalRapidoContactoOverlay.addEventListener('click', (e) => {
 formRapidoContacto.addEventListener('submit', async (e) => {
   e.preventDefault();
   const nombre = modalRapidoContactoNombre.value.trim();
-  if (!nombre) return;
+  if (!nombre) return alert('Falta el nombre del contacto.');
 
-  // Si ya hay Hotel(es)/Local(es) elegidos en la cotizacion, el contacto nuevo nace asociado a
-  // todos ellos (misma asociacion que se administra desde Contactos o desde el Hotel/Local).
-  const destinosElegidos = valoresSeleccionados(cotizacionDestino);
-  const res = await fetch('/api/contactos', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      nombre,
-      apellido: modalRapidoContactoApellido.value.trim(),
-      correo_electronico: modalRapidoContactoCorreo.value.trim(),
-      telefono_local: modalRapidoContactoTelLocal.value.trim(),
-      telefono_celular: modalRapidoContactoTelCelular.value.trim(),
-      destinos: destinosElegidos.map(Number),
-    }),
-  });
+  try {
+    // Si ya hay Hotel(es)/Local(es) elegidos en la cotizacion, el contacto nuevo nace asociado a
+    // todos ellos (misma asociacion que se administra desde Contactos o desde el Hotel/Local).
+    const destinosElegidos = valoresSeleccionados(cotizacionDestino);
+    const res = await fetch('/api/contactos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nombre,
+        apellido: modalRapidoContactoApellido.value.trim(),
+        correo_electronico: modalRapidoContactoCorreo.value.trim(),
+        telefono_local: modalRapidoContactoTelLocal.value.trim(),
+        telefono_celular: modalRapidoContactoTelCelular.value.trim(),
+        destinos: destinosElegidos.map(Number),
+      }),
+    });
 
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
-    return;
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
+      return;
+    }
+
+    const creado = await res.json();
+    const seleccionPrevia = new Set(destinosElegidos);
+    await poblarSelectsCotizacion();
+    await poblarSelectsNegocio();
+    cotizacionContacto.value = creado.id_contacto;
+    marcarSeleccionMultiple(cotizacionDestino, seleccionPrevia);
+    actualizarCampoVacio(cotizacionContacto);
+
+    cerrarModalRapidoContacto();
+  } catch (err) {
+    alert('No se pudo crear el contacto: ' + err.message);
   }
-
-  const creado = await res.json();
-  const seleccionPrevia = new Set(destinosElegidos);
-  await poblarSelectsCotizacion();
-  await poblarSelectsNegocio();
-  cotizacionContacto.value = creado.id_contacto;
-  marcarSeleccionMultiple(cotizacionDestino, seleccionPrevia);
-  actualizarCampoVacio(cotizacionContacto);
-
-  cerrarModalRapidoContacto();
 });
 
 // ---------- Alta rapida de Destino (desde el formulario de Cotizacion) ----------
@@ -2766,40 +2775,44 @@ modalRapidoDestinoOverlay.addEventListener('click', (e) => {
 formRapidoDestino.addEventListener('submit', async (e) => {
   e.preventDefault();
   const destino = modalRapidoDestinoNombre.value.trim();
-  if (!destino) return;
+  if (!destino) return alert('Falta el nombre del hotel/local.');
 
-  const res = await fetch('/api/destinos', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ destino }),
-  });
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
-    return;
-  }
-
-  const creado = await res.json();
-
-  // Si ya hay un Contacto elegido en la cotizacion, el Hotel/Local nuevo nace asociado a el
-  // (viceversa del alta rapida de Contacto: misma asociacion, mismo par contacto_destinos).
-  if (cotizacionContacto.value) {
-    await fetch(`/api/destinos/${creado.id_destino}/contactos`, {
+  try {
+    const res = await fetch('/api/destinos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contacto_id: cotizacionContacto.value }),
-    }).catch(() => {});
+      body: JSON.stringify({ destino }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      alert('Error: ' + (error.errores ? error.errores.join(', ') : (error.error || `Error ${res.status}`)));
+      return;
+    }
+
+    const creado = await res.json();
+
+    // Si ya hay un Contacto elegido en la cotizacion, el Hotel/Local nuevo nace asociado a el
+    // (viceversa del alta rapida de Contacto: misma asociacion, mismo par contacto_destinos).
+    if (cotizacionContacto.value) {
+      await fetch(`/api/destinos/${creado.id_destino}/contactos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contacto_id: cotizacionContacto.value }),
+      }).catch(() => {});
+    }
+
+    const seleccionPrevia = new Set(valoresSeleccionados(cotizacionDestino));
+    await poblarSelectsCotizacion();
+    filtrarDestinosPorContacto();
+    seleccionPrevia.add(String(creado.id_destino));
+    marcarSeleccionMultiple(cotizacionDestino, seleccionPrevia);
+    actualizarCampoVacio(cotizacionDestino);
+
+    cerrarModalRapidoDestino();
+  } catch (err) {
+    alert('No se pudo crear el hotel/local: ' + err.message);
   }
-
-  const seleccionPrevia = new Set(valoresSeleccionados(cotizacionDestino));
-  await poblarSelectsCotizacion();
-  filtrarDestinosPorContacto();
-  seleccionPrevia.add(String(creado.id_destino));
-  marcarSeleccionMultiple(cotizacionDestino, seleccionPrevia);
-  actualizarCampoVacio(cotizacionDestino);
-
-  cerrarModalRapidoDestino();
 });
 
 // ---------- Generar PDF de la cotizacion ----------

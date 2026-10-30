@@ -2130,6 +2130,12 @@ td.celda-check {
   gap: 0.35rem;
   white-space: nowrap;
 }
+.fp-secundaria .partida-observaciones {
+  flex: 1 1 220px;
+  min-width: 160px;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+}
 
 .detalle-cotizacion-productos .resumen-cotizacion {
   max-width: 320px;
@@ -2586,6 +2592,7 @@ td.celda-check {
 }
 .tarjeta-productos-cot .item-codigo { font-weight: 600; }
 .tarjeta-productos-cot .item-desc { color: #9b9b9b; font-size: 0.78rem; margin-top: 0.1rem; }
+.tarjeta-productos-cot .item-obs { color: #9b9b9b; font-size: 0.78rem; font-style: italic; margin-top: 0.1rem; }
 .tarjeta-productos-cot .resumen-cotizacion {
   display: flex;
   flex-direction: column;
@@ -2701,7 +2708,8 @@ td.celda-check {
   .detalle-cotizacion .tarjeta h3,
   .campo-cot .etiqueta-cot,
   .tarjeta-productos-cot thead th,
-  .tarjeta-productos-cot .item-desc {
+  .tarjeta-productos-cot .item-desc,
+  .tarjeta-productos-cot .item-obs {
     color: #a9a49c;
   }
   .btn-texto { color: #a9a49c; }

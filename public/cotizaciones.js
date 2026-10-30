@@ -1281,6 +1281,7 @@ function renderizarPartidas() {
         <label title="Si se desmarca, esta partida no suma IVA">
           <input type="checkbox" class="partida-causa-impuesto" ${it.causa_impuesto !== false ? 'checked' : ''} /> Causa impuesto
         </label>
+        <input type="text" class="partida-observaciones" placeholder="Observaciones (opcional)" maxlength="100" value="${escaparHtml(it.observaciones_item || '')}" />
         ${pillEstatusPartida(it.producto_item)}
         ${cotizacionId.value ? `<button type="button" class="btn-mini btn-solicitar-proveedor" data-index="${i}" title="Pedir precio y tiempo de entrega a un proveedor">Solicitar cotización</button>` : ''}
       </div>
@@ -1340,7 +1341,7 @@ btnAgregarPartida.addEventListener('click', () => {
     cotizacionMoneda.focus();
     return;
   }
-  partidas.push({ producto_item: '', cantidad: 1, precio_unitario: 0, causa_impuesto: true });
+  partidas.push({ producto_item: '', cantidad: 1, precio_unitario: 0, causa_impuesto: true, observaciones_item: '' });
   renderizarPartidas();
   actualizarResumen();
 });
@@ -1370,6 +1371,9 @@ tablaPartidas.addEventListener('input', (e) => {
   } else if (e.target.classList.contains('partida-causa-impuesto')) {
     partidas[i].causa_impuesto = e.target.checked;
     actualizarResumen();
+    return;
+  } else if (e.target.classList.contains('partida-observaciones')) {
+    partidas[i].observaciones_item = e.target.value.slice(0, 100);
     return;
   } else {
     return;
@@ -1443,6 +1447,7 @@ function agregarPendienteAPartidas(pendiente, moneda) {
       cantidad: pendiente.cantidad || 1,
       precio_unitario: sugerido ?? 0,
       causa_impuesto: true,
+      observaciones_item: '',
     });
   }
   renderizarPartidas();
@@ -1753,6 +1758,7 @@ listaSolicitudesProveedor.addEventListener('click', async (e) => {
     cantidad: it.cantidad,
     precio_unitario: it.precio_unitario,
     causa_impuesto: it.causa_impuesto !== false,
+    observaciones_item: it.observaciones_item || '',
   }));
   renderizarPartidas();
   actualizarResumen();
@@ -2104,6 +2110,7 @@ function cargarCotizacionEnFormulario(c) {
     cantidad: it.cantidad,
     precio_unitario: it.precio_unitario,
     causa_impuesto: it.causa_impuesto !== false,
+    observaciones_item: it.observaciones_item || '',
   }));
   renderizarPartidas();
   cotizacionMostrarTotales.checked = c.mostrar_totales !== false;
@@ -2176,6 +2183,7 @@ async function clonarCotizacion(id) {
     cantidad: it.cantidad,
     precio_unitario: it.precio_unitario,
     causa_impuesto: it.causa_impuesto !== false,
+    observaciones_item: it.observaciones_item || '',
   }));
   renderizarPartidas();
   cotizacionMostrarTotales.checked = c.mostrar_totales !== false;
@@ -2414,6 +2422,7 @@ async function abrirDetalleCotizacion(id) {
                     <td>
                       <div class="item-codigo">${escaparHtml(it.producto_item)}</div>
                       ${it.producto_descripcion ? `<div class="item-desc">${escaparHtml(it.producto_descripcion)}</div>` : ''}
+                      ${it.observaciones_item ? `<div class="item-obs">${escaparHtml(it.observaciones_item)}</div>` : ''}
                     </td>
                     <td class="num">${formatoImporte(it.cantidad)}</td>
                     <td class="num">${formatoImporte(it.precio_unitario)}</td>
@@ -2865,6 +2874,7 @@ function generarHtmlCotizacionPDF(c) {
       <td>
         <div class="item-codigo">${escaparHtml(it.producto_item)}</div>
         <div class="item-desc">${escaparHtml(it.producto_descripcion || '')}</div>
+        ${it.observaciones_item ? `<div class="item-obs">${escaparHtml(it.observaciones_item)}</div>` : ''}
       </td>
       <td class="num">${formatoCantidad(it.cantidad)}</td>
       <td class="num">${money(it.precio_unitario)}</td>
@@ -2903,6 +2913,7 @@ function generarHtmlCotizacionPDF(c) {
   tbody tr:nth-child(even) { background: #fafafa; }
   .item-codigo { font-weight: 600; }
   .item-desc { color: #757575; font-size: 0.8rem; }
+  .item-obs { color: #757575; font-size: 0.8rem; font-style: italic; }
   .totales { width: 280px; margin-left: auto; margin-top: 10px; }
   .totales div { display: flex; justify-content: space-between; padding: 6px 4px; border-bottom: 1px solid #eee; color: #6b7280; }
   .totales div span:last-child { color: #1f2124; }

@@ -2345,6 +2345,9 @@ async function validarItems(items) {
     if (Number(it.precio_unitario) < 0 || Number.isNaN(Number(it.precio_unitario))) {
       return ['El precio unitario de cada partida debe ser un numero valido'];
     }
+    if (it.observaciones_item && it.observaciones_item.length > 100) {
+      return ['Las observaciones de cada partida deben tener 100 caracteres o menos'];
+    }
   }
   return [];
 }
@@ -2406,8 +2409,8 @@ async function guardarItems(db, cotizacionId, items) {
   await db.prepare('DELETE FROM cotizacion_items WHERE cotizacion_id = ?').run(cotizacionId);
   for (const it of items) {
     await db.prepare(`
-      INSERT INTO cotizacion_items (cotizacion_id, producto_item, cantidad, precio_unitario, causa_impuesto) VALUES (?, ?, ?, ?, ?)
-    `).run(cotizacionId, it.producto_item, Number(it.cantidad), Number(it.precio_unitario), it.causa_impuesto !== false);
+      INSERT INTO cotizacion_items (cotizacion_id, producto_item, cantidad, precio_unitario, causa_impuesto, observaciones_item) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(cotizacionId, it.producto_item, Number(it.cantidad), Number(it.precio_unitario), it.causa_impuesto !== false, (it.observaciones_item || '').trim() || null);
   }
 }
 
@@ -3025,7 +3028,8 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
   cotizacion.items.forEach((it, i) => {
     doc.font('Helvetica').fontSize(9);
     const alturaDesc = it.producto_descripcion ? doc.heightOfString(it.producto_descripcion, { width: columnas[0].ancho - 10, fontSize: 8 }) + 3 : 0;
-    const alturaFila = Math.max(14 + alturaDesc, 14) + 16;
+    const alturaObs = it.observaciones_item ? doc.heightOfString(it.observaciones_item, { width: columnas[0].ancho - 10, fontSize: 8 }) + 3 : 0;
+    const alturaFila = Math.max(14 + alturaDesc + alturaObs, 14) + 16;
 
     if (doc.y + alturaFila > 725) { doc.addPage(); encabezadoTabla(true); }
 
@@ -3039,6 +3043,10 @@ function generarPdfCotizacion(cotizacion, res, { descargar }) {
     doc.font('Helvetica-Bold').fontSize(9).fillColor(PDF_TINTA).text(it.producto_item || '', x, y, { width: columnas[0].ancho - 10 });
     if (it.producto_descripcion) {
       doc.font('Helvetica').fontSize(8).fillColor(PDF_GRIS).text(it.producto_descripcion, x, doc.y + 2, { width: columnas[0].ancho - 10 });
+      doc.fillColor(PDF_TINTA);
+    }
+    if (it.observaciones_item) {
+      doc.font('Helvetica-Oblique').fontSize(8).fillColor(PDF_GRIS).text(it.observaciones_item, x, doc.y + 2, { width: columnas[0].ancho - 10 });
       doc.fillColor(PDF_TINTA);
     }
     x += columnas[0].ancho;

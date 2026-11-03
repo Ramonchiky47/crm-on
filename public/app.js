@@ -874,6 +874,7 @@ function renderizar(ordenes) {
       <td>${escaparHtml(o.id)}</td>
       <td>${escaparHtml(o.fecha || '')}</td>
       <td>${escaparHtml(o.estatus_nombre || '')}</td>
+      <td>${escaparHtml(o.estatus_sistema || '')}</td>
       <td>${formatoImporte(o.importe)}</td>
       <td>${escaparHtml(o.destino_nombre || '')}</td>
       <td>${escaparHtml(o.contacto_nombre || '')}</td>

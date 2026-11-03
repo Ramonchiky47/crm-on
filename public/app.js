@@ -962,7 +962,61 @@ form.addEventListener('submit', async (e) => {
 btnCancelar.addEventListener('click', cerrarFormulario);
 btnMostrarForm.addEventListener('click', abrirFormulario);
 
-btnActualizarOrdenesNetsuite.addEventListener('click', () => inputActualizarOrdenesNetsuite.click());
+async function sincronizarNetsuiteConAgente(passwordOpcional = '') {
+  btnActualizarOrdenesNetsuite.disabled = true;
+  btnActualizarOrdenesNetsuite.textContent = 'Descargando de NetSuite...';
+
+  try {
+    let res;
+    try {
+      res = await fetch('http://127.0.0.1:4567/sincronizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(passwordOpcional ? { password: passwordOpcional } : {}),
+      });
+    } catch (_) {
+      res = await fetch('/api/netsuite/sincronizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(passwordOpcional ? { password: passwordOpcional } : {}),
+      });
+    }
+
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 401 && data && data.errorPassword) {
+      const nueva = prompt('La contraseña de NetSuite cambió o venció.\nIngresa la nueva contraseña de NetSuite:');
+      if (nueva && nueva.trim()) {
+        return await sincronizarNetsuiteConAgente(nueva.trim());
+      }
+      return;
+    }
+
+    if (!res.ok || data.modoManual) {
+      alert(data.error || 'El servicio local del agente NetSuite (puerto 4567) no está respondiendo en esta Mac.');
+      return;
+    }
+
+    if (Array.isArray(data.resumen) && data.resumen.length) {
+      alert(data.resumen.join('\n'));
+    } else {
+      alert('Sincronización con NetSuite completada.');
+    }
+    await cargarOrdenes();
+  } finally {
+    btnActualizarOrdenesNetsuite.disabled = false;
+    btnActualizarOrdenesNetsuite.textContent = 'Actualizar';
+  }
+}
+
+btnActualizarOrdenesNetsuite.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (e.altKey) {
+    inputActualizarOrdenesNetsuite.click();
+    return;
+  }
+  sincronizarNetsuiteConAgente();
+});
 
 function normalizarNombreArchivo(nombre) {
   return nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');

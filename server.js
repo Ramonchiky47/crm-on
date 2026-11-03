@@ -5129,6 +5129,101 @@ app.post('/api/facturacion/importar-excel-netsuite', requirePermiso('facturacion
   res.json({ total: registros.length, ...resultado });
 }));
 
+// ---------- Sincronizacion automatica NetSuite (Agente Playwright) ----------
+app.post('/api/netsuite/sincronizar', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
+  const fs = require('fs');
+  const { execFile } = require('child_process');
+  const scriptPath = path.join(__dirname, 'scripts', 'descargar_reportes_netsuite.py');
+  const carpetaDescargas = '/Users/ramonvillanueva/Downloads/descargas netsuite';
+
+  if (process.env.VERCEL || !fs.existsSync(scriptPath)) {
+    return res.json({ modoManual: true });
+  }
+
+  const nuevoPassword = typeof req.body?.password === 'string' ? req.body.password.trim() : '';
+  const args = [scriptPath, '--todos', '--headless'];
+  if (nuevoPassword) {
+    args.push('--password', nuevoPassword);
+  }
+
+  try {
+    await new Promise((resolve, reject) => {
+      execFile('python3', args, { cwd: __dirname, timeout: 240000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+        if (err) {
+          const combinado = `${stdout || ''}\n${stderr || ''}`;
+          err.combinado = combinado;
+          return reject(err);
+        }
+        resolve(stdout);
+      });
+    });
+  } catch (e) {
+    const salida = e.combinado || e.message || '';
+    if (salida.toLowerCase().includes('contraseña no válida') || salida.toLowerCase().includes('invalid login')) {
+      return res.status(401).json({
+        errorPassword: true,
+        error: 'NetSuite rechazó la contraseña actual. Ingresa la nueva contraseña.',
+      });
+    }
+    return res.status(500).json({
+      error: `Error al descargar reportes de NetSuite: ${salida.split('\n').slice(-6).join(' | ')}`,
+    });
+  }
+
+  function normalizarNombre(t) {
+    return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function buscarMasReciente(patron) {
+    if (!fs.existsSync(carpetaDescargas)) return null;
+    const archivos = fs.readdirSync(carpetaDescargas)
+      .filter((n) => !n.startsWith('~$') && /\.xlsx$/i.test(n) && normalizarNombre(n).includes(patron))
+      .map((n) => {
+        const ruta = path.join(carpetaDescargas, n);
+        return { nombre: n, ruta, mtime: fs.statSync(ruta).mtimeMs };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    return archivos[0] || null;
+  }
+
+  const resumen = [];
+
+  // 1. Ordenes
+  const archOrdenes = buscarMasReciente('vistapredeterminadatransaccion');
+  if (archOrdenes) {
+    const reg = await netsuiteXlsxARegistros(fs.readFileSync(archOrdenes.ruta));
+    const data = await transaction((dbConn) => procesarRegistrosOrdenes(dbConn, reg));
+    resumen.push(`${archOrdenes.nombre} -> Ordenes: procesadas ${reg.length}, nuevas ${data.insertadas}, actualizadas ${data.actualizadas}, errores ${data.errores.length}`);
+  }
+
+  // 2. Detalle de compra
+  const archDetalle = buscarMasReciente('detalledeordenesdeventaporarticulo');
+  if (archDetalle) {
+    const reg = await netsuiteDetalleXlsxARegistros(fs.readFileSync(archDetalle.ruta));
+    const data = await transaction((dbConn) => procesarRegistrosDetalleCompra(dbConn, reg));
+    resumen.push(`${archDetalle.nombre} -> Detalle de compra: procesadas ${reg.length}, nuevas ${data.insertadas}, ya existian ${data.omitidas}, errores ${data.errores.length}`);
+  }
+
+  // 3. Facturacion
+  const archFact = buscarMasReciente('detalledeventasporarticulo');
+  if (archFact) {
+    const reg = await netsuiteFacturacionXlsxARegistros(fs.readFileSync(archFact.ruta));
+    const data = await transaction((dbConn) => procesarRegistrosFacturacion(dbConn, reg));
+    const det = data.reemplazo ? `tabla reemplazada, ${data.insertadas} registros` : 'no se reemplazo nada (0 filas validas)';
+    resumen.push(`${archFact.nombre} -> Facturación: procesadas ${reg.length}, ${det}, errores ${data.errores.length}`);
+  }
+
+  // Tambien sincronizar con el servidor remoto si APP_BASE_URL esta configurado en .env
+  const scriptSubir = path.join(__dirname, 'scripts', 'subir_ordenes_netsuite.js');
+  if (fs.existsSync(scriptSubir) && fs.existsSync(path.join(__dirname, '.env'))) {
+    await new Promise((resolve) => {
+      execFile('node', ['--env-file=.env', scriptSubir], { cwd: __dirname, timeout: 120000 }, () => resolve());
+    });
+  }
+
+  res.json({ ok: true, resumen });
+}));
+
 // ---------- Presupuesto de ventas ----------
 // Un monto por mes (formato 'YYYY-MM') que se captura a mano; se compara contra las ventas
 // reales de Facturacion de ese mismo mes (misma fuente que la tarjeta "Ventas del mes" del

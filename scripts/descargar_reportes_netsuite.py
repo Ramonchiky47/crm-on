@@ -1,0 +1,456 @@
+#!/usr/bin/env python3
+"""
+Agente automatizado con Playwright para iniciar sesión en Oracle NetSuite (cuenta 8223897)
+y descargar los 3 reportes en Excel hacia '/Users/ramonvillanueva/Downloads/descargas netsuite':
+
+  1. Vista predeterminada Transacción (Órdenes de venta)
+     URL: https://8223897.app.netsuite.com/app/accounting/transactions/transactionlist.nl?Transaction_TYPE=SalesOrd
+  2. Detalle de órdenes de venta por artículo (Detalle de compra, cr=33)
+     URL: https://8223897.app.netsuite.com/app/reporting/reportrunner.nl?cr=33&whence=
+  3. Detalle de ventas por artículo (Facturación, cr=268)
+     URL: https://8223897.app.netsuite.com/app/reporting/reportrunner.nl?cr=268&whence=
+
+Uso:
+  python3 scripts/descargar_reportes_netsuite.py --paso 1
+  python3 scripts/descargar_reportes_netsuite.py --paso 2
+  python3 scripts/descargar_reportes_netsuite.py --paso 3
+  python3 scripts/descargar_reportes_netsuite.py --todos --subir
+"""
+
+import argparse
+import getpass
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+from playwright.sync_api import sync_playwright
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+SESSION_DIR = BASE_DIR / ".netsuite_session"
+CARPETA_DESCARGAS = Path("/Users/ramonvillanueva/Downloads/descargas netsuite")
+
+ACCOUNT_ID = "8223897"
+LOGIN_URL = "https://system.netsuite.com/pages/customerlogin.jsp"
+APP_HOST = f"{ACCOUNT_ID}.app.netsuite.com"
+
+URL_REPORTE_1 = f"https://{APP_HOST}/app/accounting/transactions/transactionlist.nl?Transaction_TYPE=SalesOrd"
+URL_REPORTE_2 = f"https://{APP_HOST}/app/reporting/reportrunner.nl?cr=33&whence="
+URL_REPORTE_3 = f"https://{APP_HOST}/app/reporting/reportrunner.nl?cr=268&whence="
+
+
+def cargar_env():
+    env_path = BASE_DIR / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        v = v.strip().strip('"').strip("'")
+        os.environ.setdefault(k.strip(), v)
+
+
+def actualizar_password_env(nuevo_password: str):
+    env_path = BASE_DIR / ".env"
+    if not env_path.exists():
+        return
+    lines = env_path.read_text(encoding="utf-8").splitlines()
+    nuevas = []
+    reemplazado = False
+    for line in lines:
+        if line.strip().startswith("NETSUITE_PASSWORD="):
+            nuevas.append(f'NETSUITE_PASSWORD="{nuevo_password}"')
+            reemplazado = True
+        else:
+            nuevas.append(line)
+    if not reemplazado:
+        nuevas.append(f'NETSUITE_PASSWORD="{nuevo_password}"')
+    env_path.write_text("\n".join(nuevas) + "\n", encoding="utf-8")
+
+
+def necesita_autenticacion(url: str) -> bool:
+    u = url.lower()
+    return (
+        "customerlogin.jsp" in u
+        or "login.nl" in u
+        or "enterpriselogin.nl" in u
+        or "loginrouter.nl" in u
+        or "twofactor" in u
+        or "securityquestions" in u
+        or "additionalauthentication" in u
+        or "secquestions" in u
+        or APP_HOST not in u
+    )
+
+
+def asegurar_login(page, target_url: str):
+    """
+    Navega a target_url. Si NetSuite redirige al login, ingresa automáticamente
+    NETSUITE_EMAIL y NETSUITE_PASSWORD y verifica si pide pregunta de seguridad o 2FA.
+    """
+    print(f"-> Abriendo: {target_url}")
+    page.goto(target_url, wait_until="domcontentloaded")
+    time.sleep(2)
+
+    if not necesita_autenticacion(page.url):
+        print(f"✅ Sesión ya activa en: {page.url}")
+        return
+
+    email = os.environ.get("NETSUITE_EMAIL", "").strip()
+    password = os.environ.get("NETSUITE_PASSWORD", "").strip()
+
+    print(f"-> Pantalla de autenticación detectada: {page.url}")
+
+    if email and password:
+        try:
+            # Esperar campos de login (tanto customerlogin.jsp como enterpriselogin.nl)
+            campo_email = page.locator("#email, input[name='email'], #userName").first
+            campo_pass = page.locator("#password, input[name='password']").first
+            if campo_email.count() > 0 and campo_email.is_visible():
+                campo_email.fill(email)
+                campo_pass.fill(password)
+                print(f"-> Ingresando credenciales para {email}...")
+                btn_login = page.locator(
+                    "#submitButton, #login-submit, button[type='submit'], input[type='submit']"
+                ).first
+                if btn_login.count() > 0:
+                    btn_login.click()
+                else:
+                    campo_pass.press("Enter")
+                page.wait_for_load_state("domcontentloaded", timeout=30000)
+                time.sleep(3)
+        except Exception as e:
+            print(f"   (Aviso en auto-login: {e})")
+
+    # Revisar en qué pantalla quedó después de enviar usuario y contraseña
+    if necesita_autenticacion(page.url):
+        print(f"-> URL tras login inicial: {page.url}")
+        # Ver si hay mensaje de error de contraseña o pregunta de seguridad
+        body_text = ""
+        try:
+            body_text = page.locator("body").inner_text(timeout=3000)
+        except Exception:
+            pass
+        for line in body_text.splitlines():
+            s = line.strip()
+            if s:
+                print(f"   [Pantalla NetSuite]: {s[:120]}")
+
+        if "contraseña no válida" in body_text.lower() or "invalid email" in body_text.lower() or "invalid login" in body_text.lower():
+            raise RuntimeError("❌ NetSuite rechazó el correo o la contraseña ('contraseña no válida').")
+
+        # Responder automáticamente la pregunta de seguridad si estamos en securityquestions.nl
+        if "securityquestions.nl" in page.url.lower() or "pregunta:" in body_text.lower():
+            respuestas_conocidas = {
+                "alias en la infancia": os.environ.get("NETSUITE_SEC_INFANCIA", "moncho"),
+            }
+            # Permitir respuestas extra desde variable NETSUITE_SEC_EXTRA="palabra_clave:respuesta;otra:respuesta2"
+            extra_env = os.environ.get("NETSUITE_SEC_EXTRA", "")
+            for par in extra_env.split(";"):
+                if ":" in par:
+                    k_sec, v_sec = par.split(":", 1)
+                    respuestas_conocidas[k_sec.strip().lower()] = v_sec.strip()
+
+            body_lower = body_text.lower()
+            respuesta_elegida = None
+            for clave_preg, resp in respuestas_conocidas.items():
+                if clave_preg in body_lower:
+                    respuesta_elegida = resp
+                    print(f"-> Pregunta de seguridad reconocida ('{clave_preg}'). Respondiendo automáticamente...")
+                    break
+
+            if respuesta_elegida:
+                campo_resp = page.locator("input[name='answer'], input[type='password'], input[type='text']").first
+                campo_resp.fill(respuesta_elegida)
+                btn_submit = page.locator("input[type='submit'], button[type='submit'], #submitButton, input[name='submitter']").first
+                if btn_submit.count() > 0:
+                    btn_submit.click()
+                else:
+                    campo_resp.press("Enter")
+                page.wait_for_load_state("domcontentloaded", timeout=30000)
+                time.sleep(3)
+            else:
+                raise RuntimeError("❌ NetSuite mostró una pregunta de seguridad nueva que aún no tenemos registrada. Revisa la línea 'Pregunta:' arriba.")
+
+    # Si después de responder la pregunta de seguridad sigue pidiendo algo más
+    if necesita_autenticacion(page.url):
+        print("\n======================================================================")
+        print("🔐 Se requiere paso adicional en la ventana de Chrome (Pregunta de")
+        print("   seguridad / 2FA / Selección de rol). Esperando a que se complete...")
+        print("======================================================================\n")
+
+        deadline = time.time() + 180
+        while time.time() < deadline:
+            curr = page.url
+            if not necesita_autenticacion(curr):
+                print(f"✅ Sesión autenticada en: {curr}")
+                break
+            time.sleep(1.5)
+        else:
+            raise RuntimeError(f"No se completó el inicio de sesión. URL actual: {page.url}")
+
+    if target_url.split("?")[0] not in page.url:
+        page.goto(target_url, wait_until="domcontentloaded")
+        time.sleep(2)
+
+
+def descargar_reporte_1_ordenes(page) -> Path:
+    """
+    Paso 1: Vista predeterminada Transacción (Órdenes de venta)
+    """
+    print("\n=== PASO 1: Vista predeterminada Transacción (Órdenes) ===")
+    asegurar_login(page, URL_REPORTE_1)
+    try:
+        page.wait_for_load_state("networkidle", timeout=30000)
+    except Exception:
+        pass
+    time.sleep(2)
+
+    print(f"-> Página cargada: {page.title()} ({page.url})")
+
+    selectores_excel = [
+        "[data-button-code='exportxls']",
+        "div.uir-list-export-xls",
+        "td.uir-list-export-xls",
+        "div[title*='Excel' i]",
+        "a[title*='Excel' i]",
+        "button[title*='Excel' i]",
+        "img[title*='Excel' i]",
+        "[aria-label*='Excel' i]",
+        "img[src*='xls' i]",
+        "a[onclick*='xls' i]",
+        "div[onclick*='xls' i]",
+    ]
+
+    boton_encontrado = None
+    for sel in selectores_excel:
+        loc = page.locator(sel).first
+        if loc.count() > 0 and loc.is_visible():
+            boton_encontrado = loc
+            print(f"-> Botón Excel detectado con selector: {sel}")
+            break
+
+    if not boton_encontrado:
+        # Inspeccionar elementos con xls/export en el DOM para diagnóstico
+        info = page.evaluate("""() => {
+            const els = Array.from(document.querySelectorAll('a, button, div, td, img, span'));
+            return els.filter(el => {
+                const html = (el.outerHTML || '').toLowerCase();
+                return html.includes('xls') || html.includes('excel') || html.includes('export');
+            }).slice(0, 15).map(el => ({
+                tag: el.tagName,
+                id: el.id,
+                cls: el.className,
+                title: el.getAttribute('title'),
+                onclick: el.getAttribute('onclick')
+            }));
+        }""")
+        print("-> Elementos de exportación encontrados en DOM:", info)
+
+    print("-> Iniciando descarga de 'Vista predeterminada Transacción'...")
+    with page.expect_download(timeout=120000) as download_info:
+        if boton_encontrado:
+            boton_encontrado.click()
+        else:
+            # Intentar invocar la función o clic por JS si existe
+            clicked = page.evaluate("""() => {
+                const el = document.querySelector("[onclick*='xls' i], [title*='Excel' i], .uir-list-export-xls");
+                if (el) { el.click(); return true; }
+                return false;
+            }""")
+            if not clicked:
+                print("   (Esperando clic manual en el ícono de Excel en la ventana...)")
+
+    download = download_info.value
+    nombre_archivo = download.suggested_filename
+    if not nombre_archivo.lower().endswith((".xlsx", ".xls")):
+        nombre_archivo += ".xlsx"
+
+    CARPETA_DESCARGAS.mkdir(parents=True, exist_ok=True)
+    destino = CARPETA_DESCARGAS / nombre_archivo
+    download.save_as(str(destino))
+    print(f"✅ Reporte 1 guardado en: {destino} ({destino.stat().st_size:,} bytes)")
+    return destino
+
+
+def descargar_reporte_runner(page, num_paso: int, titulo: str, url: str, desde: str = "01/01/2026") -> Path:
+    """
+    Paso 2 y 3: Reportes en reportrunner.nl (cr=33 y cr=268)
+    Configura el rango de fechas desde '01/01/2026' hasta el día actual y exporta a Excel.
+    """
+    print(f"\n=== PASO {num_paso}: {titulo} ===")
+    asegurar_login(page, url)
+    try:
+        page.wait_for_load_state("networkidle", timeout=45000)
+    except Exception:
+        pass
+    time.sleep(2)
+
+    hoy_str = datetime.now().strftime("%d/%m/%Y")
+
+    # Ajustar fechas en #crit_1_from y #crit_1_to y dar clic en #refresh
+    try:
+        campo_desde = page.locator("#crit_1_from, input[name='crit_1_from']").first
+        campo_hasta = page.locator("#crit_1_to, input[name='crit_1_to']").first
+
+        if campo_desde.count() > 0 and campo_desde.is_visible():
+            val_desde = campo_desde.input_value().strip()
+            val_hasta = campo_hasta.input_value().strip() if (campo_hasta.count() > 0 and campo_hasta.is_visible()) else ""
+            print(f"-> Fechas actuales en el reporte: Desde='{val_desde}', Hasta='{val_hasta}'")
+            if val_desde != desde or (val_hasta and val_hasta != hoy_str):
+                print(f"-> Ajustando rango de fechas: Desde='{desde}' Hasta='{hoy_str}'")
+                campo_desde.click()
+                campo_desde.fill(desde)
+                campo_desde.press("Tab")
+                time.sleep(0.5)
+                if campo_hasta.count() > 0 and campo_hasta.is_visible():
+                    campo_hasta.click()
+                    campo_hasta.fill(hoy_str)
+                    campo_hasta.press("Tab")
+                    time.sleep(0.5)
+
+                btn_refresh = page.locator("#refresh, input[name='refresh']").first
+                if btn_refresh.count() > 0 and btn_refresh.is_visible():
+                    print("-> Clic en Actualizar (#refresh)...")
+                    btn_refresh.click()
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=60000)
+                    except Exception:
+                        pass
+                    time.sleep(3)
+                    print(f"-> Nuevas fechas confirmadas: Desde='{campo_desde.input_value().strip()}', Hasta='{campo_hasta.input_value().strip()}'")
+    except Exception as e:
+        print(f"   (Aviso al verificar fechas del reporte: {e})")
+
+    selectores_excel = [
+        "[data-button-code='exportxls']",
+        "button[title*='Excel' i]",
+        "a[title*='Excel' i]",
+        "div[title*='Excel' i]",
+        "img[title*='Excel' i]",
+        "span[title*='Excel' i]",
+        "[aria-label*='Excel' i]",
+        "a[onclick*='exportToExcel' i]",
+        "button[onclick*='exportToExcel' i]",
+        "div[onclick*='exportToExcel' i]",
+        "td[onclick*='exportToExcel' i]",
+        "a[onclick*='xls' i]",
+        "div[onclick*='xls' i]",
+        "img[src*='excel' i]",
+        "img[src*='xls' i]",
+    ]
+
+    boton_encontrado = None
+    for sel in selectores_excel:
+        loc = page.locator(sel).first
+        if loc.count() > 0 and loc.is_visible():
+            boton_encontrado = loc
+            print(f"-> Botón Excel detectado con selector: {sel}")
+            break
+
+    if not boton_encontrado:
+        export_els = page.evaluate("""() => {
+            return Array.from(document.querySelectorAll('a, button, div, td, img, span, input')).filter(el => {
+                const h = (el.outerHTML || '').toLowerCase();
+                return (h.includes('xls') || h.includes('excel') || h.includes('export') || h.includes('refresh')) && el.offsetParent !== null;
+            }).slice(0, 20).map(el => ({
+                tag: el.tagName, id: el.id, cls: el.className, title: el.getAttribute('title'), onclick: el.getAttribute('onclick'), text: (el.innerText || '').slice(0, 40)
+            }));
+        }""")
+        print("-> Elementos de acción en Report Runner:", export_els)
+
+    print(f"-> Iniciando descarga de '{titulo}'...")
+    with page.expect_download(timeout=120000) as download_info:
+        if boton_encontrado:
+            boton_encontrado.click()
+        else:
+            print("   (Esperando clic en el botón de Exportar a Excel en la ventana...)")
+
+    download = download_info.value
+    nombre_archivo = download.suggested_filename
+    if not nombre_archivo.lower().endswith((".xlsx", ".xls")):
+        nombre_archivo += ".xlsx"
+
+    CARPETA_DESCARGAS.mkdir(parents=True, exist_ok=True)
+    destino = CARPETA_DESCARGAS / nombre_archivo
+    download.save_as(str(destino))
+    print(f"✅ Reporte {num_paso} guardado en: {destino} ({destino.stat().st_size:,} bytes)")
+    return destino
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Agente de descarga de reportes NetSuite")
+    parser.add_argument("--paso", type=int, choices=[1, 2, 3], help="Ejecutar solo el paso 1, 2 o 3")
+    parser.add_argument("--todos", action="store_true", help="Descargar los 3 reportes en secuencia")
+    parser.add_argument("--subir", action="store_true", help="Subir al CRM al terminar usando subir_ordenes_netsuite.js")
+    parser.add_argument("--password", type=str, help="Actualizar y usar nueva contraseña de NetSuite")
+    parser.add_argument("--preguntar-password", action="store_true", help="Preguntar interactivamente si cambió la contraseña")
+    parser.add_argument("--headless", action="store_true", help="Ejecutar sin ventana visible")
+    args = parser.parse_args()
+
+    if not args.paso and not args.todos:
+        args.paso = 1
+
+    cargar_env()
+
+    if args.password:
+        os.environ["NETSUITE_PASSWORD"] = args.password
+        actualizar_password_env(args.password)
+    elif args.preguntar_password and sys.stdin.isatty():
+        actual = os.environ.get("NETSUITE_PASSWORD", "")
+        prompt_msg = f"Contraseña de NetSuite [Enter para usar la guardada ({'*' * len(actual)})]: "
+        nueva = getpass.getpass(prompt_msg).strip()
+        if nueva:
+            os.environ["NETSUITE_PASSWORD"] = nueva
+            actualizar_password_env(nueva)
+            print("-> Contraseña actualizada en .env")
+
+    SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    CARPETA_DESCARGAS.mkdir(parents=True, exist_ok=True)
+
+    with sync_playwright() as p:
+        context = p.chromium.launch_persistent_context(
+            user_data_dir=str(SESSION_DIR),
+            channel="chrome",
+            headless=args.headless,
+            accept_downloads=True,
+            viewport={"width": 1400, "height": 900},
+        )
+        page = context.pages[0] if context.pages else context.new_page()
+
+        try:
+            if args.paso == 1 or args.todos:
+                descargar_reporte_1_ordenes(page)
+
+            if args.paso == 2 or args.todos:
+                descargar_reporte_runner(
+                    page,
+                    num_paso=2,
+                    titulo="Detalle de órdenes de venta por artículo (cr=33)",
+                    url=URL_REPORTE_2,
+                )
+
+            if args.paso == 3 or args.todos:
+                descargar_reporte_runner(
+                    page,
+                    num_paso=3,
+                    titulo="Detalle de ventas por artículo (cr=268)",
+                    url=URL_REPORTE_3,
+                )
+        finally:
+            context.close()
+
+    if args.subir:
+        print("\n=== SUBIENDO REPORTES AL CRM (subir_ordenes_netsuite.js) ===")
+        subprocess.run(
+            ["node", "--env-file=.env", "scripts/subir_ordenes_netsuite.js"],
+            cwd=str(BASE_DIR),
+            check=True,
+        )
+
+
+if __name__ == "__main__":
+    main()

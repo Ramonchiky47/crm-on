@@ -4869,8 +4869,13 @@ app.post('/api/detalle-compra/importar-excel-netsuite', requirePermiso('detalle_
 const SELECT_FACTURACION = `
   SELECT f.*, fp.pedido_id, fp.estatus_factura, d.destino hotel_nombre,
     (
-      SELECT SUM(dc.cantidad_vendida) FROM detalle_de_compra dc
+      -- NO sumar: Detalle de compra acumula una fila por cada sincronizacion de NetSuite en la
+      -- que aparece esa orden+articulo (no reemplaza), asi que sumar todas infla el total segun
+      -- cuantas veces se haya corrido el sync. La fila del import mas reciente es la vigente.
+      SELECT dc.cantidad_vendida FROM detalle_de_compra dc
       WHERE dc.id = fp.pedido_id AND dc.articulo = f.articulo
+      ORDER BY dc.creado_en DESC
+      LIMIT 1
     ) AS cantidad_pedida
   FROM facturacion f
   LEFT JOIN facturacion_pedido_id fp ON fp.id = f.id

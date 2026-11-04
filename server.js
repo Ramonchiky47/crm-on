@@ -3263,6 +3263,34 @@ app.get('/api/ordenes/:id/facturas', requirePermiso('ordenes', 'ver'), ar(async 
   res.json(rows);
 }));
 
+// "Comprometido" (cantidad de inventario comprometida) no viene en ningun reporte masivo de
+// NetSuite, solo en el registro individual de cada orden - se consulta bajo demanda (agente
+// Playwright local, ver scripts/descargar_reportes_netsuite.py --comprometido) y se guarda aqui
+// en su propia tabla para no depender de ningun reimport masivo.
+app.get('/api/ordenes/:id/comprometido', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM comprometido_orden WHERE orden_id = ? ORDER BY id').all(req.params.id);
+  res.json(rows);
+}));
+
+app.post('/api/ordenes/:id/comprometido', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
+  const orden = await db.prepare('SELECT id FROM ordenes WHERE id = ?').get(req.params.id);
+  if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
+
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+
+  await transaction(async (db) => {
+    await db.prepare('DELETE FROM comprometido_orden WHERE orden_id = ?').run(req.params.id);
+    for (const it of items) {
+      if (!it.articulo) continue;
+      await db.prepare('INSERT INTO comprometido_orden (orden_id, articulo, comprometido) VALUES (?, ?, ?)')
+        .run(req.params.id, it.articulo, numeroOpcional(it.comprometido));
+    }
+  });
+
+  const rows = await db.prepare('SELECT * FROM comprometido_orden WHERE orden_id = ? ORDER BY id').all(req.params.id);
+  res.json(rows);
+}));
+
 // Cotizaciones candidatas para asociar a esta orden (la direccion inversa de "Marcar como
 // ganada" en Cotizaciones): del mismo Hotel/Local que la orden (no el contacto individual: la
 // misma propiedad puede tener varios contactos cotizando/ordenando), todavia en Negociacion y

@@ -111,11 +111,34 @@ function pillEstatusFactura(estatus) {
   return `<span class="pill-estatus ${clase}">${escaparHtml(estatus)}</span>`;
 }
 
+// "Comprometido" se consulta bajo demanda (no viene en ningún reporte masivo de NetSuite, ver
+// btn-consultar-comprometido), así que puede no haberse consultado nunca para esta orden. El
+// check compara la suma de Comprometido contra la cantidad total de Artículos; falta sumarle la
+// cantidad cubierta por PO (sin fuente confirmada todavía) para que sea la comparación completa.
+function htmlComprometido(comprometido, articulos) {
+  if (!comprometido.length) {
+    return '<p class="pista">Sin consultar todavía.</p>';
+  }
+  const totalComprometido = comprometido.reduce((s, c) => s + (Number(c.comprometido) || 0), 0);
+  const totalArticulos = articulos.reduce((s, a) => s + (Number(a.cantidad_vendida) || 0), 0);
+  const coincide = totalComprometido >= totalArticulos;
+  return `
+    <ul class="lista-comprometido">
+      ${comprometido.map((c) => `<li>${escaparHtml(c.articulo)}: <strong>${c.comprometido}</strong></li>`).join('')}
+    </ul>
+    <p class="chequeo-comprometido ${coincide ? 'chequeo-ok' : 'chequeo-alerta'}">
+      ${coincide ? '✓' : '⚠️'} Comprometido (${totalComprometido}) ${coincide ? 'cubre' : 'no cubre'} la cantidad total de la orden (${totalArticulos})
+      <br><span class="pista">Pendiente sumar la cantidad cubierta por PO a proveedor — no hay fuente confirmada todavía.</span>
+    </p>
+  `;
+}
+
 async function abrirDetalle(id) {
-  const [orden, articulos, facturas] = await Promise.all([
+  const [orden, articulos, facturas, comprometido] = await Promise.all([
     fetch(`/api/ordenes/${encodeURIComponent(id)}`).then((r) => r.json()),
     fetch(`/api/detalle-compra?id=${encodeURIComponent(id)}`).then((r) => r.json()),
     fetch(`/api/ordenes/${encodeURIComponent(id)}/facturas`).then((r) => r.json()),
+    fetch(`/api/ordenes/${encodeURIComponent(id)}/comprometido`).then((r) => r.json()),
   ]);
 
   modalContenido.innerHTML = `
@@ -218,6 +241,13 @@ async function abrirDetalle(id) {
               </table>
             </div>
           ` : '<p class="vacio-articulos-orden">Esta orden no tiene artículos capturados en Detalle de compra.</p>'}
+          <div class="bloque-comprometido">
+            <div class="tarjeta-articulos-encabezado">
+              <h4>Comprometido</h4>
+              ${permisosOrdenes.editar ? `<button type="button" id="btn-consultar-comprometido" class="btn-mini" title="Consulta NetSuite en vivo vía el agente local (puerto 4567) — requiere Chrome con el servicio corriendo">Consultar comprometido</button>` : ''}
+            </div>
+            ${htmlComprometido(comprometido, articulos)}
+          </div>
         </div>
         <div class="tarjeta-productos-cot" style="margin-top: 1.1rem;">
           <div class="tarjeta-articulos-encabezado">
@@ -255,6 +285,30 @@ async function abrirDetalle(id) {
 
   modalCaja.classList.add('modal-caja-ancha');
   modalOverlay.hidden = false;
+
+  const btnConsultarComprometido = document.getElementById('btn-consultar-comprometido');
+  if (btnConsultarComprometido) {
+    btnConsultarComprometido.addEventListener('click', async () => {
+      btnConsultarComprometido.disabled = true;
+      btnConsultarComprometido.textContent = 'Consultando…';
+      try {
+        const res = await fetch(`http://127.0.0.1:4567/comprometido?orden=${encodeURIComponent(orden.id)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+        await fetch(`/api/ordenes/${encodeURIComponent(orden.id)}/comprometido`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: data.items }),
+        });
+        abrirDetalle(orden.id);
+      } catch (e) {
+        alert('No se pudo consultar Comprometido: ' + e.message
+          + '\n\n¿Está corriendo el servicio local del agente NetSuite (puerto 4567) en esta Mac, en Chrome?');
+        btnConsultarComprometido.disabled = false;
+        btnConsultarComprometido.textContent = 'Consultar comprometido';
+      }
+    });
+  }
 
   const btnMostrarAsociarCotizacion = document.getElementById('btn-mostrar-asociar-cotizacion');
   if (btnMostrarAsociarCotizacion) {

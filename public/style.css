@@ -1278,6 +1278,15 @@ th.num, td.num {
   font-weight: 600;
 }
 
+.bloque-comprometido { margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px dashed var(--borde); }
+.bloque-comprometido h4 { font-size: 0.85rem; margin: 0; }
+.lista-comprometido { list-style: none; margin: 0.4rem 0 0; padding: 0; font-size: 0.85rem; }
+.lista-comprometido li { padding: 0.15rem 0; }
+.chequeo-comprometido { margin-top: 0.5rem; font-size: 0.85rem; }
+.chequeo-comprometido.chequeo-ok { color: var(--exito); }
+.chequeo-comprometido.chequeo-alerta { color: var(--alerta); }
+.chequeo-comprometido .pista { margin-top: 0.15rem; }
+
 .estatus-vigente {
   color: var(--exito);
   font-weight: 600;

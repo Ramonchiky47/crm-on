@@ -3,6 +3,9 @@
  * Servicio local permanente (127.0.0.1:4567) que conecta el botón "Actualizar"
  * del CRM (https://crm-on-staging.vercel.app) con el agente local de Playwright
  * (scripts/descargar_reportes_netsuite.py) y la subida automática (scripts/subir_ordenes_netsuite.js).
+ *
+ * También expone GET /comprometido?orden=SO1234 para consultar "Comprometido" de UNA orden
+ * puntual (no viene en ningún reporte masivo, solo en el registro individual de la orden).
  */
 
 const http = require('http');
@@ -110,6 +113,38 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && req.url.startsWith('/comprometido')) {
+    const orden = new URL(req.url, 'http://localhost').searchParams.get('orden');
+    if (!orden) {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Falta el parametro ?orden=SO1234' }));
+      return;
+    }
+
+    console.log(`[${new Date().toISOString()}] Consultando Comprometido de ${orden}...`);
+    let salida;
+    try {
+      salida = await ejecutarComando('python3', ['-u', PY_SCRIPT, '--comprometido', orden, '--headless'], 120000);
+    } catch (e) {
+      const combinado = e.combinado || e.message || '';
+      console.error('Error al consultar Comprometido:', combinado);
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: `Error al consultar Comprometido: ${combinado.trim().split('\n').slice(-4).join(' | ')}` }));
+      return;
+    }
+
+    const lineaResultado = salida.split('\n').find((l) => l.startsWith('RESULTADO_JSON:'));
+    if (!lineaResultado) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'El agente no devolvió un resultado reconocible (ver log del servicio local).' }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(lineaResultado.slice('RESULTADO_JSON:'.length));
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify({ error: 'Ruta no encontrada' }));
 });
@@ -117,3 +152,4 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`Servicio local del Agente NetSuite escuchando en http://127.0.0.1:${PORT}`);
 });
+

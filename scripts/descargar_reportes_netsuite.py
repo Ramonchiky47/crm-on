@@ -355,6 +355,9 @@ def consultar_comprometido(page, numero_so: str) -> list:
     print(f"✅ Comprometido de {numero_so}:")
     for f in filas:
         print(f"   {f['articulo']}: {f['comprometido']}")
+    # Linea final de salida parseable: scripts/servicio_agente_netsuite.js la usa para reenviar
+    # el resultado al CRM sin tener que re-parsear el log humano de arriba.
+    print(f"RESULTADO_JSON:{json.dumps({'orden': numero_so, 'items': filas}, ensure_ascii=False)}")
     return filas
 
 

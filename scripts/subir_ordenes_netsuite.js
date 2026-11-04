@@ -1,8 +1,9 @@
 // Busca en la carpeta de descargas los archivos .xlsx mas recientes que exporta NetSuite ("Vista
 // predeterminada Transaccion" -> Ordenes, "Detalle de ordenes de venta por articulo" -> Detalle de
-// compra, "Detalle de ventas por articulo" -> Facturacion), inicia sesion en la app con la cuenta
-// de APP_USUARIO/APP_PASSWORD y los sube a sus endpoints (misma logica que subirlos a mano desde
-// el boton "Actualizar" de Ordenes).
+// compra, "Detalle de ventas por articulo" -> Facturacion, "Informe de ordenes de venta por
+// articulo" -> PO de Ordenes), inicia sesion en la app con la cuenta de APP_USUARIO/APP_PASSWORD
+// y los sube a sus endpoints (misma logica que subirlos a mano desde el boton "Actualizar" de
+// Ordenes).
 //
 // Uso: node --env-file=.env scripts/subir_ordenes_netsuite.js
 const fs = require('fs');
@@ -16,6 +17,7 @@ const REPORTES = [
   { patron: 'vistapredeterminadatransaccion', endpoint: '/api/ordenes/importar-excel-netsuite', nombre: 'Ordenes' },
   { patron: 'detalledeordenesdeventaporarticulo', endpoint: '/api/detalle-compra/importar-excel-netsuite', nombre: 'Detalle de compra' },
   { patron: 'detalledeventasporarticulo', endpoint: '/api/facturacion/importar-excel-netsuite', nombre: 'Facturación' },
+  { patron: 'informedeordenesdeventaporarticulo', endpoint: '/api/ordenes/importar-po-netsuite', nombre: 'PO de Ordenes' },
 ];
 
 function normalizar(texto) {
@@ -87,6 +89,11 @@ async function subirArchivo(baseUrl, cookie, endpoint, rutaArchivo) {
     console.log(`Total procesadas: ${resultado.total}`);
     if ('reemplazo' in resultado) {
       console.log(resultado.reemplazo ? `Tabla reemplazada, ${resultado.insertadas} registros` : 'No se reemplazo nada (0 filas validas)');
+    } else if ('ordenesConPo' in resultado) {
+      console.log(`Órdenes con PO en el reporte: ${resultado.ordenesConPo}`);
+      console.log(`numero_oc completado: ${resultado.actualizadas}`);
+      console.log(`Ya tenían numero_oc (sin tocar): ${resultado.omitidas}`);
+      console.log(`Sin esa orden en el CRM: ${resultado.sinOrden}`);
     } else {
       console.log(`Nuevas: ${resultado.insertadas}`);
       if ('actualizadas' in resultado) console.log(`Actualizadas: ${resultado.actualizadas}`);

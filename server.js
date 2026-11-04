@@ -5141,6 +5141,94 @@ app.post('/api/facturacion/importar-excel-netsuite', requirePermiso('facturacion
   res.json({ total: registros.length, ...resultado });
 }));
 
+// Reporte "Informe de ordenes de venta por articulo, PO y Cantidades" (paso 4 del agente de
+// NetSuite): trae varias filas por orden (una por articulo), con el numero de orden de NetSuite
+// en la columna 8 ("Numero de documento", ej. SO6390) y el PO del proveedor en la columna 9
+// ("Nº de orden (proveedor)", ej. PO5624). Columnas fijas por posicion, igual que el resto de
+// los parsers de NetSuite en este archivo.
+async function netsuitePoXlsxARegistros(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const hoja = workbook.worksheets[0];
+  if (!hoja) return [];
+
+  let filaEncabezado = null;
+  for (let numeroFila = 1; numeroFila <= Math.min(hoja.rowCount, 20); numeroFila++) {
+    const fila = hoja.getRow(numeroFila);
+    if (normalizarEncabezadoXlsx(fila.getCell(8).value) === 'numero de documento') {
+      filaEncabezado = numeroFila;
+      break;
+    }
+  }
+  if (!filaEncabezado) return [];
+
+  const registros = [];
+  for (let numeroFila = filaEncabezado + 1; numeroFila <= hoja.rowCount; numeroFila++) {
+    const fila = hoja.getRow(numeroFila);
+    const numeroDocumento = celdaXlsxATexto(fila.getCell(8).value, false);
+    if (!numeroDocumento) continue;
+    registros.push({
+      numero_documento: numeroDocumento,
+      po: celdaXlsxATexto(fila.getCell(9).value, false) || null,
+    });
+  }
+  return registros;
+}
+
+// Complementa numero_oc (PO) en Ordenes a partir de ese reporte: una orden puede traer mas de un
+// PO distinto entre sus articulos, asi que se concatenan con " / " (no se puede elegir uno solo
+// sin perder informacion). Nunca sobreescribe un numero_oc que ya tenia algo capturado - solo
+// llena huecos, a mano o de otra carga.
+async function procesarRegistrosPoOrdenes(db, registros) {
+  const posPorOrden = new Map();
+  for (const r of registros) {
+    if (!posPorOrden.has(r.numero_documento)) posPorOrden.set(r.numero_documento, new Set());
+    if (r.po) posPorOrden.get(r.numero_documento).add(r.po);
+  }
+
+  const errores = [];
+  let actualizadas = 0;
+  let omitidas = 0;
+  let sinOrden = 0;
+
+  for (const [ordenId, posSet] of posPorOrden) {
+    if (!posSet.size) continue;
+    const po = [...posSet].sort().join(' / ');
+    try {
+      const info = await db.prepare(
+        "UPDATE ordenes SET numero_oc = ? WHERE id = ? AND (numero_oc IS NULL OR numero_oc = '')"
+      ).run(po, ordenId);
+      if (info.changes) {
+        actualizadas++;
+      } else if (await db.prepare('SELECT 1 FROM ordenes WHERE id = ?').get(ordenId)) {
+        omitidas++;
+      } else {
+        sinOrden++;
+      }
+    } catch (e) {
+      errores.push({ orden: ordenId, error: e.message });
+    }
+  }
+
+  return { ordenesConPo: posPorOrden.size, actualizadas, omitidas, sinOrden, errores };
+}
+
+app.post('/api/ordenes/importar-po-netsuite', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) {
+    return res.status(400).json({ error: 'Envia el archivo .xlsx de NetSuite como binario (Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)' });
+  }
+
+  let registros;
+  try {
+    registros = await netsuitePoXlsxARegistros(req.body);
+  } catch (e) {
+    return res.status(400).json({ error: `No se pudo leer el archivo Excel: ${e.message}` });
+  }
+
+  const resultado = await transaction((db) => procesarRegistrosPoOrdenes(db, registros));
+  res.json({ total: registros.length, ...resultado });
+}));
+
 // ---------- Sincronizacion automatica NetSuite (Agente Playwright) ----------
 app.post('/api/netsuite/sincronizar', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
   const fs = require('fs');

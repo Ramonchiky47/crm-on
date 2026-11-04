@@ -136,6 +136,18 @@ function pillEstatusFactura(estatus) {
   return `<span class="pill-estatus ${clase}">${escaparHtml(estatus)}</span>`;
 }
 
+// Cantidad pedida en la Orden de venta para este mismo artículo (via el Pedido capturado a
+// mano), para cotejar contra "Cantidad" (lo facturado). Sin pedido asociado no hay con qué
+// comparar, así que se muestra en blanco en vez de marcarlo como descuadre.
+function celdaCantidadPedida(f) {
+  if (f.cantidad_pedida === null || f.cantidad_pedida === undefined) {
+    return f.pedido_id ? '<span class="pista-inline">Sin ese artículo en la orden</span>' : '';
+  }
+  const coincide = Number(f.cantidad_pedida) === Number(f.cantidad_vendida);
+  const clase = coincide ? 'estatus-vigente' : 'estatus-vencido';
+  return `<span class="${clase}">${f.cantidad_pedida}</span>`;
+}
+
 function renderizar(lista) {
   tabla.innerHTML = '';
   estadoVacio.hidden = lista.length !== 0;
@@ -150,6 +162,7 @@ function renderizar(lista) {
       <td>${escaparHtml(f.descripcion || '')}</td>
       <td>${escaparHtml(f.numero_serie || '')}</td>
       <td>${f.cantidad_vendida ?? ''}</td>
+      <td>${celdaCantidadPedida(f)}</td>
       <td>${formatoImporte(f.precio_venta)}</td>
       <td>${formatoImporte(f.ingresos)}</td>
       <td>${escaparHtml(f.pedido_id || '')}</td>

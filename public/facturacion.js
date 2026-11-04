@@ -16,6 +16,7 @@ const campos = {
 const btnGuardar = document.getElementById('btn-guardar');
 const btnCancelar = document.getElementById('btn-cancelar');
 const btnMostrarForm = document.getElementById('btn-mostrar-form');
+const btnCompletarPedidos = document.getElementById('btn-completar-pedidos');
 const tabla = document.getElementById('tabla-facturacion');
 const estadoVacio = document.getElementById('estado-vacio');
 const buscar = document.getElementById('buscar');
@@ -235,6 +236,29 @@ form.addEventListener('submit', async (e) => {
 btnCancelar.addEventListener('click', cerrarFormulario);
 btnMostrarForm.addEventListener('click', abrirFormulario);
 
+btnCompletarPedidos.addEventListener('click', async () => {
+  if (!confirm('Esto va a buscar, por número de serie, la orden (SO) de cada factura que no tenga Pedido capturado, y lo va a completar automáticamente cuando encuentre una sola orden candidata. ¿Continuar?')) return;
+  btnCompletarPedidos.disabled = true;
+  btnCompletarPedidos.textContent = 'Completando…';
+  try {
+    const res = await fetch('/api/facturacion/completar-pedidos-por-serie', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || (data.errores || []).join(', ') || `Error ${res.status}`);
+    let mensaje = `Completadas: ${data.completadas}\nAmbiguas (más de una orden candidata, sin tocar): ${data.ambiguas}\nSin ninguna coincidencia: ${data.sinCoincidencia}`;
+    if (data.detalleAmbiguas && data.detalleAmbiguas.length) {
+      mensaje += '\n\nAlgunas ambiguas (factura → órdenes candidatas):\n'
+        + data.detalleAmbiguas.slice(0, 10).map((a) => `${a.factura} → ${a.ordenes.join(', ')}`).join('\n');
+    }
+    alert(mensaje);
+    cargarFacturacion();
+  } catch (e) {
+    alert('Error al completar pedidos: ' + e.message);
+  } finally {
+    btnCompletarPedidos.disabled = false;
+    btnCompletarPedidos.textContent = 'Completar pedidos';
+  }
+});
+
 // Abre el formulario ya lleno con los datos del registro (se usa tanto desde el boton "Editar"
 // como al hacer clic en cualquier parte de la fila, para poder asociar el ID de pedido rapido).
 async function abrirDetalleFacturacion(idFacturacion, { enfocarPedido = false } = {}) {
@@ -288,7 +312,10 @@ buscar.addEventListener('input', () => {
 promesaAuth.then((sesion) => {
   if (!sesion) return;
   permisosFacturacion = sesion.permisos.facturacion;
-  if (!permisosFacturacion.editar) btnMostrarForm.hidden = true;
+  if (!permisosFacturacion.editar) {
+    btnMostrarForm.hidden = true;
+    btnCompletarPedidos.hidden = true;
+  }
 
   // Se llego desde el detalle de una orden ("Facturas asociadas"): precarga el buscador con ese
   // ID de documento para llegar directo a esa factura en vez de la lista completa.

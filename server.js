@@ -4944,6 +4944,51 @@ async function asociarPedidoId(db, id, pedidoId, estatusFactura) {
   `).run(id, pedidoId, estatusFactura);
 }
 
+// Completa pedido_id (SO) en las facturas que no lo tienen, cruzando numeros de serie contra
+// Detalle de compra: el mismo numero de serie en ambos lados es la misma pieza fisica, asi que
+// la orden que la vendio es la orden correspondiente a esa factura. Solo aplica cuando el cruce
+// da UNA sola orden candidata; con mas de una se deja para revision manual (no se adivina) y sin
+// ninguna coincidencia tambien se deja intacta. Preserva el estatus_factura ya capturado.
+app.post('/api/facturacion/completar-pedidos-por-serie', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
+  const [facturas, detalle] = await Promise.all([
+    db.prepare(`${SELECT_FACTURACION} WHERE fp.pedido_id IS NULL AND f.numero_serie IS NOT NULL AND f.numero_serie != ''`).all(),
+    db.prepare("SELECT id, numero_serie FROM detalle_de_compra WHERE numero_serie IS NOT NULL AND numero_serie != ''").all(),
+  ]);
+
+  const ordenesPorSerie = new Map();
+  for (const d of detalle) {
+    for (const serie of d.numero_serie.split(',').map((s) => s.trim()).filter(Boolean)) {
+      if (!ordenesPorSerie.has(serie)) ordenesPorSerie.set(serie, new Set());
+      ordenesPorSerie.get(serie).add(d.id);
+    }
+  }
+
+  let completadas = 0;
+  let ambiguas = 0;
+  let sinCoincidencia = 0;
+  const detalleAmbiguas = [];
+
+  for (const f of facturas) {
+    const series = f.numero_serie.split(',').map((s) => s.trim()).filter(Boolean);
+    const ordenesCandidatas = new Set();
+    for (const serie of series) {
+      (ordenesPorSerie.get(serie) || []).forEach((o) => ordenesCandidatas.add(o));
+    }
+    if (ordenesCandidatas.size === 1) {
+      const [ordenId] = [...ordenesCandidatas];
+      await asociarPedidoId(db, f.id, ordenId, f.estatus_factura || null);
+      completadas++;
+    } else if (ordenesCandidatas.size > 1) {
+      ambiguas++;
+      detalleAmbiguas.push({ factura: f.id, ordenes: [...ordenesCandidatas] });
+    } else {
+      sinCoincidencia++;
+    }
+  }
+
+  res.json({ total: facturas.length, completadas, ambiguas, sinCoincidencia, detalleAmbiguas: detalleAmbiguas.slice(0, 30) });
+}));
+
 app.post('/api/facturacion', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
   const errores = validarFacturacion(req.body);
   if (errores.length) return res.status(400).json({ errores });

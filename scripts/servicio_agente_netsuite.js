@@ -5,9 +5,12 @@
  * (scripts/descargar_reportes_netsuite.py) y la subida automática (scripts/subir_ordenes_netsuite.js).
  *
  * También expone GET /comprometido?orden=SO1234 para consultar "Comprometido" de UNA orden
- * puntual (no viene en ningún reporte masivo, solo en el registro individual de la orden), y
+ * puntual (no viene en ningún reporte masivo, solo en el registro individual de la orden),
  * GET /pedido-factura?factura=INV1234 para consultar "Creado desde" (la Orden de venta que
- * originó esa factura) de UNA factura puntual, tampoco disponible en ningún reporte masivo.
+ * originó esa factura) de UNA factura puntual, tampoco disponible en ningún reporte masivo, y
+ * POST /completar-pedidos para correr el proceso masivo (todas las facturas sin Pedido) - usado
+ * tanto por el botón "Completar pedidos desde NetSuite" en Facturación como por la tarea
+ * programada de lunes a viernes (ver com.gonpal.completar-pedidos.plist).
  */
 
 const http = require('http');
@@ -18,6 +21,7 @@ const PORT = 4567;
 const BASE_DIR = path.resolve(__dirname, '..');
 const PY_SCRIPT = path.join(BASE_DIR, 'scripts', 'descargar_reportes_netsuite.py');
 const UPLOAD_SCRIPT = path.join(BASE_DIR, 'scripts', 'subir_ordenes_netsuite.js');
+const COMPLETAR_PEDIDOS_SCRIPT = path.join(BASE_DIR, 'scripts', 'completar_pedidos_desde_netsuite.js');
 
 function setCorsHeaders(req, res) {
   const origin = req.headers.origin || '*';
@@ -178,6 +182,29 @@ const server = http.createServer(async (req, res) => {
 
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(lineaResultado.slice('RESULTADO_JSON:'.length));
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/completar-pedidos') {
+    console.log(`[${new Date().toISOString()}] Completando pedidos sin asociar desde NetSuite ("Creado desde")...`);
+    let salida;
+    try {
+      salida = await ejecutarComando(process.execPath, ['--env-file=.env', COMPLETAR_PEDIDOS_SCRIPT], 1800000);
+      console.log(salida);
+    } catch (e) {
+      const combinado = e.combinado || e.message || '';
+      console.error('Error al completar pedidos desde NetSuite:', combinado);
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: `Error al completar pedidos: ${combinado.trim().split('\n').slice(-4).join(' | ')}` }));
+      return;
+    }
+
+    const lineas = salida.split('\n').map((l) => l.trim()).filter(Boolean);
+    const resumen = lineas.find((l) => l.startsWith('Total consultadas:')) || null;
+    const detalle = lineas.filter((l) => /^(✅|❌).*->/.test(l));
+
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ ok: true, resumen, detalle }));
     return;
   }
 

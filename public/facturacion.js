@@ -17,6 +17,7 @@ const btnGuardar = document.getElementById('btn-guardar');
 const btnCancelar = document.getElementById('btn-cancelar');
 const btnMostrarForm = document.getElementById('btn-mostrar-form');
 const btnCompletarPedidos = document.getElementById('btn-completar-pedidos');
+const btnCompletarPedidosNetsuite = document.getElementById('btn-completar-pedidos-netsuite');
 const btnBuscarPedidoNetsuite = document.getElementById('btn-buscar-pedido-netsuite');
 const tabla = document.getElementById('tabla-facturacion');
 const estadoVacio = document.getElementById('estado-vacio');
@@ -260,6 +261,32 @@ btnCompletarPedidos.addEventListener('click', async () => {
   }
 });
 
+// Corre el mismo proceso que la tarea programada de lunes a viernes: busca en NetSuite el
+// "Creado desde" de TODAS las facturas sin Pedido asociado (no solo las serializadas) y guarda
+// cada resultado directamente. Puede tardar varios minutos si hay muchas facturas pendientes.
+btnCompletarPedidosNetsuite.addEventListener('click', async () => {
+  if (!confirm('Esto va a buscar en NetSuite, para cada factura sin Pedido asociado, el campo "Creado desde" (la Orden de venta que la originó) y va a guardarlo directamente. Puede tardar varios minutos. ¿Continuar?')) return;
+  btnCompletarPedidosNetsuite.disabled = true;
+  btnCompletarPedidosNetsuite.textContent = 'Consultando NetSuite…';
+  try {
+    const res = await fetch('http://127.0.0.1:4567/completar-pedidos', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    let mensaje = data.resumen || 'Proceso terminado.';
+    if (data.detalle && data.detalle.length) {
+      mensaje += '\n\n' + data.detalle.join('\n');
+    }
+    alert(mensaje);
+    cargarFacturacion();
+  } catch (e) {
+    alert('No se pudo completar pedidos desde NetSuite: ' + e.message
+      + '\n\n¿Está corriendo el servicio local del agente NetSuite (puerto 4567) en esta Mac, en Chrome?');
+  } finally {
+    btnCompletarPedidosNetsuite.disabled = false;
+    btnCompletarPedidosNetsuite.textContent = 'Completar pedidos desde NetSuite';
+  }
+});
+
 // Consulta "Creado desde" (el vinculo exacto a la Orden de venta) de la factura que esta en el
 // formulario, via el agente local de NetSuite. Solo llena el campo — no guarda solo, para que se
 // revise antes de confirmar con "Guardar cambios"/"Agregar registro".
@@ -343,6 +370,7 @@ promesaAuth.then((sesion) => {
   if (!permisosFacturacion.editar) {
     btnMostrarForm.hidden = true;
     btnCompletarPedidos.hidden = true;
+    btnCompletarPedidosNetsuite.hidden = true;
   }
 
   // Se llego desde el detalle de una orden ("Facturas asociadas"): precarga el buscador con ese

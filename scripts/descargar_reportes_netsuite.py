@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Agente automatizado con Playwright para iniciar sesión en Oracle NetSuite (cuenta 8223897)
-y descargar los 3 reportes en Excel hacia '/Users/ramonvillanueva/Downloads/descargas netsuite':
+y descargar los reportes en Excel hacia '/Users/ramonvillanueva/Downloads/descargas netsuite':
 
   1. Vista predeterminada Transacción (Órdenes de venta)
      URL: https://8223897.app.netsuite.com/app/accounting/transactions/transactionlist.nl?Transaction_TYPE=SalesOrd
@@ -9,11 +9,16 @@ y descargar los 3 reportes en Excel hacia '/Users/ramonvillanueva/Downloads/desc
      URL: https://8223897.app.netsuite.com/app/reporting/reportrunner.nl?cr=33&whence=
   3. Detalle de ventas por artículo (Facturación, cr=268)
      URL: https://8223897.app.netsuite.com/app/reporting/reportrunner.nl?cr=268&whence=
+  4. Informe de órdenes de venta por artículo, PO y Cantidades (cr=327)
+     URL: https://8223897.app.netsuite.com/app/reporting/reportrunner.nl?cr=327&reload=T
+     Rango de fechas: 1 de enero del año en curso hasta hoy (a diferencia de los reportes 2 y 3,
+     que usan un "desde" fijo).
 
 Uso:
   python3 scripts/descargar_reportes_netsuite.py --paso 1
   python3 scripts/descargar_reportes_netsuite.py --paso 2
   python3 scripts/descargar_reportes_netsuite.py --paso 3
+  python3 scripts/descargar_reportes_netsuite.py --paso 4
   python3 scripts/descargar_reportes_netsuite.py --todos --subir
 """
 
@@ -38,6 +43,7 @@ APP_HOST = f"{ACCOUNT_ID}.app.netsuite.com"
 URL_REPORTE_1 = f"https://{APP_HOST}/app/accounting/transactions/transactionlist.nl?Transaction_TYPE=SalesOrd"
 URL_REPORTE_2 = f"https://{APP_HOST}/app/reporting/reportrunner.nl?cr=33&whence="
 URL_REPORTE_3 = f"https://{APP_HOST}/app/reporting/reportrunner.nl?cr=268&whence="
+URL_REPORTE_4 = f"https://{APP_HOST}/app/reporting/reportrunner.nl?cr=327&reload=T"
 
 
 def cargar_env():
@@ -383,8 +389,8 @@ def descargar_reporte_runner(page, num_paso: int, titulo: str, url: str, desde: 
 
 def main():
     parser = argparse.ArgumentParser(description="Agente de descarga de reportes NetSuite")
-    parser.add_argument("--paso", type=int, choices=[1, 2, 3], help="Ejecutar solo el paso 1, 2 o 3")
-    parser.add_argument("--todos", action="store_true", help="Descargar los 3 reportes en secuencia")
+    parser.add_argument("--paso", type=int, choices=[1, 2, 3, 4], help="Ejecutar solo el paso 1, 2, 3 o 4")
+    parser.add_argument("--todos", action="store_true", help="Descargar los 4 reportes en secuencia")
     parser.add_argument("--subir", action="store_true", help="Subir al CRM al terminar usando subir_ordenes_netsuite.js")
     parser.add_argument("--password", type=str, help="Actualizar y usar nueva contraseña de NetSuite")
     parser.add_argument("--preguntar-password", action="store_true", help="Preguntar interactivamente si cambió la contraseña")
@@ -439,6 +445,17 @@ def main():
                     num_paso=3,
                     titulo="Detalle de ventas por artículo (cr=268)",
                     url=URL_REPORTE_3,
+                )
+
+            if args.paso == 4 or args.todos:
+                # A diferencia de los reportes 2 y 3 (desde fijo "01/01/2026"), este va del 1 de
+                # enero del año en curso a hoy: el PO/cantidades solo interesa del año actual.
+                descargar_reporte_runner(
+                    page,
+                    num_paso=4,
+                    titulo="Informe de órdenes de venta por artículo, PO y Cantidades (cr=327)",
+                    url=URL_REPORTE_4,
+                    desde=f"01/01/{datetime.now().year}",
                 )
         finally:
             context.close()

@@ -33,6 +33,7 @@ Uso:
   python3 scripts/descargar_reportes_netsuite.py --todos --subir
   python3 scripts/descargar_reportes_netsuite.py --comprometido SO7808
   python3 scripts/descargar_reportes_netsuite.py --pedido-factura INV9604
+  python3 scripts/descargar_reportes_netsuite.py --pedidos-lote INV9604,INV9605,CM180
 """
 
 import argparse
@@ -455,12 +456,18 @@ def consultar_pedido_de_factura(page, numero_factura: str):
     except Exception:
         pass
 
-    # Busca "Orden de venta #SO1234" directamente en el HTML crudo de cada frame (en vez de
-    # recorrer el DOM buscando una etiqueta "Creado desde" con texto exacto): mas robusto a que
-    # la marca real no coincida exactamente con lo asumido (espacios no separables, el campo
-    # dentro de un nodo con mas texto, etc.) y no depende de que el elemento sea "visible" para
-    # Playwright. Se sondea cada frame, reintentando hasta 20s por si el contenido tarda en cargar.
-    patron_pedido = re.compile(r'orden de venta[^<]{0,60}?#\s*(SO\d+)', re.IGNORECASE)
+    # Busca el campo "Creado desde" directamente en el HTML crudo de cada frame, anclado al
+    # atributo estable data-field-name="createdfrom" del div que envuelve el campo (en vez de
+    # al texto visible "Creado desde", que en el marcado real de NetSuite es la etiqueta de un
+    # link de ayuda ("¿Qué es esto?") y NO el valor). El valor real vive en un <span> hermano
+    # posterior con aria-labelledby="createdfrom_lbl", dentro de un <a> con el texto
+    # "Orden de venta #SOxxxx". Confirmado contra el HTML real de una factura (INV9604 ->
+    # "Orden de venta #SO6943"). No depende de que el elemento sea "visible" para Playwright.
+    # Se sondea cada frame, reintentando hasta 20s por si el contenido tarda en cargar.
+    patron_pedido = re.compile(
+        r'data-field-name="createdfrom".{0,1500}?aria-labelledby="createdfrom_lbl".{0,500}?(SO\d+)',
+        re.IGNORECASE | re.DOTALL,
+    )
 
     pedido_so = None
     deadline = time.time() + 20
@@ -487,7 +494,7 @@ def consultar_pedido_de_factura(page, numero_factura: str):
             info_por_frame.append({
                 "frame_url": frame.url,
                 "largo_html": len(html),
-                "tiene_creado_desde": "creado desde" in html.lower(),
+                "tiene_createdfrom": 'data-field-name="createdfrom"' in html,
             })
         print(f"-> No se encontró 'Creado desde' con una Orden de venta vinculada ({len(page.frames)} frame(s) revisados). Diagnóstico:")
         print("  ", info_por_frame)
@@ -691,13 +698,14 @@ def main():
     parser.add_argument("--todos", action="store_true", help="Descargar los 4 reportes en secuencia")
     parser.add_argument("--comprometido", type=str, metavar="SO1234", help="Consultar 'Comprometido' de una sola orden (no descarga reportes)")
     parser.add_argument("--pedido-factura", type=str, metavar="INV1234", help="Consultar la Orden de venta ('Creado desde') de una sola factura (no descarga reportes)")
+    parser.add_argument("--pedidos-lote", type=str, metavar="INV1,INV2,...", help="Igual que --pedido-factura pero para varias facturas separadas por coma, en UNA sola sesion de navegador (una linea RESULTADO_JSON por factura)")
     parser.add_argument("--subir", action="store_true", help="Subir al CRM al terminar usando subir_ordenes_netsuite.js")
     parser.add_argument("--password", type=str, help="Actualizar y usar nueva contraseña de NetSuite")
     parser.add_argument("--preguntar-password", action="store_true", help="Preguntar interactivamente si cambió la contraseña")
     parser.add_argument("--headless", action="store_true", help="Ejecutar sin ventana visible")
     args = parser.parse_args()
 
-    if not args.paso and not args.todos and not args.comprometido and not args.pedido_factura:
+    if not args.paso and not args.todos and not args.comprometido and not args.pedido_factura and not args.pedidos_lote:
         args.paso = 1
 
     cargar_env()
@@ -734,6 +742,18 @@ def main():
 
             if args.pedido_factura:
                 consultar_pedido_de_factura(page, args.pedido_factura)
+                return
+
+            if args.pedidos_lote:
+                numeros = [n.strip().upper() for n in args.pedidos_lote.split(",") if n.strip()]
+                print(f"-> Consultando 'Creado desde' de {len(numeros)} factura(s) en esta sesión...")
+                for i, numero in enumerate(numeros, start=1):
+                    print(f"\n[{i}/{len(numeros)}] {numero}")
+                    try:
+                        consultar_pedido_de_factura(page, numero)
+                    except Exception as e:
+                        print(f"   ❌ {e}")
+                        print(f"RESULTADO_JSON:{json.dumps({'factura': numero, 'pedido_id': None, 'error': str(e)}, ensure_ascii=False)}")
                 return
 
             if args.paso == 1 or args.todos:

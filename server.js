@@ -4949,6 +4949,21 @@ async function asociarPedidoId(db, id, pedidoId, estatusFactura) {
   `).run(id, pedidoId, estatusFactura);
 }
 
+// Asocia (o borra, si pedido_id viene vacio) el Pedido de UN "id" de factura/nota de credito
+// puntual, sin tocar el resto de sus campos. Pensado para el flujo de "Creado desde" (agente
+// NetSuite): tanto el boton manual como la tarea programada guardan por aqui.
+app.post('/api/facturacion/:id/pedido', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
+  const id = quitarAcentos(req.params.id);
+  const existe = await db.prepare('SELECT 1 FROM facturacion WHERE id = ? LIMIT 1').get(id);
+  if (!existe) return res.status(404).json({ error: 'No existe ninguna factura con ese ID de documento' });
+
+  const existente = await db.prepare('SELECT estatus_factura FROM facturacion_pedido_id WHERE id = ?').get(id);
+  const pedidoId = quitarAcentos((req.body.pedido_id || '').trim()) || null;
+  await asociarPedidoId(db, id, pedidoId, existente ? existente.estatus_factura : null);
+
+  res.json({ ok: true, id, pedido_id: pedidoId });
+}));
+
 // Completa pedido_id (SO) en las facturas que no lo tienen, cruzando numeros de serie contra
 // Detalle de compra: el mismo numero de serie en ambos lados es la misma pieza fisica, asi que
 // la orden que la vendio es la orden correspondiente a esa factura. Solo aplica cuando el cruce

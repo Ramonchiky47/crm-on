@@ -74,7 +74,10 @@
         </label>
         <label>
           ID de pedido
-          <input type="text" id="pedido_id" placeholder="Ej. SO6810" />
+          <span class="campo-con-boton">
+            <input type="text" id="pedido_id" placeholder="Ej. SO6810" />
+            <button type="button" id="btn-buscar-pedido-netsuite" class="btn-mini" title="Busca en NetSuite el campo 'Creado desde' de esta factura (requiere el ID de documento ya capturado arriba)">Buscar en NetSuite</button>
+          </span>
         </label>
         <label>
           Estatus de factura

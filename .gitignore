@@ -9,3 +9,4 @@ npm-debug.log*
 Reporte_NetSuite_Gonpal.xlsx
 .netsuite_session/
 scripts/.netsuite_ids_orden.json
+scripts/.netsuite_ids_factura.json

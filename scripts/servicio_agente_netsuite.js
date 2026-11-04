@@ -5,7 +5,9 @@
  * (scripts/descargar_reportes_netsuite.py) y la subida automática (scripts/subir_ordenes_netsuite.js).
  *
  * También expone GET /comprometido?orden=SO1234 para consultar "Comprometido" de UNA orden
- * puntual (no viene en ningún reporte masivo, solo en el registro individual de la orden).
+ * puntual (no viene en ningún reporte masivo, solo en el registro individual de la orden), y
+ * GET /pedido-factura?factura=INV1234 para consultar "Creado desde" (la Orden de venta que
+ * originó esa factura) de UNA factura puntual, tampoco disponible en ningún reporte masivo.
  */
 
 const http = require('http');
@@ -130,6 +132,38 @@ const server = http.createServer(async (req, res) => {
       console.error('Error al consultar Comprometido:', combinado);
       res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ error: `Error al consultar Comprometido: ${combinado.trim().split('\n').slice(-4).join(' | ')}` }));
+      return;
+    }
+
+    const lineaResultado = salida.split('\n').find((l) => l.startsWith('RESULTADO_JSON:'));
+    if (!lineaResultado) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'El agente no devolvió un resultado reconocible (ver log del servicio local).' }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(lineaResultado.slice('RESULTADO_JSON:'.length));
+    return;
+  }
+
+  if (req.method === 'GET' && req.url.startsWith('/pedido-factura')) {
+    const factura = new URL(req.url, 'http://localhost').searchParams.get('factura');
+    if (!factura) {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Falta el parametro ?factura=INV1234' }));
+      return;
+    }
+
+    console.log(`[${new Date().toISOString()}] Consultando "Creado desde" de ${factura}...`);
+    let salida;
+    try {
+      salida = await ejecutarComando('python3', ['-u', PY_SCRIPT, '--pedido-factura', factura, '--headless'], 120000);
+    } catch (e) {
+      const combinado = e.combinado || e.message || '';
+      console.error('Error al consultar pedido de factura:', combinado);
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: `Error al consultar la Orden de venta: ${combinado.trim().split('\n').slice(-4).join(' | ')}` }));
       return;
     }
 

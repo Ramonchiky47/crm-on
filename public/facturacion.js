@@ -17,6 +17,7 @@ const btnGuardar = document.getElementById('btn-guardar');
 const btnCancelar = document.getElementById('btn-cancelar');
 const btnMostrarForm = document.getElementById('btn-mostrar-form');
 const btnCompletarPedidos = document.getElementById('btn-completar-pedidos');
+const btnBuscarPedidoNetsuite = document.getElementById('btn-buscar-pedido-netsuite');
 const tabla = document.getElementById('tabla-facturacion');
 const estadoVacio = document.getElementById('estado-vacio');
 const buscar = document.getElementById('buscar');
@@ -256,6 +257,33 @@ btnCompletarPedidos.addEventListener('click', async () => {
   } finally {
     btnCompletarPedidos.disabled = false;
     btnCompletarPedidos.textContent = 'Completar pedidos';
+  }
+});
+
+// Consulta "Creado desde" (el vinculo exacto a la Orden de venta) de la factura que esta en el
+// formulario, via el agente local de NetSuite. Solo llena el campo — no guarda solo, para que se
+// revise antes de confirmar con "Guardar cambios"/"Agregar registro".
+btnBuscarPedidoNetsuite.addEventListener('click', async () => {
+  const idFactura = campos.id.value.trim();
+  if (!idFactura) return alert('Captura primero el ID de documento de la factura (ej. INV9604).');
+
+  btnBuscarPedidoNetsuite.disabled = true;
+  btnBuscarPedidoNetsuite.textContent = 'Buscando…';
+  try {
+    const res = await fetch(`http://127.0.0.1:4567/pedido-factura?factura=${encodeURIComponent(idFactura)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    if (!data.pedido_id) {
+      alert(`${idFactura} no tiene "Creado desde" con una Orden de venta vinculada en NetSuite.`);
+      return;
+    }
+    campos.pedido_id.value = data.pedido_id;
+  } catch (e) {
+    alert('No se pudo consultar NetSuite: ' + e.message
+      + '\n\n¿Está corriendo el servicio local del agente NetSuite (puerto 4567) en esta Mac, en Chrome?');
+  } finally {
+    btnBuscarPedidoNetsuite.disabled = false;
+    btnBuscarPedidoNetsuite.textContent = 'Buscar en NetSuite';
   }
 });
 

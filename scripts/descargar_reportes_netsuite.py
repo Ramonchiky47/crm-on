@@ -19,6 +19,12 @@ orden puntual: ese dato no viene en ningún reporte masivo, solo en el registro 
 orden (salesord.nl?id=<ID interno>). Usa un cache local (scripts/.netsuite_ids_orden.json,
 poblado durante el paso 1) para traducir "SO1234" al ID interno que requiere esa URL.
 
+Y --pedido-factura consulta "Creado desde" de UNA factura puntual (custinvc.nl?id=<ID interno>):
+el vínculo exacto a la Orden de venta que la originó. Tampoco viene en ningún reporte masivo (el
+reporte 3 y la lista de Facturas no traen esa columna). Usa un cache local
+(scripts/.netsuite_ids_factura.json, poblado al consultar desde la lista de Facturas,
+Transaction_TYPE=CustInvc) para traducir "INV1234" al ID interno.
+
 Uso:
   python3 scripts/descargar_reportes_netsuite.py --paso 1
   python3 scripts/descargar_reportes_netsuite.py --paso 2
@@ -26,6 +32,7 @@ Uso:
   python3 scripts/descargar_reportes_netsuite.py --paso 4
   python3 scripts/descargar_reportes_netsuite.py --todos --subir
   python3 scripts/descargar_reportes_netsuite.py --comprometido SO7808
+  python3 scripts/descargar_reportes_netsuite.py --pedido-factura INV9604
 """
 
 import argparse
@@ -43,6 +50,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SESSION_DIR = BASE_DIR / ".netsuite_session"
 CARPETA_DESCARGAS = Path("/Users/ramonvillanueva/Downloads/descargas netsuite")
 CACHE_IDS_ORDEN = BASE_DIR / "scripts" / ".netsuite_ids_orden.json"
+CACHE_IDS_FACTURA = BASE_DIR / "scripts" / ".netsuite_ids_factura.json"
 
 ACCOUNT_ID = "8223897"
 LOGIN_URL = "https://system.netsuite.com/pages/customerlogin.jsp"
@@ -52,6 +60,7 @@ URL_REPORTE_1 = f"https://{APP_HOST}/app/accounting/transactions/transactionlist
 URL_REPORTE_2 = f"https://{APP_HOST}/app/reporting/reportrunner.nl?cr=33&whence="
 URL_REPORTE_3 = f"https://{APP_HOST}/app/reporting/reportrunner.nl?cr=268&whence="
 URL_REPORTE_4 = f"https://{APP_HOST}/app/reporting/reportrunner.nl?cr=327&reload=T"
+URL_LISTA_FACTURAS = f"https://{APP_HOST}/app/accounting/transactions/transactionlist.nl?Transaction_TYPE=CustInvc"
 
 
 def cargar_env():
@@ -361,6 +370,125 @@ def consultar_comprometido(page, numero_so: str) -> list:
     return filas
 
 
+def actualizar_cache_ids_factura(page):
+    """
+    Mismo problema que con Ordenes (ver actualizar_cache_ids_orden): el registro individual de
+    una factura vive en custinvc.nl?id=<ID_INTERNO>, no por su numero "INV1234"/"CM180". Extrae
+    ese mapeo de los links de la lista de facturas (Transaction_TYPE=CustInvc) y lo guarda en
+    CACHE_IDS_FACTURA.
+    """
+    try:
+        pares = page.evaluate("""() => {
+            const resultado = [];
+            const enlaces = Array.from(document.querySelectorAll("a[href*='custinvc.nl']"));
+            for (const a of enlaces) {
+                const texto = (a.innerText || '').trim();
+                const m = a.href.match(/[?&]id=(\\d+)/);
+                if (texto && /^(INV|CM)\\d+$/i.test(texto) && m) {
+                    resultado.push([texto.toUpperCase(), m[1]]);
+                }
+            }
+            return resultado;
+        }""")
+    except Exception as e:
+        print(f"   (Aviso: no se pudo leer el mapeo de IDs de factura: {e})")
+        return
+
+    if not pares:
+        print("   (Aviso: no se encontraron links de factura en esta lista para actualizar el cache de IDs)")
+        return
+
+    cache = {}
+    if CACHE_IDS_FACTURA.exists():
+        try:
+            cache = json.loads(CACHE_IDS_FACTURA.read_text(encoding="utf-8"))
+        except Exception:
+            cache = {}
+
+    for numero_factura, id_interno in pares:
+        cache[numero_factura] = id_interno
+
+    CACHE_IDS_FACTURA.write_text(json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"-> Cache de IDs de factura actualizado: {len(pares)} factura(s) en esta página, {len(cache)} en total.")
+
+
+def consultar_pedido_de_factura(page, numero_factura: str):
+    """
+    Abre el registro individual de una factura (custinvc.nl?id=...) y lee el campo "Creado desde"
+    (ej. "Orden de venta #SO6943"), que es el vinculo directo y exacto a la Orden de venta que la
+    origino - mas confiable que cruzar por numero de serie (que solo cubre articulos serializados).
+    """
+    numero_factura = numero_factura.strip().upper()
+
+    cache = {}
+    if CACHE_IDS_FACTURA.exists():
+        try:
+            cache = json.loads(CACHE_IDS_FACTURA.read_text(encoding="utf-8"))
+        except Exception:
+            cache = {}
+
+    id_interno = cache.get(numero_factura)
+    if not id_interno:
+        print(f"-> {numero_factura} no está en el cache de IDs; actualizando desde la lista de Facturas...")
+        asegurar_login(page, URL_LISTA_FACTURAS)
+        try:
+            page.wait_for_load_state("networkidle", timeout=30000)
+        except Exception:
+            pass
+        time.sleep(2)
+        actualizar_cache_ids_factura(page)
+        cache = json.loads(CACHE_IDS_FACTURA.read_text(encoding="utf-8")) if CACHE_IDS_FACTURA.exists() else {}
+        id_interno = cache.get(numero_factura)
+
+    if not id_interno:
+        raise RuntimeError(
+            f"No se encontró el ID interno de {numero_factura} en la lista de Facturas. "
+            "Verifica que el número sea correcto y que la factura aparezca en esa lista."
+        )
+
+    url_factura = f"https://{APP_HOST}/app/accounting/transactions/custinvc.nl?id={id_interno}&whence="
+    print(f"-> Abriendo {numero_factura} (ID interno {id_interno}): {url_factura}")
+    asegurar_login(page, url_factura)
+    try:
+        page.wait_for_load_state("networkidle", timeout=30000)
+    except Exception:
+        pass
+    time.sleep(2)
+
+    # "Creado desde" es una etiqueta (texto gris) seguida de un link "Orden de venta #SO1234".
+    pedido_so = page.evaluate("""() => {
+        const etiquetas = Array.from(document.querySelectorAll('*'))
+            .filter(el => el.children.length === 0 && (el.innerText || '').trim().toLowerCase() === 'creado desde');
+        for (const etiqueta of etiquetas) {
+            let contenedor = etiqueta.closest('div, td, tr') || etiqueta.parentElement;
+            for (let i = 0; i < 4 && contenedor; i++, contenedor = contenedor.nextElementSibling || contenedor.parentElement) {
+                const enlace = contenedor.querySelector ? contenedor.querySelector('a') : null;
+                if (enlace && /orden de venta/i.test(enlace.innerText || '')) {
+                    const m = (enlace.innerText || '').match(/SO\\d+/i);
+                    if (m) return m[0].toUpperCase();
+                }
+            }
+        }
+        return null;
+    }""")
+
+    if not pedido_so:
+        info = page.evaluate("""() => {
+            return Array.from(document.querySelectorAll('div, td, span, a'))
+                .map(el => (el.innerText || '').trim())
+                .filter((t) => t && t.length < 60)
+                .slice(0, 60);
+        }""")
+        print("-> No se encontró 'Creado desde' con una Orden de venta vinculada. Texto visible (diagnóstico):")
+        print("  ", info)
+        print(f"RESULTADO_JSON:{json.dumps({'factura': numero_factura, 'pedido_id': None}, ensure_ascii=False)}")
+        return None
+
+    print(f"✅ {numero_factura} fue creada desde: {pedido_so}")
+    print(f"RESULTADO_JSON:{json.dumps({'factura': numero_factura, 'pedido_id': pedido_so}, ensure_ascii=False)}")
+    return pedido_so
+
+
 def descargar_reporte_1_ordenes(page) -> Path:
     """
     Paso 1: Vista predeterminada Transacción (Órdenes de venta)
@@ -552,13 +680,14 @@ def main():
     parser.add_argument("--paso", type=int, choices=[1, 2, 3, 4], help="Ejecutar solo el paso 1, 2, 3 o 4")
     parser.add_argument("--todos", action="store_true", help="Descargar los 4 reportes en secuencia")
     parser.add_argument("--comprometido", type=str, metavar="SO1234", help="Consultar 'Comprometido' de una sola orden (no descarga reportes)")
+    parser.add_argument("--pedido-factura", type=str, metavar="INV1234", help="Consultar la Orden de venta ('Creado desde') de una sola factura (no descarga reportes)")
     parser.add_argument("--subir", action="store_true", help="Subir al CRM al terminar usando subir_ordenes_netsuite.js")
     parser.add_argument("--password", type=str, help="Actualizar y usar nueva contraseña de NetSuite")
     parser.add_argument("--preguntar-password", action="store_true", help="Preguntar interactivamente si cambió la contraseña")
     parser.add_argument("--headless", action="store_true", help="Ejecutar sin ventana visible")
     args = parser.parse_args()
 
-    if not args.paso and not args.todos and not args.comprometido:
+    if not args.paso and not args.todos and not args.comprometido and not args.pedido_factura:
         args.paso = 1
 
     cargar_env()
@@ -591,6 +720,10 @@ def main():
         try:
             if args.comprometido:
                 consultar_comprometido(page, args.comprometido)
+                return
+
+            if args.pedido_factura:
+                consultar_pedido_de_factura(page, args.pedido_factura)
                 return
 
             if args.paso == 1 or args.todos:

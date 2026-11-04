@@ -453,10 +453,12 @@ def consultar_pedido_de_factura(page, numero_factura: str):
         page.wait_for_load_state("networkidle", timeout=30000)
     except Exception:
         pass
-    time.sleep(2)
 
     # "Creado desde" es una etiqueta (texto gris) seguida de un link "Orden de venta #SO1234".
-    pedido_so = page.evaluate("""() => {
+    # El formulario del registro puede venir dentro de un iframe (NetSuite classic) y tardar en
+    # terminar de pintarse despues de "networkidle" (el shell/menu carga antes que el contenido),
+    # asi que se sondea cada frame de la pagina, reintentando hasta 20s en vez de un solo intento.
+    script_busqueda = """() => {
         const etiquetas = Array.from(document.querySelectorAll('*'))
             .filter(el => el.children.length === 0 && (el.innerText || '').trim().toLowerCase() === 'creado desde');
         for (const etiqueta of etiquetas) {
@@ -470,17 +472,36 @@ def consultar_pedido_de_factura(page, numero_factura: str):
             }
         }
         return null;
-    }""")
+    }"""
+
+    pedido_so = None
+    deadline = time.time() + 20
+    while time.time() < deadline and not pedido_so:
+        for frame in page.frames:
+            try:
+                pedido_so = frame.evaluate(script_busqueda)
+            except Exception:
+                pedido_so = None
+            if pedido_so:
+                break
+        if not pedido_so:
+            time.sleep(1)
 
     if not pedido_so:
-        info = page.evaluate("""() => {
-            return Array.from(document.querySelectorAll('div, td, span, a'))
-                .map(el => (el.innerText || '').trim())
-                .filter((t) => t && t.length < 60)
-                .slice(0, 60);
-        }""")
-        print("-> No se encontró 'Creado desde' con una Orden de venta vinculada. Texto visible (diagnóstico):")
-        print("  ", info)
+        info_por_frame = []
+        for frame in page.frames:
+            try:
+                textos = frame.evaluate("""() => {
+                    return Array.from(document.querySelectorAll('div, td, span, a'))
+                        .map(el => (el.innerText || '').trim())
+                        .filter((t) => t && t.length < 60);
+                }""")
+            except Exception:
+                textos = []
+            if textos:
+                info_por_frame.append({"frame_url": frame.url, "textos": textos[:60]})
+        print(f"-> No se encontró 'Creado desde' con una Orden de venta vinculada ({len(page.frames)} frame(s) revisados). Diagnóstico:")
+        print("  ", info_por_frame)
         print(f"RESULTADO_JSON:{json.dumps({'factura': numero_factura, 'pedido_id': None}, ensure_ascii=False)}")
         return None
 

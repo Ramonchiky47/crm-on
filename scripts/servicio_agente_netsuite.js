@@ -127,6 +127,7 @@ const server = http.createServer(async (req, res) => {
     let salida;
     try {
       salida = await ejecutarComando('python3', ['-u', PY_SCRIPT, '--comprometido', orden, '--headless'], 120000);
+      console.log(salida);
     } catch (e) {
       const combinado = e.combinado || e.message || '';
       console.error('Error al consultar Comprometido:', combinado);
@@ -159,6 +160,7 @@ const server = http.createServer(async (req, res) => {
     let salida;
     try {
       salida = await ejecutarComando('python3', ['-u', PY_SCRIPT, '--pedido-factura', factura, '--headless'], 120000);
+      console.log(salida);
     } catch (e) {
       const combinado = e.combinado || e.message || '';
       console.error('Error al consultar pedido de factura:', combinado);

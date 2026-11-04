@@ -301,30 +301,41 @@ def consultar_comprometido(page, numero_so: str) -> list:
 
     # La sub-pestaña "Artículos" suele estar activa por default al abrir la orden; su tabla trae
     # columnas Artículo/Comprometido/Empaquetando/Recolectado/Completado (confirmado por captura).
+    # Usa tabla.rows/fila.cells (no querySelectorAll por separado) para que el indice de columna
+    # de la fila de encabezado y el de las filas de datos queden alineados en la MISMA tabla.
     filas = page.evaluate("""() => {
-        const filas = [];
         const tablas = Array.from(document.querySelectorAll('table'));
         for (const tabla of tablas) {
-            const encabezados = Array.from(tabla.querySelectorAll('th, td'))
-                .slice(0, 12)
-                .map(c => (c.innerText || '').trim().toLowerCase());
-            if (!encabezados.some(h => h.includes('comprometido'))) continue;
+            const filasTabla = Array.from(tabla.rows);
+            if (!filasTabla.length) continue;
+
+            let idxEncabezado = -1;
+            let encabezados = [];
+            for (let i = 0; i < Math.min(filasTabla.length, 5); i++) {
+                const celdas = Array.from(filasTabla[i].cells).map(c => (c.innerText || '').trim().toLowerCase());
+                if (celdas.some(h => h.includes('comprometido'))) {
+                    idxEncabezado = i;
+                    encabezados = celdas;
+                    break;
+                }
+            }
+            if (idxEncabezado === -1) continue;
 
             const colComprometido = encabezados.findIndex(h => h.includes('comprometido'));
             const colArticulo = encabezados.findIndex(h => h.includes('art') && h.includes('culo'));
-            const filasTabla = Array.from(tabla.querySelectorAll('tr'));
-            for (const tr of filasTabla) {
-                const celdas = Array.from(tr.querySelectorAll('td')).map(td => (td.innerText || '').trim());
-                if (!celdas.length || colComprometido >= celdas.length) continue;
-                const articulo = colArticulo >= 0 ? celdas[colArticulo] : '';
+
+            const resultado = [];
+            for (let i = idxEncabezado + 1; i < filasTabla.length; i++) {
+                const celdas = Array.from(filasTabla[i].cells).map(c => (c.innerText || '').trim());
+                if (colComprometido < 0 || colComprometido >= celdas.length) continue;
                 const comprometido = celdas[colComprometido];
-                if (articulo && comprometido !== '' && !isNaN(Number(comprometido))) {
-                    filas.push({ articulo, comprometido: Number(comprometido) });
-                }
+                if (comprometido === '' || isNaN(Number(comprometido))) continue;
+                const articulo = (colArticulo >= 0 && colArticulo < celdas.length) ? celdas[colArticulo] : '';
+                resultado.push({ articulo: articulo || '(sin identificar)', comprometido: Number(comprometido) });
             }
-            if (filas.length) break;
+            if (resultado.length) return resultado;
         }
-        return filas;
+        return [];
     }""")
 
     if not filas:

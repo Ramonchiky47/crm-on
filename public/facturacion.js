@@ -11,6 +11,7 @@ const campos = {
   precio_venta: document.getElementById('precio_venta'),
   ingresos: document.getElementById('ingresos'),
   pedido_id: document.getElementById('pedido_id'),
+  estatus_factura: document.getElementById('estatus_factura'),
 };
 const btnGuardar = document.getElementById('btn-guardar');
 const btnCancelar = document.getElementById('btn-cancelar');
@@ -126,6 +127,15 @@ filtroSinPedido.addEventListener('change', ordenarYRenderizar);
 
 let permisosFacturacion = { ver: true, editar: true, borrar: true };
 
+// Verde Pagada, rojo Vencida, gris neutro Pendiente de pago (o sin capturar todavía).
+function pillEstatusFactura(estatus) {
+  if (!estatus) return '';
+  let clase = 'pill-neutro';
+  if (estatus === 'Pagada') clase = 'estatus-vigente';
+  else if (estatus === 'Vencida') clase = 'estatus-vencido';
+  return `<span class="pill-estatus ${clase}">${escaparHtml(estatus)}</span>`;
+}
+
 function renderizar(lista) {
   tabla.innerHTML = '';
   estadoVacio.hidden = lista.length !== 0;
@@ -143,6 +153,7 @@ function renderizar(lista) {
       <td>${formatoImporte(f.precio_venta)}</td>
       <td>${formatoImporte(f.ingresos)}</td>
       <td>${escaparHtml(f.pedido_id || '')}</td>
+      <td>${pillEstatusFactura(f.estatus_factura)}</td>
       <td>${escaparHtml(f.hotel_nombre || '')}</td>
       <td class="acciones">
         ${permisosFacturacion.editar ? `<button class="btn-editar" data-id="${f.id_facturacion}">Editar</button>` : ''}
@@ -186,6 +197,7 @@ form.addEventListener('submit', async (e) => {
     precio_venta: campos.precio_venta.value,
     ingresos: campos.ingresos.value,
     pedido_id: campos.pedido_id.value.trim(),
+    estatus_factura: campos.estatus_factura.value,
   };
 
   const idOriginal = inputIdOriginal.value;
@@ -227,6 +239,7 @@ async function abrirDetalleFacturacion(idFacturacion, { enfocarPedido = false } 
   campos.precio_venta.value = f.precio_venta ?? '';
   campos.ingresos.value = f.ingresos ?? '';
   campos.pedido_id.value = f.pedido_id || '';
+  campos.estatus_factura.value = f.estatus_factura || '';
 
   btnGuardar.textContent = 'Guardar cambios';
   abrirFormulario();

@@ -75,6 +75,15 @@
           ID de pedido
           <input type="text" id="pedido_id" placeholder="Ej. SO6810" />
         </label>
+        <label>
+          Estatus de factura
+          <select id="estatus_factura">
+            <option value="">-- Sin capturar --</option>
+            <option value="Pendiente de pago">Pendiente de pago</option>
+            <option value="Pagada">Pagada</option>
+            <option value="Vencida">Vencida</option>
+          </select>
+        </label>
       </div>
 
       <div class="acciones-form">
@@ -105,6 +114,7 @@
             <th data-campo="precio_venta">Precio</th>
             <th data-campo="ingresos">Ingresos</th>
             <th data-campo="pedido_id">Pedido</th>
+            <th data-campo="estatus_factura">Estatus</th>
             <th data-campo="hotel_nombre">Hotel</th>
             <th>Acciones</th>
           </tr>

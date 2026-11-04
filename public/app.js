@@ -5,6 +5,7 @@ const campos = {
   fecha: document.getElementById('fecha'),
   nombre: document.getElementById('nombre'),
   numero_oc: document.getElementById('numero_oc'),
+  fecha_autorizacion: document.getElementById('fecha_autorizacion'),
   estatus_id: document.getElementById('estatus_id'),
   moneda: document.getElementById('moneda'),
   importe_moneda_extranjera: document.getElementById('importe_moneda_extranjera'),
@@ -100,6 +101,16 @@ function pillEstatusOrden(nombre) {
   return `<span class="pill-estatus ${clase}">${escaparHtml(nombre)}</span>`;
 }
 
+// Estatus de cobranza capturado a mano por factura: verde Pagada, rojo Vencida, gris neutro
+// Pendiente de pago (o sin capturar todavía).
+function pillEstatusFactura(estatus) {
+  if (!estatus) return '';
+  let clase = 'pill-neutro';
+  if (estatus === 'Pagada') clase = 'estatus-vigente';
+  else if (estatus === 'Vencida') clase = 'estatus-vencido';
+  return `<span class="pill-estatus ${clase}">${escaparHtml(estatus)}</span>`;
+}
+
 async function abrirDetalle(id) {
   const [orden, articulos, facturas] = await Promise.all([
     fetch(`/api/ordenes/${encodeURIComponent(id)}`).then((r) => r.json()),
@@ -125,6 +136,7 @@ async function abrirDetalle(id) {
           <h3>Resumen</h3>
           ${campoOrden('Fecha', orden.fecha)}
           ${campoOrden('Número de OC / cheque', orden.numero_oc)}
+          ${campoOrden('Fecha de autorización', orden.fecha_autorizacion)}
           ${campoOrden('Número de seguimiento', orden.numero_seguimiento)}
           ${campoOrden('Estatus del sistema', orden.estatus_sistema)}
           ${campoOrden('Imprimir', orden.imprimir)}
@@ -216,7 +228,7 @@ async function abrirDetalle(id) {
             <div class="tabla-scroll">
               <table>
                 <thead><tr>
-                  <th>ID</th><th>Artículo</th><th>Tipo</th><th>Fecha</th>
+                  <th>ID</th><th>Artículo</th><th>Tipo</th><th>Fecha</th><th>Estatus</th>
                   <th class="num">Cantidad</th><th class="num">Ingresos</th>
                 </tr></thead>
                 <tbody>
@@ -226,6 +238,7 @@ async function abrirDetalle(id) {
                       <td>${escaparHtml(f.articulo || '')}</td>
                       <td>${escaparHtml(f.tipo || '')}</td>
                       <td>${escaparHtml(f.fecha || '')}</td>
+                      <td>${pillEstatusFactura(f.estatus_factura)}</td>
                       <td class="num">${f.cantidad_vendida ?? ''}</td>
                       <td class="num">${formatoImporte(f.ingresos)}</td>
                     </tr>
@@ -922,6 +935,7 @@ form.addEventListener('submit', async (e) => {
     fecha: campos.fecha.value,
     nombre: campos.nombre.value.trim(),
     numero_oc: campos.numero_oc.value.trim(),
+    fecha_autorizacion: campos.fecha_autorizacion.value,
     estatus_id: campos.estatus_id.value,
     moneda: campos.moneda.value,
     importe_moneda_extranjera: campos.importe_moneda_extranjera.value,
@@ -1100,6 +1114,7 @@ function cargarOrdenEnFormulario(o) {
   campos.fecha.value = o.fecha || '';
   campos.nombre.value = o.nombre || '';
   campos.numero_oc.value = o.numero_oc || '';
+  campos.fecha_autorizacion.value = o.fecha_autorizacion || '';
   campos.estatus_id.value = o.estatus_id ?? '';
   campos.moneda.value = o.moneda ?? '';
   campos.importe_moneda_extranjera.value = o.importe_moneda_extranjera ?? '';

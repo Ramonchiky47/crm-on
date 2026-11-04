@@ -3255,7 +3255,7 @@ app.get('/api/ordenes/:id', requirePermiso('ordenes', 'ver'), ar(async (req, res
 // ordenes puede ver que se facturo de ellas aunque no tenga acceso al modulo de Facturacion.
 app.get('/api/ordenes/:id/facturas', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
   const rows = await db.prepare(`
-    SELECT f.* FROM facturacion f
+    SELECT f.*, fp.estatus_factura FROM facturacion f
     JOIN facturacion_pedido_id fp ON fp.id = f.id
     WHERE fp.pedido_id = ?
     ORDER BY f.fecha DESC
@@ -3318,14 +3318,15 @@ app.post('/api/ordenes', requirePermiso('ordenes', 'editar'), ar(async (req, res
     INSERT INTO ordenes (
       id, fecha, imprimir, nombre, numero_oc, estatus_sistema, numero_seguimiento, nota,
       moneda, importe_moneda_extranjera, importe, estatus_id, observaciones,
-      destino_id, contacto_id, estado_entrega_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      destino_id, contacto_id, estado_entrega_id, fecha_autorizacion
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     idLimpio, normalizarFecha(b.fecha), quitarAcentos(b.imprimir) || null, quitarAcentos(b.nombre) || null, quitarAcentos(b.numero_oc) || null,
     quitarAcentos(b.estatus_sistema) || null, quitarAcentos(b.numero_seguimiento) || null, quitarAcentos(b.nota) || null,
     textoOpcional(quitarAcentos(b.moneda), 5), numeroOpcional(b.importe_moneda_extranjera), numeroOpcional(b.importe),
     enteroOpcional(b.estatus_id), quitarAcentos(b.observaciones) || null,
-    enteroOpcional(b.destino_id), enteroOpcional(b.contacto_id), enteroOpcional(b.estado_entrega_id)
+    enteroOpcional(b.destino_id), enteroOpcional(b.contacto_id), enteroOpcional(b.estado_entrega_id),
+    normalizarFecha(b.fecha_autorizacion) || null
   );
 
   const ordenesActualizadasPorNombre = await propagarContactoDestinoPorNombre(
@@ -3367,7 +3368,7 @@ app.put('/api/ordenes/:id', requirePermiso('ordenes', 'editar'), ar(async (req, 
     UPDATE ordenes SET
       fecha = ?, imprimir = ?, nombre = ?, numero_oc = ?, estatus_sistema = ?, numero_seguimiento = ?, nota = ?,
       moneda = ?, importe_moneda_extranjera = ?, importe = ?, estatus_id = ?, observaciones = ?,
-      destino_id = ?, contacto_id = ?, estado_entrega_id = ?
+      destino_id = ?, contacto_id = ?, estado_entrega_id = ?, fecha_autorizacion = ?
     WHERE id = ?
   `).run(
     campo('fecha', normalizarFecha), campo('imprimir'), nombreFinal, campo('numero_oc'), campo('estatus_sistema'),
@@ -3375,6 +3376,7 @@ app.put('/api/ordenes/:id', requirePermiso('ordenes', 'editar'), ar(async (req, 
     campo('moneda', (v) => textoOpcional(quitarAcentos(v), 5)), campo('importe_moneda_extranjera', numeroOpcional), campo('importe', numeroOpcional),
     campo('estatus_id', enteroOpcional), campo('observaciones'),
     destinoIdFinal, contactoIdFinal, campo('estado_entrega_id', enteroOpcional),
+    campo('fecha_autorizacion', normalizarFecha),
     req.params.id
   );
 
@@ -4837,16 +4839,20 @@ app.post('/api/detalle-compra/importar-excel-netsuite', requirePermiso('detalle_
 // (es un reporte que cambia), asi que cualquier dato que deba sobrevivir a esa carga no puede
 // vivir en esa tabla. Un LEFT JOIN lo trae de vuelta al leer.
 const SELECT_FACTURACION = `
-  SELECT f.*, fp.pedido_id, d.destino hotel_nombre
+  SELECT f.*, fp.pedido_id, fp.estatus_factura, d.destino hotel_nombre
   FROM facturacion f
   LEFT JOIN facturacion_pedido_id fp ON fp.id = f.id
   LEFT JOIN ordenes o ON o.id = fp.pedido_id
   LEFT JOIN destinos d ON d.id_destino = o.destino_id
 `;
 
+// Estatus de cobranza capturado a mano por factura (no lo trae NetSuite); vive junto a pedido_id
+// en facturacion_pedido_id por la misma razon: sobrevivir al reemplazo total de "facturacion".
+const ESTATUS_FACTURA_OPCIONES = ['Pendiente de pago', 'Pagada', 'Vencida'];
+
 function validarFacturacion(body, { parcial = false } = {}) {
   const errores = [];
-  const { id, cantidad_vendida, precio_venta, ingresos } = body;
+  const { id, cantidad_vendida, precio_venta, ingresos, estatus_factura } = body;
 
   if (!parcial && (typeof id !== 'string' || id.trim() === '')) {
     errores.push('id es requerido y debe ser texto no vacio');
@@ -4859,6 +4865,9 @@ function validarFacturacion(body, { parcial = false } = {}) {
   }
   if (ingresos !== undefined && numeroOpcional(ingresos) === undefined) {
     errores.push('ingresos debe ser numerico');
+  }
+  if (estatus_factura && !ESTATUS_FACTURA_OPCIONES.includes(estatus_factura)) {
+    errores.push(`estatus_factura debe ser una de: ${ESTATUS_FACTURA_OPCIONES.join(', ')}`);
   }
 
   return errores;
@@ -4886,20 +4895,21 @@ app.get('/api/facturacion/:idFacturacion', requirePermiso('facturacion', 'ver'),
   res.json(row);
 }));
 
-// Guarda o borra la asociacion de pedido_id para un "id" de factura/nota de credito. Vive en su
-// propia tabla (ver comentario de SELECT_FACTURACION) para sobrevivir al reemplazo total de
-// "facturacion" en cada carga de NetSuite. pedido_id vacio/null borra la asociacion si existia.
-async function asociarPedidoId(db, id, pedidoId) {
+// Guarda o borra la asociacion de pedido_id/estatus_factura para un "id" de factura/nota de
+// credito. Vive en su propia tabla (ver comentario de SELECT_FACTURACION) para sobrevivir al
+// reemplazo total de "facturacion" en cada carga de NetSuite. Si ambos quedan vacios, borra la
+// fila (ya no hay nada que conservar).
+async function asociarPedidoId(db, id, pedidoId, estatusFactura) {
   if (!id) return;
-  if (!pedidoId) {
+  if (!pedidoId && !estatusFactura) {
     await db.prepare('DELETE FROM facturacion_pedido_id WHERE id = ?').run(id);
     return;
   }
   await db.prepare(`
-    INSERT INTO facturacion_pedido_id (id, pedido_id)
-    VALUES (?, ?)
-    ON CONFLICT (id) DO UPDATE SET pedido_id = excluded.pedido_id, actualizado_en = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
-  `).run(id, pedidoId);
+    INSERT INTO facturacion_pedido_id (id, pedido_id, estatus_factura)
+    VALUES (?, ?, ?)
+    ON CONFLICT (id) DO UPDATE SET pedido_id = excluded.pedido_id, estatus_factura = excluded.estatus_factura, actualizado_en = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+  `).run(id, pedidoId, estatusFactura);
 }
 
 app.post('/api/facturacion', requirePermiso('facturacion', 'editar'), ar(async (req, res) => {
@@ -4922,7 +4932,7 @@ app.post('/api/facturacion', requirePermiso('facturacion', 'editar'), ar(async (
     numeroOpcional(b.precio_venta),
     numeroOpcional(b.ingresos)
   );
-  await asociarPedidoId(db, id, quitarAcentos(b.pedido_id) || null);
+  await asociarPedidoId(db, id, quitarAcentos(b.pedido_id) || null, b.estatus_factura || null);
 
   res.status(201).json(await db.prepare(`${SELECT_FACTURACION} WHERE f.id_facturacion = ?`).get(info.lastInsertRowid));
 }));
@@ -4947,7 +4957,9 @@ app.put('/api/facturacion/:idFacturacion', requirePermiso('facturacion', 'editar
     campo('cantidad_vendida', numeroOpcional), campo('precio_venta', numeroOpcional), campo('ingresos', numeroOpcional),
     req.params.idFacturacion
   );
-  if (b.pedido_id !== undefined) await asociarPedidoId(db, id, quitarAcentos(b.pedido_id) || null);
+  if (b.pedido_id !== undefined || b.estatus_factura !== undefined) {
+    await asociarPedidoId(db, id, quitarAcentos(b.pedido_id) || null, b.estatus_factura || null);
+  }
 
   res.json(await db.prepare(`${SELECT_FACTURACION} WHERE f.id_facturacion = ?`).get(req.params.idFacturacion));
 }));

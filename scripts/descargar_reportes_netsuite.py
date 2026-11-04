@@ -14,16 +14,23 @@ y descargar los reportes en Excel hacia '/Users/ramonvillanueva/Downloads/descar
      Rango de fechas: 1 de enero del año en curso hasta hoy (a diferencia de los reportes 2 y 3,
      que usan un "desde" fijo).
 
+Además, --comprometido consulta "Comprometido" (cantidad comprometida de inventario) de UNA
+orden puntual: ese dato no viene en ningún reporte masivo, solo en el registro individual de la
+orden (salesord.nl?id=<ID interno>). Usa un cache local (scripts/.netsuite_ids_orden.json,
+poblado durante el paso 1) para traducir "SO1234" al ID interno que requiere esa URL.
+
 Uso:
   python3 scripts/descargar_reportes_netsuite.py --paso 1
   python3 scripts/descargar_reportes_netsuite.py --paso 2
   python3 scripts/descargar_reportes_netsuite.py --paso 3
   python3 scripts/descargar_reportes_netsuite.py --paso 4
   python3 scripts/descargar_reportes_netsuite.py --todos --subir
+  python3 scripts/descargar_reportes_netsuite.py --comprometido SO7808
 """
 
 import argparse
 import getpass
+import json
 import os
 import subprocess
 import sys
@@ -35,6 +42,7 @@ from playwright.sync_api import sync_playwright
 BASE_DIR = Path(__file__).resolve().parent.parent
 SESSION_DIR = BASE_DIR / ".netsuite_session"
 CARPETA_DESCARGAS = Path("/Users/ramonvillanueva/Downloads/descargas netsuite")
+CACHE_IDS_ORDEN = BASE_DIR / "scripts" / ".netsuite_ids_orden.json"
 
 ACCOUNT_ID = "8223897"
 LOGIN_URL = "https://system.netsuite.com/pages/customerlogin.jsp"
@@ -203,6 +211,142 @@ def asegurar_login(page, target_url: str):
         time.sleep(2)
 
 
+def actualizar_cache_ids_orden(page):
+    """
+    "Comprometido" (y cualquier otro dato que solo viva en el registro individual de una orden,
+    no en un reporte masivo) requiere abrir salesord.nl?id=<ID_INTERNO>&whence= - pero NetSuite
+    identifica las ordenes por ese ID interno, no por el numero "SO1234" que usamos en el CRM.
+    Esta funcion extrae ese mapeo (SO1234 -> ID interno) de los links de la lista de "Vista
+    predeterminada Transaccion" (ya se visita en el paso 1) y lo guarda en CACHE_IDS_ORDEN para
+    poder construir esa URL despues sin tener que buscar la orden a mano cada vez.
+    """
+    try:
+        pares = page.evaluate("""() => {
+            const resultado = [];
+            const enlaces = Array.from(document.querySelectorAll("a[href*='salesord.nl']"));
+            for (const a of enlaces) {
+                const texto = (a.innerText || '').trim();
+                const m = a.href.match(/[?&]id=(\\d+)/);
+                if (texto && /^SO\\d+$/i.test(texto) && m) {
+                    resultado.push([texto.toUpperCase(), m[1]]);
+                }
+            }
+            return resultado;
+        }""")
+    except Exception as e:
+        print(f"   (Aviso: no se pudo leer el mapeo de IDs de orden: {e})")
+        return
+
+    if not pares:
+        print("   (Aviso: no se encontraron links de orden en esta lista para actualizar el cache de IDs)")
+        return
+
+    cache = {}
+    if CACHE_IDS_ORDEN.exists():
+        try:
+            cache = json.loads(CACHE_IDS_ORDEN.read_text(encoding="utf-8"))
+        except Exception:
+            cache = {}
+
+    for numero_so, id_interno in pares:
+        cache[numero_so] = id_interno
+
+    CACHE_IDS_ORDEN.write_text(json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"-> Cache de IDs de orden actualizado: {len(pares)} orden(es) en esta página, {len(cache)} en total.")
+
+
+def consultar_comprometido(page, numero_so: str) -> list:
+    """
+    Abre el registro individual de una orden (salesord.nl?id=...) y lee, de la pestaña
+    "Artículos", la cantidad "Comprometido" por línea de artículo. A diferencia de los otros
+    reportes (masivos, uno por todas las órdenes), esto es una consulta por-orden bajo demanda:
+    "Comprometido" no viene en ningún reporte exportable, solo en el registro individual.
+    """
+    numero_so = numero_so.strip().upper()
+
+    cache = {}
+    if CACHE_IDS_ORDEN.exists():
+        try:
+            cache = json.loads(CACHE_IDS_ORDEN.read_text(encoding="utf-8"))
+        except Exception:
+            cache = {}
+
+    id_interno = cache.get(numero_so)
+    if not id_interno:
+        print(f"-> {numero_so} no está en el cache de IDs; actualizando desde 'Vista predeterminada Transacción'...")
+        asegurar_login(page, URL_REPORTE_1)
+        try:
+            page.wait_for_load_state("networkidle", timeout=30000)
+        except Exception:
+            pass
+        time.sleep(2)
+        actualizar_cache_ids_orden(page)
+        cache = json.loads(CACHE_IDS_ORDEN.read_text(encoding="utf-8")) if CACHE_IDS_ORDEN.exists() else {}
+        id_interno = cache.get(numero_so)
+
+    if not id_interno:
+        raise RuntimeError(
+            f"No se encontró el ID interno de {numero_so} en la lista de Órdenes. "
+            "Verifica que el número sea correcto y que la orden aparezca en 'Vista predeterminada Transacción'."
+        )
+
+    url_orden = f"https://{APP_HOST}/app/accounting/transactions/salesord.nl?id={id_interno}&whence="
+    print(f"-> Abriendo {numero_so} (ID interno {id_interno}): {url_orden}")
+    asegurar_login(page, url_orden)
+    try:
+        page.wait_for_load_state("networkidle", timeout=30000)
+    except Exception:
+        pass
+    time.sleep(2)
+
+    # La sub-pestaña "Artículos" suele estar activa por default al abrir la orden; su tabla trae
+    # columnas Artículo/Comprometido/Empaquetando/Recolectado/Completado (confirmado por captura).
+    filas = page.evaluate("""() => {
+        const filas = [];
+        const tablas = Array.from(document.querySelectorAll('table'));
+        for (const tabla of tablas) {
+            const encabezados = Array.from(tabla.querySelectorAll('th, td'))
+                .slice(0, 12)
+                .map(c => (c.innerText || '').trim().toLowerCase());
+            if (!encabezados.some(h => h.includes('comprometido'))) continue;
+
+            const colComprometido = encabezados.findIndex(h => h.includes('comprometido'));
+            const colArticulo = encabezados.findIndex(h => h.includes('art') && h.includes('culo'));
+            const filasTabla = Array.from(tabla.querySelectorAll('tr'));
+            for (const tr of filasTabla) {
+                const celdas = Array.from(tr.querySelectorAll('td')).map(td => (td.innerText || '').trim());
+                if (!celdas.length || colComprometido >= celdas.length) continue;
+                const articulo = colArticulo >= 0 ? celdas[colArticulo] : '';
+                const comprometido = celdas[colComprometido];
+                if (articulo && comprometido !== '' && !isNaN(Number(comprometido))) {
+                    filas.push({ articulo, comprometido: Number(comprometido) });
+                }
+            }
+            if (filas.length) break;
+        }
+        return filas;
+    }""")
+
+    if not filas:
+        info = page.evaluate("""() => {
+            return Array.from(document.querySelectorAll('th, td'))
+                .map(el => (el.innerText || '').trim())
+                .filter(Boolean)
+                .slice(0, 40);
+        }""")
+        print("-> No se encontró una tabla con columna 'Comprometido'. Texto de celdas visibles (diagnóstico):")
+        print("  ", info)
+        raise RuntimeError(
+            f"No se pudo leer 'Comprometido' de {numero_so}. Revisa que la pestaña 'Artículos' esté visible "
+            "(ver diagnóstico arriba) — puede que haya que ajustar el selector."
+        )
+
+    print(f"✅ Comprometido de {numero_so}:")
+    for f in filas:
+        print(f"   {f['articulo']}: {f['comprometido']}")
+    return filas
+
+
 def descargar_reporte_1_ordenes(page) -> Path:
     """
     Paso 1: Vista predeterminada Transacción (Órdenes de venta)
@@ -216,6 +360,8 @@ def descargar_reporte_1_ordenes(page) -> Path:
     time.sleep(2)
 
     print(f"-> Página cargada: {page.title()} ({page.url})")
+
+    actualizar_cache_ids_orden(page)
 
     selectores_excel = [
         "[data-button-code='exportxls']",
@@ -391,13 +537,14 @@ def main():
     parser = argparse.ArgumentParser(description="Agente de descarga de reportes NetSuite")
     parser.add_argument("--paso", type=int, choices=[1, 2, 3, 4], help="Ejecutar solo el paso 1, 2, 3 o 4")
     parser.add_argument("--todos", action="store_true", help="Descargar los 4 reportes en secuencia")
+    parser.add_argument("--comprometido", type=str, metavar="SO1234", help="Consultar 'Comprometido' de una sola orden (no descarga reportes)")
     parser.add_argument("--subir", action="store_true", help="Subir al CRM al terminar usando subir_ordenes_netsuite.js")
     parser.add_argument("--password", type=str, help="Actualizar y usar nueva contraseña de NetSuite")
     parser.add_argument("--preguntar-password", action="store_true", help="Preguntar interactivamente si cambió la contraseña")
     parser.add_argument("--headless", action="store_true", help="Ejecutar sin ventana visible")
     args = parser.parse_args()
 
-    if not args.paso and not args.todos:
+    if not args.paso and not args.todos and not args.comprometido:
         args.paso = 1
 
     cargar_env()
@@ -428,6 +575,10 @@ def main():
         page = context.pages[0] if context.pages else context.new_page()
 
         try:
+            if args.comprometido:
+                consultar_comprometido(page, args.comprometido)
+                return
+
             if args.paso == 1 or args.todos:
                 descargar_reporte_1_ordenes(page)
 

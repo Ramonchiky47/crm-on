@@ -8,3 +8,4 @@ npm-debug.log*
 .env*
 Reporte_NetSuite_Gonpal.xlsx
 .netsuite_session/
+scripts/.netsuite_ids_orden.json

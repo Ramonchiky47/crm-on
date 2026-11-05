@@ -760,19 +760,29 @@ def main():
                 descargar_reporte_1_ordenes(page)
 
             if args.paso == 2 or args.todos:
+                # Fijo en 2026: a diferencia de Facturacion (paso 3), esta carga ACUMULA filas en
+                # vez de reemplazar (detalle_de_compra no hace TRUNCATE), asi que ampliar el rango
+                # aqui reimportaria todo el historial 2025 en cada sincronizacion y multiplicaria
+                # el problema conocido de filas duplicadas. No tocar sin resolver eso primero.
                 descargar_reporte_runner(
                     page,
                     num_paso=2,
                     titulo="Detalle de órdenes de venta por artículo (cr=33)",
                     url=URL_REPORTE_2,
+                    desde="01/01/2026",
                 )
 
             if args.paso == 3 or args.todos:
+                # Desde 2025 (no solo 2026): Facturacion SI reemplaza la tabla completa en cada
+                # carga (TRUNCATE + insert, ver procesarRegistrosFacturacion en server.js), asi
+                # que ampliar el rango es seguro y es lo que permite comparar venta vs. el año
+                # anterior en Resultados.
                 descargar_reporte_runner(
                     page,
                     num_paso=3,
                     titulo="Detalle de ventas por artículo (cr=268)",
                     url=URL_REPORTE_3,
+                    desde="01/01/2025",
                 )
 
             if args.paso == 4 or args.todos:

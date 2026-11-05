@@ -6,7 +6,6 @@ const campos = {
   nombre: document.getElementById('nombre'),
   numero_oc: document.getElementById('numero_oc'),
   fecha_autorizacion: document.getElementById('fecha_autorizacion'),
-  estatus_id: document.getElementById('estatus_id'),
   moneda: document.getElementById('moneda'),
   importe_moneda_extranjera: document.getElementById('importe_moneda_extranjera'),
   importe: document.getElementById('importe'),
@@ -784,10 +783,9 @@ campos.contacto_id.addEventListener('change', filtrarDestinosPorContacto);
 campos.destino_id.addEventListener('change', filtrarContactosPorDestino);
 
 async function cargarCatalogos() {
-  const [destinos, contactos, estatusLista, estadosEntrega] = await Promise.all([
+  const [destinos, contactos, estadosEntrega] = await Promise.all([
     fetch('/api/destinos').then((r) => r.json()),
     fetch('/api/contactos').then((r) => r.json()),
-    fetch('/api/estatus').then((r) => r.json()),
     fetch('/api/estados-entrega').then((r) => r.json()),
   ]);
 
@@ -797,7 +795,6 @@ async function cargarCatalogos() {
 
   poblarSelect(campos.destino_id, destinos, 'id_destino', 'destino');
   poblarSelect(campos.contacto_id, contactos, 'id_contacto', 'nombre_completo_correo');
-  poblarSelect(campos.estatus_id, estatusLista, 'id_estatus', 'estatus');
   poblarSelect(campos.estado_entrega_id, estadosEntrega, 'id_estado_entrega', 'estado_entrega');
 }
 
@@ -940,7 +937,6 @@ function renderizar(ordenes) {
       <td><input type="checkbox" class="check-orden" value="${escaparHtml(o.id)}" ${ordenesSeleccionadas.has(o.id) ? 'checked' : ''} /></td>
       <td>${escaparHtml(o.id)}</td>
       <td>${escaparHtml(o.fecha || '')}</td>
-      <td>${escaparHtml(o.estatus_nombre || '')}</td>
       <td>${escaparHtml(o.estatus_sistema || '')}</td>
       <td>${formatoImporte(o.importe)}</td>
       <td>${escaparHtml(o.destino_nombre || '')}</td>
@@ -990,7 +986,6 @@ form.addEventListener('submit', async (e) => {
     nombre: campos.nombre.value.trim(),
     numero_oc: campos.numero_oc.value.trim(),
     fecha_autorizacion: campos.fecha_autorizacion.value,
-    estatus_id: campos.estatus_id.value,
     moneda: campos.moneda.value,
     importe_moneda_extranjera: campos.importe_moneda_extranjera.value,
     importe: campos.importe.value,
@@ -1169,7 +1164,6 @@ function cargarOrdenEnFormulario(o) {
   campos.nombre.value = o.nombre || '';
   campos.numero_oc.value = o.numero_oc || '';
   campos.fecha_autorizacion.value = o.fecha_autorizacion || '';
-  campos.estatus_id.value = o.estatus_id ?? '';
   campos.moneda.value = o.moneda ?? '';
   campos.importe_moneda_extranjera.value = o.importe_moneda_extranjera ?? '';
   campos.importe.value = o.importe ?? '';

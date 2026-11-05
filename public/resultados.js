@@ -192,6 +192,60 @@ function pintarComparativaAnual(prefijo, datos, anioAnterior) {
   elNota.textContent = `$${formatoImporte(datos.ventaAnioAnterior)} en ${anioAnterior}`;
 }
 
+// "Presupuesto del año": a diferencia de "Acumulado del año" (que compara contra el presupuesto
+// de Enero-"hasta" nada mas), esta compara el acumulado contra el presupuesto de los 12 meses
+// completos, y de ahi calcula cuanto falta y cuanto habria que vender en promedio cada mes que
+// queda para cubrirlo. Si ya se supero el presupuesto anual, se muestra como excedente (en vez
+// de "falta") y la venta mensual necesaria baja a $0.00: ya no hace falta nada.
+function pintarPresupuestoAnual(datos) {
+  document.getElementById('anual-periodo').textContent = `Avance al cierre de ${nombreMes(datos.hasta)} ${datos.anio}`;
+
+  const elPorcentaje = document.getElementById('anual-porcentaje');
+  const elAcumulado = document.getElementById('anual-acumulado');
+  const elNotaPresupuesto = document.getElementById('anual-presupuesto-nota');
+  const elRestanteEtiqueta = document.getElementById('anual-restante-etiqueta');
+  const elRestante = document.getElementById('anual-restante');
+  const elMensual = document.getElementById('anual-mensual-necesaria');
+  const elMensualNota = document.getElementById('anual-mensual-nota');
+
+  elAcumulado.textContent = `$${formatoImporte(datos.acumulado)}`;
+
+  if (datos.presupuestoTotal === null) {
+    elPorcentaje.textContent = 'Sin presupuesto';
+    elPorcentaje.className = 'hero-venta__cifra pista';
+    elNotaPresupuesto.textContent = 'No hay presupuesto capturado para este año.';
+    elRestanteEtiqueta.textContent = 'Falta para cumplir';
+    elRestante.textContent = '';
+    elMensual.textContent = '';
+    elMensualNota.textContent = '';
+    return;
+  }
+
+  const cumplido = datos.cumplido;
+  elPorcentaje.textContent = `${formatoImporte(datos.porcentaje)}%`;
+  elPorcentaje.className = `hero-venta__cifra ${cumplido ? 'texto-bueno' : ''}`;
+  elNotaPresupuesto.textContent = `de $${formatoImporte(datos.presupuestoTotal)} presupuestados en el año`;
+
+  elRestanteEtiqueta.textContent = cumplido ? 'Excedente sobre el presupuesto' : 'Falta para cumplir';
+  elRestante.textContent = `$${formatoImporte(Math.abs(datos.restante))}`;
+  elRestante.className = `hero-comparativa__valor ${cumplido ? 'texto-bueno' : 'texto-critico'}`;
+
+  if (cumplido) {
+    elMensual.textContent = '$0.00';
+    elMensual.className = 'hero-comparativa__valor texto-bueno';
+    elMensualNota.textContent = 'El presupuesto del año ya se cumplió.';
+  } else if (datos.mesesRestantes <= 0) {
+    elMensual.textContent = 'No alcanzable';
+    elMensual.className = 'hero-comparativa__valor texto-critico';
+    elMensualNota.textContent = 'No quedan meses en el año para alcanzarlo.';
+  } else {
+    elMensual.textContent = `$${formatoImporte(datos.ventaMensualNecesaria)}`;
+    elMensual.className = 'hero-comparativa__valor';
+    const mesesNombres = MESES_CORTOS.slice(12 - datos.mesesRestantes).join('-');
+    elMensualNota.textContent = `promedio en ${mesesNombres} (${datos.mesesRestantes} mes${datos.mesesRestantes === 1 ? '' : 'es'}) para cerrar el año en el presupuesto`;
+  }
+}
+
 function pintarGrupo(prefijo, datos, anioAnterior) {
   document.getElementById(`${prefijo}-venta`).textContent = `$${formatoImporte(datos.venta)}`;
   pintarComparativaPresupuesto(prefijo, datos);
@@ -234,6 +288,9 @@ async function cargarResultados() {
   if (d.ytd) {
     document.getElementById('ytd-periodo').textContent = `Enero - ${nombreMes(d.ytd.hasta)} ${d.ytd.anio}`;
     pintarGrupo('ytd', d.ytd, Number(d.ytd.anio) - 1);
+  }
+  if (d.presupuestoAnual) {
+    pintarPresupuestoAnual(d.presupuestoAnual);
   }
   if (d.mesSeleccionado) {
     const [anio, mes] = d.mesSeleccionado.anioMes.split('-');

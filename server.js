@@ -5815,6 +5815,29 @@ app.get('/api/resultados/resumen', ar(async (req, res) => {
       cambioAnual: cambioAnual(ventaYtdNum, ventaYtdAnioAnteriorNum),
     };
 
+    // Avance contra el presupuesto de los 12 meses del año (no solo Enero-"hasta" como en
+    // resultado.ytd.presupuesto/alcance): cuanto se lleva acumulado, cuanto falta para cubrir
+    // TODO el presupuesto anual y cuanto habria que vender en promedio cada uno de los meses que
+    // quedan para alcanzarlo. Si ya se acumulo mas que el presupuesto completo, "restante" sale
+    // negativo y ventaMensualNecesaria se deja en 0 (ya no falta nada, no un numero negativo).
+    const presupuestoAnioCompleto = await db.prepare('SELECT COALESCE(SUM(monto), 0) p FROM presupuesto_ventas WHERE anio_mes LIKE ?').get(`${anio}-%`);
+    const presupuestoAnioCompletoNum = Number(presupuestoAnioCompleto.p);
+    const mesesRestantes = 12 - Number(mes);
+    const restanteAnual = presupuestoAnioCompletoNum - ventaYtdNum;
+    resultado.presupuestoAnual = {
+      anio,
+      hasta: mes,
+      presupuestoTotal: presupuestoAnioCompletoNum || null,
+      acumulado: ventaYtdNum,
+      restante: presupuestoAnioCompletoNum ? restanteAnual : null,
+      porcentaje: presupuestoAnioCompletoNum ? (ventaYtdNum / presupuestoAnioCompletoNum) * 100 : null,
+      mesesRestantes,
+      ventaMensualNecesaria: presupuestoAnioCompletoNum
+        ? (mesesRestantes > 0 ? Math.max(restanteAnual, 0) / mesesRestantes : null)
+        : null,
+      cumplido: presupuestoAnioCompletoNum ? restanteAnual <= 0 : null,
+    };
+
     const ventaMes = await db.prepare('SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion WHERE fecha LIKE ?').get(`${anioMes}-%`);
     const presupuestoMes = await db.prepare('SELECT monto FROM presupuesto_ventas WHERE anio_mes = ?').get(anioMes);
     const ventaMesAnioAnterior = await db.prepare('SELECT COALESCE(SUM(ingresos), 0) v FROM facturacion WHERE fecha LIKE ?').get(`${anioMesAnterior}-%`);

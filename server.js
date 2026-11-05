@@ -4559,7 +4559,8 @@ app.get('/api/reportes/articulos', requirePermiso('ordenes', 'ver'), ar(async (r
       dv.articulo,
       SUM(dv.cantidad_vendida) AS cantidad_total,
       SUM(dv.importe) AS importe_total,
-      COUNT(DISTINCT dv.id) AS num_ordenes
+      COUNT(DISTINCT dv.id) AS num_ordenes,
+      STRING_AGG(DISTINCT dv.id, ', ' ORDER BY dv.id) AS pedidos
     FROM detalle_vigente dv
     JOIN ordenes o ON o.id = dv.id
     LEFT JOIN destinos d ON d.id_destino = o.destino_id

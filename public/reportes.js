@@ -269,10 +269,15 @@ function renderizar(filas) {
     cantidadTotal += f.cantidad_total || 0;
     importeTotal += f.importe_total || 0;
 
+    const pedidosHtml = (f.pedidos || '').split(',').map((id) => id.trim()).filter(Boolean)
+      .map((id) => `<a href="ordenes.html?orden=${encodeURIComponent(id)}">${escaparHtml(id)}</a>`)
+      .join(', ');
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${escaparHtml(f.hotel || '(sin hotel/local)')}</td>
       <td>${escaparHtml(f.articulo)}</td>
+      <td>${pedidosHtml}</td>
       <td>${f.cantidad_total ?? ''}</td>
       <td>${formatoImporte(f.importe_total)}</td>
       <td><button type="button" class="btn-ordenes-combo" data-hotel="${escaparHtml(f.hotel || '')}" data-articulo="${escaparHtml(f.articulo)}">${f.num_ordenes}</button></td>

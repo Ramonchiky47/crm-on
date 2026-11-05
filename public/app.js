@@ -29,20 +29,34 @@ const buscar = document.getElementById('buscar');
 const filtroEstatusBtn = document.getElementById('filtro-estatus-btn');
 const filtroEstatusPanel = document.getElementById('filtro-estatus-panel');
 const chipsEstatus = document.getElementById('chips-estatus-ordenes');
-const estatusSeleccionados = new Set();
+let estatusSeleccionados = new Set();
 let todosLosEstatusIds = new Set();
-let idEstatusCancelado = null;
 let catalogoEstatusChips = [];
-// Sentinela para agrupar ordenes sin estatus asignado (estatus_id NULL) como una opcion mas del
+// true despues del primer armado del catalogo (con al menos un valor real): a partir de ahi ya
+// no se reinicia la seleccion a "todos" en cada recarga, para no perder lo que el usuario ya
+// eligio con cada guardado/edicion (que tambien recargan la lista via cargarOrdenes()).
+let estatusFiltroInicializado = false;
+// Mientras esto este activo, la tabla muestra SOLO lo oculto por defecto (ver
+// ordenEsOcultaPorDefecto) y el filtro normal de estatus/chips queda en pausa.
+let mostrarOcultas = false;
+// Sentinela para agrupar ordenes sin Estatus del sistema (estatus_sistema vacio: ordenes
+// capturadas a mano que todavia no se han sincronizado con NetSuite) como una opcion mas del
 // filtro/chips, en vez de que desaparezcan silenciosamente de la lista.
 const ID_ESTATUS_VACIO = '__vacio__';
 function idEstatusDe(o) {
-  return o.estatus_id === null || o.estatus_id === undefined ? ID_ESTATUS_VACIO : String(o.estatus_id);
+  return o.estatus_sistema || ID_ESTATUS_VACIO;
+}
+// Cerrada/Cancelada en NetSuite y sin ninguna factura asociada: son ordenes muertas (nunca se
+// van a facturar) que solo ensucian el reporte del dia a dia. Se ocultan del reporte por
+// default; el chip "Cerradas/Canceladas sin factura" las trae de vuelta bajo demanda.
+function ordenEsOcultaPorDefecto(o) {
+  return (o.estatus_sistema === 'Cerrada' || o.estatus_sistema === 'Cancelada') && !o.tiene_facturas;
 }
 const filtroAnio = document.getElementById('filtro-anio');
 const filtroMesOrdenes = document.getElementById('filtro-mes-ordenes');
 const filtroSinFactura = document.getElementById('filtro-sin-factura');
 const chipPendientesFacturar = document.getElementById('chip-pendientes-facturar');
+const chipOcultas = document.getElementById('chip-cerradas-canceladas-sin-factura');
 const checkTodosOrdenes = document.getElementById('check-todos-ordenes');
 const btnEnviarTareasOrdenes = document.getElementById('btn-enviar-tareas-ordenes');
 const ordenesSeleccionadas = new Set();
@@ -90,13 +104,13 @@ function campoOrden(etiqueta, valor, { vacioTexto = 'Sin capturar' } = {}) {
   </div>`;
 }
 
-// Chip de estatus: verde para Facturada, rojo para Cancelado (mismo criterio que ya usan las
-// filas de la tabla), gris neutro para cualquier otro estatus capturado libremente.
+// Chip de Estatus del sistema: verde para Facturada, rojo para Cancelada (mismo criterio que ya
+// usan las filas de la tabla), gris neutro para cualquier otro valor que traiga NetSuite.
 function pillEstatusOrden(nombre) {
   if (!nombre) return '';
   let clase = 'pill-neutro';
-  if (nombre === '2.-Facturada') clase = 'estatus-vigente';
-  else if (nombre === 'Cancelado') clase = 'estatus-vencido';
+  if (nombre === 'Facturada') clase = 'estatus-vigente';
+  else if (nombre === 'Cancelada') clase = 'estatus-vencido';
   return `<span class="pill-estatus ${clase}">${escaparHtml(nombre)}</span>`;
 }
 
@@ -144,7 +158,7 @@ async function abrirDetalle(id) {
     <div class="detalle-orden">
     <p class="eyebrow-cot">Orden de venta</p>
     <h2>${escaparHtml(orden.id)}</h2>
-    ${pillEstatusOrden(orden.estatus_nombre)}
+    ${pillEstatusOrden(orden.estatus_sistema)}
 
     <div class="barra-acciones-cot">
       <div class="grupo-acciones-cot">
@@ -461,10 +475,36 @@ function comparar(va, vb) {
 }
 
 function ordenarYRenderizar() {
-  let filtrada = filtroMesOrdenes.value
+  const baseMes = filtroMesOrdenes.value
     ? ultimaListaOrdenes.filter((o) => (o.fecha || '').slice(5, 7) === filtroMesOrdenes.value)
     : ultimaListaOrdenes;
+
+  const ocultas = baseMes.filter(ordenEsOcultaPorDefecto);
+  const visibles = baseMes.filter((o) => !ordenEsOcultaPorDefecto(o));
+  actualizarChipOcultas(ocultas.length);
+
+  // "Mostrar ocultas" es una vista aparte, no otro valor mas del filtro de estatus: mientras esta
+  // activa se ve nada mas lo oculto (Cerrada/Cancelada sin factura) y el panel/chips de estatus se
+  // pausan, para no mezclar ni pisar la seleccion que el usuario tenga en la vista normal.
+  if (mostrarOcultas) {
+    chipsEstatus.innerHTML = '';
+    const lista = [...ocultas].sort((a, b) => {
+      const cmp = comparar(a[orden.campo], b[orden.campo]);
+      return orden.direccion === 'asc' ? cmp : -cmp;
+    });
+    renderizar(lista);
+    actualizarIndicadoresOrden();
+    actualizarChipPendientesFacturar();
+    actualizarTotalesOrdenes(lista);
+    return;
+  }
+
+  let filtrada = visibles;
   if (filtroSinFactura.checked) filtrada = filtrada.filter((o) => !o.tiene_facturas);
+
+  // El catalogo de estatus (chips + multi-select) se reconstruye siempre sobre lo VISIBLE (nunca
+  // sobre lo oculto): asi el chip "Cerradas/Canceladas sin factura" no se mezcla con el resto.
+  reconstruirOpcionesEstatus(visibles);
 
   // Los chips se calculan sobre lo que ya paso Mes/Sin factura pero ANTES del propio filtro de
   // estatus, para que muestren el conteo real de cada estatus (incluyendo los que dan 0) sin
@@ -509,14 +549,11 @@ function actualizarTotalesOrdenes(lista) {
     .join('<br>');
 }
 
-// "Pendientes de facturar" = no Cancelada + sin factura asociada; no es un estatus nuevo, es un
-// atajo de un clic sobre dos controles que ya existen (el checkbox "Solo sin factura" y el
-// estatus por default de "todos menos Cancelado"), asi que no duplica esa logica de filtrado.
+// "Pendientes de facturar" = sin factura asociada, viendo todos los estatus (ya no hace falta
+// excluir Cancelada a mano: Cancelada/Cerrada sin factura ya estan ocultas por defecto, ver
+// ordenEsOcultaPorDefecto); es un atajo de un clic sobre los controles que ya existen.
 function pendientesFacturarActivo() {
-  return filtroSinFactura.checked
-    && !!idEstatusCancelado
-    && !estatusSeleccionados.has(idEstatusCancelado)
-    && estatusSeleccionados.size === todosLosEstatusIds.size - 1;
+  return !mostrarOcultas && filtroSinFactura.checked && estatusSeleccionados.size === todosLosEstatusIds.size;
 }
 
 function actualizarChipPendientesFacturar() {
@@ -527,32 +564,43 @@ chipPendientesFacturar.addEventListener('click', () => {
   if (pendientesFacturarActivo()) {
     filtroSinFactura.checked = false;
   } else {
+    mostrarOcultas = false;
+    chipOcultas.classList.remove('chip-estatus-activo');
     filtroSinFactura.checked = true;
-    if (idEstatusCancelado) {
-      estatusSeleccionados.clear();
-      todosLosEstatusIds.forEach((id) => { if (id !== idEstatusCancelado) estatusSeleccionados.add(id); });
-      filtroEstatusPanel.querySelectorAll('input[type="checkbox"][value]').forEach((cb) => {
-        cb.checked = estatusSeleccionados.has(cb.value);
-      });
-      const todosCheckbox = document.getElementById('filtro-estatus-todos');
-      if (todosCheckbox) todosCheckbox.checked = estatusSeleccionados.size === todosLosEstatusIds.size;
-      actualizarBotonFiltroEstatus();
-    }
+    estatusSeleccionados = new Set(todosLosEstatusIds);
+    filtroEstatusPanel.querySelectorAll('input[type="checkbox"][value]').forEach((cb) => {
+      cb.checked = estatusSeleccionados.has(cb.value);
+    });
+    const todosCheckbox = document.getElementById('filtro-estatus-todos');
+    if (todosCheckbox) todosCheckbox.checked = true;
+    actualizarBotonFiltroEstatus();
   }
   ordenarYRenderizar();
 });
 
-// Franja de chips por estatus arriba de la tabla: uno por cada estatus del catalogo (Cancelado
-// nunca aparece), con su conteo -incluyendo "(0)" si no tiene ordenes en el filtro actual- y
-// resaltado si esta activo. Comparte estado (estatusSeleccionados) con el multi-select de
-// estatus; clic en un chip prende/apaga ese estatus igual que su checkbox correspondiente.
+function actualizarChipOcultas(n) {
+  const el = document.getElementById('chip-cerradas-canceladas-conteo');
+  if (el) el.textContent = `(${n})`;
+}
+
+chipOcultas.addEventListener('click', () => {
+  mostrarOcultas = !mostrarOcultas;
+  chipOcultas.classList.toggle('chip-estatus-activo', mostrarOcultas);
+  ordenarYRenderizar();
+});
+
+// Franja de chips por Estatus del sistema arriba de la tabla: uno por cada valor real que traiga
+// NetSuite entre lo visible (ver ordenEsOcultaPorDefecto/reconstruirOpcionesEstatus), con su
+// conteo -incluyendo "(0)" si no tiene ordenes en el filtro actual- y resaltado si esta activo.
+// Comparte estado (estatusSeleccionados) con el multi-select de estatus; clic en un chip
+// prende/apaga ese estatus igual que su checkbox correspondiente.
 function renderizarChipsEstatus(baseLista) {
   chipsEstatus.innerHTML = catalogoEstatusChips.map((e) => {
     const id = String(e.id_estatus);
     const conteo = baseLista.filter((o) => idEstatusDe(o) === id).length;
     const activo = !estatusSeleccionados.size || estatusSeleccionados.has(id);
     return `
-      <button type="button" class="chip-estatus${activo ? ' chip-estatus-activo' : ''}" data-id="${id}">
+      <button type="button" class="chip-estatus${activo ? ' chip-estatus-activo' : ''}" data-id="${escaparHtml(id)}">
         ${escaparHtml(e.estatus)} <span class="chip-estatus-conteo">(${conteo})</span>
       </button>
     `;
@@ -798,45 +846,43 @@ async function cargarCatalogos() {
   poblarSelect(campos.estado_entrega_id, estadosEntrega, 'id_estado_entrega', 'estado_entrega');
 }
 
-async function cargarFiltroEstatus() {
-  const res = await fetch('/api/estatus');
-  const lista = (await res.json()).filter((e) => e.estatus);
+// Catalogo del filtro de estatus: a diferencia del viejo (tabla estatus_catalogo, capturada a
+// mano), Estatus del sistema no tiene catalogo propio - es texto que llega de NetSuite en cada
+// sincronizacion - asi que el catalogo se arma con los valores que de verdad aparecen en "pool"
+// (lo visible, ya sin Cerrada/Cancelada sin factura; ver ordenarYRenderizar). Se reconstruye en
+// cada render para no perderse un valor nuevo que aparezca, pero la SELECCION del usuario
+// (estatusSeleccionados) solo se reinicia a "todos" la primera vez: despues se respeta, aunque la
+// lista se recargue por un guardado/edicion.
+function reconstruirOpcionesEstatus(pool) {
+  const valoresPresentes = new Set(pool.map(idEstatusDe));
+  const reales = [...valoresPresentes].filter((v) => v !== ID_ESTATUS_VACIO).sort((a, b) => a.localeCompare(b, 'es'));
+  if (valoresPresentes.has(ID_ESTATUS_VACIO)) reales.push(ID_ESTATUS_VACIO);
 
-  if (!lista.length) {
-    filtroEstatusPanel.innerHTML = '<p class="pista">No hay estatus capturados.</p>';
-    return;
+  catalogoEstatusChips = reales.map((v) => ({ id_estatus: v, estatus: v === ID_ESTATUS_VACIO ? 'Vacías' : v }));
+  todosLosEstatusIds = new Set(reales);
+
+  if (!estatusFiltroInicializado && reales.length) {
+    estatusSeleccionados = new Set(reales);
+    estatusFiltroInicializado = true;
   }
 
-  // "Vacías" agrupa las ordenes sin estatus_id (huecos que dejan cargas de NetSuite u ordenes
-  // capturadas a mano sin ese dato); se agrega al final, fuera del catalogo real.
-  lista.push({ id_estatus: ID_ESTATUS_VACIO, estatus: 'Vacías' });
-
-  todosLosEstatusIds = new Set(lista.map((e) => String(e.id_estatus)));
-  const cancelado = lista.find((e) => e.estatus === 'Cancelado');
-  idEstatusCancelado = cancelado ? String(cancelado.id_estatus) : null;
-  catalogoEstatusChips = lista.filter((e) => e.estatus !== 'Cancelado');
-
-  // Por default se ocultan las ordenes Canceladas (rara vez interesan en el dia a dia); se
-  // puede reactivar desde este mismo filtro si se necesitan ver.
-  estatusSeleccionados.clear();
-  todosLosEstatusIds.forEach((id) => {
-    if (id !== idEstatusCancelado) estatusSeleccionados.add(id);
-  });
+  if (!reales.length) {
+    filtroEstatusPanel.innerHTML = '<p class="pista">No hay órdenes para mostrar.</p>';
+    return;
+  }
 
   filtroEstatusPanel.innerHTML = `
     <label class="multi-select-opcion multi-select-todos">
       <input type="checkbox" id="filtro-estatus-todos" /><span class="multi-select-texto">Seleccionar todos</span>
     </label>
-  ` + lista.map((e) => `
+  ` + catalogoEstatusChips.map((e) => `
     <label class="multi-select-opcion">
-      <input type="checkbox" value="${e.id_estatus}" ${estatusSeleccionados.has(String(e.id_estatus)) ? 'checked' : ''} /><span class="multi-select-texto">${escaparHtml(e.estatus)}</span>
+      <input type="checkbox" value="${escaparHtml(e.id_estatus)}" ${estatusSeleccionados.has(e.id_estatus) ? 'checked' : ''} /><span class="multi-select-texto">${escaparHtml(e.estatus)}</span>
     </label>
   `).join('');
 
   document.getElementById('filtro-estatus-todos').checked = estatusSeleccionados.size === todosLosEstatusIds.size;
-
   actualizarBotonFiltroEstatus();
-  cargarOrdenes();
 }
 
 // Filtro de Año: por default solo se ve el año en curso (la mayoria de las consultas del dia a
@@ -869,12 +915,6 @@ filtroSinFactura.addEventListener('change', ordenarYRenderizar);
 function actualizarBotonFiltroEstatus() {
   if (!estatusSeleccionados.size || estatusSeleccionados.size === todosLosEstatusIds.size) {
     filtroEstatusBtn.textContent = 'Todos los estatus';
-  } else if (
-    idEstatusCancelado
-    && estatusSeleccionados.size === todosLosEstatusIds.size - 1
-    && !estatusSeleccionados.has(idEstatusCancelado)
-  ) {
-    filtroEstatusBtn.textContent = 'Todos excepto Cancelado';
   } else {
     filtroEstatusBtn.textContent = `${estatusSeleccionados.size} estatus seleccionado(s)`;
   }
@@ -930,8 +970,8 @@ function renderizar(ordenes) {
   for (const o of ordenes) {
     const tr = document.createElement('tr');
     tr.dataset.id = o.id;
-    if (o.estatus_nombre === '2.-Facturada') tr.classList.add('fila-facturada');
-    else if (o.estatus_nombre === 'Cancelado') tr.classList.add('fila-cancelado');
+    if (o.estatus_sistema === 'Facturada') tr.classList.add('fila-facturada');
+    else if (o.estatus_sistema === 'Cancelada') tr.classList.add('fila-cancelado');
     if (o.tiene_tarea_activa) tr.classList.add('fila-en-tareas');
     tr.innerHTML = `
       <td><input type="checkbox" class="check-orden" value="${escaparHtml(o.id)}" ${ordenesSeleccionadas.has(o.id) ? 'checked' : ''} /></td>
@@ -1279,14 +1319,12 @@ promesaAuth.then((sesion) => {
     btnActualizarOrdenesNetsuite.hidden = true;
   }
 
-  // cargarFiltroEstatus() dispara su propio cargarOrdenes() al final (linea ~775); si corriera en
-  // paralelo con cargarFiltroAnio() podria ganarle la carrera y pedir /api/ordenes ANTES de que
-  // el select de Año tenga valor, trayendo todos los años en vez de solo el actual. Por eso se
-  // encadena despues, no en paralelo.
-  Promise.all([cargarCatalogos(), cargarFiltroAnio()]).then(() => {
-    cargarFiltroEstatus();
-    return cargarOrdenes();
-  }).then(() => {
+  // cargarOrdenes() no debe correr en paralelo con cargarFiltroAnio() porque podria ganarle la
+  // carrera y pedir /api/ordenes ANTES de que el select de Año tenga valor, trayendo todos los
+  // años en vez de solo el actual. El catalogo de estatus ya no se carga aparte (no tiene su
+  // propio endpoint: se arma dentro de cargarOrdenes/ordenarYRenderizar a partir de los valores
+  // reales de estatus_sistema que trae la lista).
+  Promise.all([cargarCatalogos(), cargarFiltroAnio()]).then(() => cargarOrdenes()).then(() => {
     // Se llego desde el detalle de un Contacto/Hotel-Local: abre directo esa orden.
     const ordenId = new URLSearchParams(window.location.search).get('orden');
     if (ordenId) abrirDetalle(ordenId);
@@ -1294,5 +1332,4 @@ promesaAuth.then((sesion) => {
 
   suscribirTiempoReal(['ordenes'], cargarOrdenes);
   suscribirTiempoReal(['destinos', 'contactos', 'estados_entrega'], cargarCatalogos);
-  suscribirTiempoReal(['estatus_catalogo'], () => { cargarCatalogos(); cargarFiltroEstatus(); });
 });

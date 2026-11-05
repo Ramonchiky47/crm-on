@@ -2459,6 +2459,21 @@ td.celda-check {
   color: #8a5a06;
 }
 
+/* Trae de vuelta lo que ordenEsOcultaPorDefecto esconde del reporte (Cerrada/Cancelada sin
+   factura, ver app.js): acento neutro/apagado, ni azul (estatus normal) ni ambar (Pendientes de
+   facturar), para leerse como "esto normalmente esta oculto", no como un filtro mas. */
+.chip-ocultas {
+  border-color: #9a9a9a;
+  color: #5c5c5c;
+  border-style: dashed;
+}
+.chip-ocultas.chip-estatus-activo {
+  background: #ececec;
+  border-color: #5c5c5c;
+  border-style: solid;
+  color: #333;
+}
+
 .chip-estatus-conteo { font-weight: 400; opacity: 0.7; }
 .chip-estatus.chip-estatus-activo .chip-estatus-conteo { opacity: 0.85; }
 
@@ -2712,6 +2727,8 @@ td.celda-check {
   .chip-estatus.chip-estatus-activo { background: #16283c; border-color: #3987e5; color: #8ec4fa; }
   .chip-pendientes-facturar { border-color: #7a5a1e; color: #e0a83f; }
   .chip-pendientes-facturar.chip-estatus-activo { background: #2e2410; border-color: #e0a83f; color: #f0c977; }
+  .chip-ocultas { border-color: #6b6b6b; color: #aaa; }
+  .chip-ocultas.chip-estatus-activo { background: #2e2e2e; border-color: #aaa; color: #eee; }
   .grupo-etapa-cot .etiqueta-etapa-cot,
   .detalle-cotizacion-info .tarjeta h3,
   .detalle-cotizacion .tarjeta h3,

@@ -1527,6 +1527,84 @@ th.num, td.num {
   font-size: 0.78rem;
 }
 
+/* Tablero tipo kanban (Datos -> Órdenes, agrupadas por Estatus del sistema): una columna por
+   estatus, mas pobladas primero, con scroll horizontal si no caben todas. */
+.tablero-kanban {
+  display: flex;
+  gap: 0.9rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  margin-top: 0.9rem;
+}
+.kanban-columna {
+  flex: 0 0 260px;
+  display: flex;
+  flex-direction: column;
+  background: var(--fondo-suave);
+  border-radius: 10px;
+  max-height: 70vh;
+}
+.kanban-columna__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  font-weight: 700;
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--borde);
+}
+.kanban-columna__conteo {
+  background: var(--borde);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.kanban-columna__lista {
+  overflow-y: auto;
+  padding: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.kanban-tarjeta {
+  display: block;
+  background: var(--fondo-modal);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.kanban-tarjeta:hover {
+  border-color: #1565c0;
+  transform: translateY(-1px);
+}
+.kanban-tarjeta__id {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.kanban-tarjeta__fecha {
+  font-size: 0.72rem;
+  color: #757575;
+  margin-top: 0.1rem;
+}
+.kanban-tarjeta__importe {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 0.35rem;
+}
+.kanban-tarjeta__hotel {
+  font-size: 0.76rem;
+  color: #757575;
+  margin-top: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dashboard-tile {
   border: 1px solid var(--borde);
   border-radius: 10px;

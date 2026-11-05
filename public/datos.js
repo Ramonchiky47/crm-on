@@ -9,31 +9,44 @@ function formatoImporte(valor) {
   return Number(valor).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Tablero kanban por Estatus del sistema (no tabla plana): cada columna es un estatus, con sus
+// tarjetas ordenadas por fecha mas reciente primero. Las columnas se ordenan por cuantas ordenes
+// traen (la mas poblada primero), para que lo mas relevante del dia a dia quede a la vista sin
+// tener que desplazar el tablero horizontalmente.
 async function cargarOrdenes() {
   const res = await fetch('/api/ordenes');
   const ordenes = await res.json();
   document.getElementById('conteo-ordenes').textContent = ordenes.length;
 
-  const tabla = document.getElementById('tabla-ordenes');
-  tabla.innerHTML = ordenes.map((o) => `
-    <tr>
-      <td>${escaparHtml(o.id)}</td>
-      <td>${escaparHtml(o.fecha || '')}</td>
-      <td>${escaparHtml(o.imprimir || '')}</td>
-      <td>${escaparHtml(o.nombre || '')}</td>
-      <td>${escaparHtml(o.numero_oc || '')}</td>
-      <td>${escaparHtml(o.estatus_sistema || '')}</td>
-      <td>${escaparHtml(o.numero_seguimiento || '')}</td>
-      <td>${escaparHtml(o.nota || '')}</td>
-      <td>${o.moneda ?? ''}</td>
-      <td>${formatoImporte(o.importe_moneda_extranjera)}</td>
-      <td>${formatoImporte(o.importe)}</td>
-      <td>${escaparHtml(o.estatus_nombre || '')}</td>
-      <td>${escaparHtml(o.observaciones || '')}</td>
-      <td>${escaparHtml(o.destino_nombre || '')}</td>
-      <td>${escaparHtml(o.contacto_nombre || '')}</td>
-      <td>${escaparHtml(o.estado_entrega_nombre || '')}</td>
-    </tr>
+  const grupos = new Map();
+  for (const o of ordenes) {
+    const clave = o.estatus_sistema || 'Sin estatus del sistema';
+    if (!grupos.has(clave)) grupos.set(clave, []);
+    grupos.get(clave).push(o);
+  }
+  for (const lista of grupos.values()) {
+    lista.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  }
+  const columnas = [...grupos.entries()].sort((a, b) => b[1].length - a[1].length);
+
+  const tablero = document.getElementById('tablero-ordenes');
+  tablero.innerHTML = columnas.map(([estatus, lista]) => `
+    <div class="kanban-columna">
+      <div class="kanban-columna__cabecera">
+        <span>${escaparHtml(estatus)}</span>
+        <span class="kanban-columna__conteo">${lista.length}</span>
+      </div>
+      <div class="kanban-columna__lista">
+        ${lista.map((o) => `
+          <a class="kanban-tarjeta" href="ordenes.html?orden=${encodeURIComponent(o.id)}">
+            <div class="kanban-tarjeta__id">${escaparHtml(o.id)}</div>
+            <div class="kanban-tarjeta__fecha">${escaparHtml(o.fecha || '')}</div>
+            <div class="kanban-tarjeta__importe">${o.importe !== null && o.importe !== undefined ? '$' + formatoImporte(o.importe) : ''}</div>
+            <div class="kanban-tarjeta__hotel">${escaparHtml(o.destino_nombre || '(sin hotel/local)')}</div>
+          </a>
+        `).join('')}
+      </div>
+    </div>
   `).join('');
 }
 
@@ -165,7 +178,7 @@ promesaAuth.then((sesion) => {
   const { permisos } = sesion;
 
   if (permisos.ordenes.ver) cargarOrdenes();
-  else document.getElementById('tabla-ordenes').closest('section').hidden = true;
+  else document.getElementById('tablero-ordenes').closest('section').hidden = true;
 
   if (permisos.detalle_compra.ver) cargarDetalle();
   else document.getElementById('tabla-detalle').closest('section').hidden = true;

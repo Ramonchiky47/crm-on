@@ -4521,6 +4521,9 @@ const CTE_DETALLE_VIGENTE = `
   )
 `;
 
+// Los reportes de esta seccion solo interesan a partir de 2026 (lo anterior ya no es operativo).
+const FECHA_DESDE_REPORTES = "o.fecha >= '2026-01-01'";
+
 app.get('/api/reportes/articulos', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
   const { estatus, articulo, hotel } = req.query;
 
@@ -4532,7 +4535,7 @@ app.get('/api/reportes/articulos', requirePermiso('ordenes', 'ver'), ar(async (r
     estatusIds = pendiente ? [String(pendiente.id_estatus)] : [];
   }
 
-  const condiciones = ['1=1'];
+  const condiciones = [FECHA_DESDE_REPORTES];
   const parametros = [];
 
   if (estatusIds.length) {
@@ -4581,7 +4584,7 @@ app.get('/api/reportes/ordenes', requirePermiso('ordenes', 'ver'), ar(async (req
     estatusIds = pendiente ? [String(pendiente.id_estatus)] : [];
   }
 
-  const condiciones = ['dv.articulo = ?'];
+  const condiciones = ['dv.articulo = ?', FECHA_DESDE_REPORTES];
   const parametros = [articulo];
 
   if (hotel) {
@@ -4636,6 +4639,7 @@ function condicionPendienteFacturar() {
       SELECT 1 FROM facturacion_pedido_id fp JOIN facturacion f ON f.id = fp.id WHERE fp.pedido_id = o.id
     )
     AND o.estatus_sistema NOT IN ('Cerrada', 'Cancelada')
+    AND ${FECHA_DESDE_REPORTES}
   `;
 }
 
@@ -4680,6 +4684,7 @@ app.get('/api/reportes/pendiente-entregar', requirePermiso('ordenes', 'ver'), ar
     FROM detalle_vigente dv
     JOIN ordenes o ON o.id = dv.id
     WHERE o.estatus_sistema IN (${ESTATUS_SISTEMA_PENDIENTE_ENTREGA.map(() => '?').join(',')})
+      AND ${FECHA_DESDE_REPORTES}
     GROUP BY dv.articulo
     ORDER BY importe_total DESC NULLS LAST
   `).all(...ESTATUS_SISTEMA_PENDIENTE_ENTREGA);
@@ -4700,6 +4705,7 @@ app.get('/api/reportes/pendiente-entregar/detalle', requirePermiso('ordenes', 'v
     LEFT JOIN destinos d ON d.id_destino = o.destino_id
     LEFT JOIN contactos c ON c.id_contacto = o.contacto_id
     WHERE dv.articulo = ? AND o.estatus_sistema IN (${ESTATUS_SISTEMA_PENDIENTE_ENTREGA.map(() => '?').join(',')})
+      AND ${FECHA_DESDE_REPORTES}
     ORDER BY o.fecha DESC
   `).all(articulo, ...ESTATUS_SISTEMA_PENDIENTE_ENTREGA);
   res.json(filas);

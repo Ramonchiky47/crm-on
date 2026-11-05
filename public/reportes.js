@@ -88,7 +88,7 @@ async function abrirDetallePendiente(clave, articulo) {
             <tr>
               <td>${escaparHtml(f.hotel || '(sin hotel/local)')}${f.contacto_nombre ? ` · ${escaparHtml(f.contacto_nombre)}` : ''}</td>
               <td>${escaparHtml(f.fecha_pedido || '')}</td>
-              <td><a href="#" class="link-orden-pendiente" data-id="${escaparHtml(f.orden_id)}">${escaparHtml(f.orden_id)}</a></td>
+              <td><a href="ordenes.html?orden=${encodeURIComponent(f.orden_id)}">${escaparHtml(f.orden_id)}</a></td>
               <td>${f.cantidad ?? ''}</td>
               <td>${formatoImporte(f.importe)}</td>
             </tr>
@@ -109,13 +109,6 @@ modalPendienteCerrar.addEventListener('click', cerrarModalPendiente);
 modalPendienteOverlay.addEventListener('click', (e) => {
   if (e.target === modalPendienteOverlay) cerrarModalPendiente();
 });
-modalPendienteContenido.addEventListener('click', (e) => {
-  const link = e.target.closest('.link-orden-pendiente');
-  if (!link) return;
-  e.preventDefault();
-  abrirDetalle(link.dataset.id);
-});
-
 REPORTES_PENDIENTE.facturar.tbody.addEventListener('click', (e) => {
   const fila = e.target.closest('tr[data-articulo]');
   if (fila) abrirDetallePendiente(fila.dataset.clave, fila.dataset.articulo);

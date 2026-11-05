@@ -10,7 +10,34 @@
   <div class="contenedor">
     <h1>Reportes</h1>
 
-    <h2>Pendiente por facturar</h2>
+    <div class="dashboard-grid">
+      <a href="#pendiente-facturar" class="dashboard-tile tarjeta-enlace">
+        <span class="dashboard-tile__icono" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+        </span>
+        <h2>Pendiente por facturar</h2>
+        <p>Por modelo: órdenes sin ninguna factura asociada.</p>
+        <span class="dashboard-tile__cta">Ver reporte →</span>
+      </a>
+      <a href="#pendiente-entregar" class="dashboard-tile tarjeta-enlace">
+        <span class="dashboard-tile__icono" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="14" height="11"/><path d="M15 9h4l3 3v5h-7z"/><circle cx="5.5" cy="19.5" r="1.5"/><circle cx="17.5" cy="19.5" r="1.5"/></svg>
+        </span>
+        <h2>Pendiente por entregar</h2>
+        <p>Por modelo: órdenes sin facturar ni entregar todavía.</p>
+        <span class="dashboard-tile__cta">Ver reporte →</span>
+      </a>
+      <a href="#hotel-articulo" class="dashboard-tile tarjeta-enlace">
+        <span class="dashboard-tile__icono" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        </span>
+        <h2>Cantidades por hotel y artículo</h2>
+        <p>Venta cruzada por hotel/local y modelo, con filtro de estatus.</p>
+        <span class="dashboard-tile__cta">Ver reporte →</span>
+      </a>
+    </div>
+
+    <h2 id="pendiente-facturar">Pendiente por facturar</h2>
     <p class="pista">Por modelo: órdenes sin ninguna factura asociada (sin contar Cerrada/Cancelada, que ya no se van a facturar). Clic en un modelo para ver el detalle por cliente y fecha de pedido.</p>
     <div class="tabla-scroll">
       <table>
@@ -35,7 +62,7 @@
     </div>
     <p id="estado-vacio-pendiente-facturar" class="pista" hidden>No hay nada pendiente por facturar.</p>
 
-    <h2>Pendiente por entregar</h2>
+    <h2 id="pendiente-entregar">Pendiente por entregar</h2>
     <p class="pista">Por modelo: órdenes cuyo Estatus del sistema todavía no llega a facturación ("Ejecución de la orden pendiente" o "Parcialmente ejecutada"). Clic en un modelo para ver el detalle por cliente y fecha de pedido.</p>
     <div class="tabla-scroll">
       <table>
@@ -60,7 +87,7 @@
     </div>
     <p id="estado-vacio-pendiente-entregar" class="pista" hidden>No hay nada pendiente por entregar.</p>
 
-    <h2>Cantidades por hotel y artículo</h2>
+    <h2 id="hotel-articulo">Cantidades por hotel y artículo</h2>
     <p class="pista">Por defecto muestra las órdenes con estatus "Pendiente". Ajusta el estatus o escribe un artículo para filtrar.</p>
 
     <div class="busqueda fila-filtros">

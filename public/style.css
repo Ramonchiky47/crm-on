@@ -47,6 +47,16 @@
   accent-color: #1565c0;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+/* Para que un salto a #ancla (ej. las tarjetas de Reportes) no deje el titulo tapado detras de
+   la barra superior fija. */
+body.con-barra-superior [id] {
+  scroll-margin-top: calc(var(--altura-barra-superior) + 0.75rem);
+}
+
 body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 14px;
@@ -1496,6 +1506,27 @@ th.num, td.num {
   margin-top: 1.5rem;
 }
 
+/* Fila de accesos a reportes dentro de otra pantalla (ej. Resultados): mismas tarjetas pero mas
+   chicas/compactas, porque ahi son un enlace secundario, no el contenido principal. */
+.dashboard-grid--compacto {
+  margin-top: 0.9rem;
+  margin-bottom: 1.1rem;
+}
+.dashboard-grid--compacto .dashboard-tile {
+  padding: 1rem 1.1rem;
+}
+.dashboard-grid--compacto .dashboard-tile__icono {
+  width: 2rem;
+  height: 2rem;
+  margin-bottom: 0.6rem;
+}
+.dashboard-grid--compacto .dashboard-tile h2 {
+  font-size: 0.95rem;
+}
+.dashboard-grid--compacto .dashboard-tile p {
+  font-size: 0.78rem;
+}
+
 .dashboard-tile {
   border: 1px solid var(--borde);
   border-radius: 10px;
@@ -1519,6 +1550,31 @@ th.num, td.num {
   margin: 0;
   color: #757575;
   font-size: 0.85rem;
+}
+
+/* Variante con icono + CTA "Ver reporte ->" (hub de Reportes, accesos rapidos de Resultados):
+   mismo .dashboard-tile de base, solo le agrega el badge redondeado arriba y el link al pie. */
+.dashboard-tile__icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 10px;
+  background: #e3f0fc;
+  color: #1565c0;
+  margin-bottom: 0.9rem;
+}
+.dashboard-tile__icono svg { width: 1.3rem; height: 1.3rem; }
+.dashboard-tile__cta {
+  display: inline-block;
+  margin-top: 0.7rem;
+  color: #1565c0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+@media (prefers-color-scheme: dark) {
+  .dashboard-tile__icono { background: #15283c; color: #6cb2f4; }
 }
 
 .tarjetas-subcatalogo {

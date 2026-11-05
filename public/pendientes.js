@@ -736,6 +736,11 @@ promesaAuth.then(async (sesion) => {
     return;
   }
 
+  // Permite entrar directo a un subtab (ej. index.html?subtab=calendario desde el link
+  // "Calendario" de la barra lateral), igual que catalogos.html/cotizaciones.html con ?tab=.
+  const subtabUrl = new URLSearchParams(window.location.search).get('subtab');
+  if (subtabUrl) activarSubtabInicio(subtabUrl);
+
   btnMostrarFormPendiente.hidden = !permisosCatalogos.editar;
   btnSincronizarGoogleTasks.hidden = !permisosCatalogos.editar;
 

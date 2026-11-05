@@ -91,17 +91,28 @@ function ajustarNavegacion(datos) {
 const NAV_LATERAL = [
   { grupo: null, texto: 'Inicio', href: 'panel.html', permiso: () => true },
   { grupo: null, texto: 'Resultados', href: 'resultados.html', permiso: () => true },
-  { grupo: null, texto: 'Negocios', href: 'cotizaciones.html?tab=negocios', permiso: (p) => p.catalogos.ver },
-  { grupo: null, texto: 'Órdenes', href: 'ordenes.html', permiso: (p) => p.ordenes.ver },
-  { grupo: null, texto: 'Reportes', href: 'reportes.html', permiso: (p) => p.ordenes.ver },
-  { grupo: null, texto: 'Detalle de compra', href: 'detalle.html', permiso: (p) => p.detalle_compra.ver },
-  { grupo: null, texto: 'Facturación', href: 'facturacion.html', permiso: (p) => p.facturacion.ver },
-  { grupo: null, texto: 'Presupuesto de ventas', href: 'presupuesto.html', permiso: (p) => p.facturacion.ver },
-  { grupo: null, texto: 'Cotizaciones', href: 'cotizaciones.html?tab=visualizacion', permiso: (p) => p.catalogos.ver },
-  { grupo: null, texto: 'Solicitudes de compra', href: 'cotizaciones.html?tab=solicitudes-proveedor', permiso: (p) => p.catalogos.ver },
-  { grupo: null, texto: 'Carga inicial', href: 'carga.html', permiso: (p) => p.ordenes.editar || p.detalle_compra.editar },
-  { grupo: null, texto: 'Tareas', href: 'index.html', permiso: (p) => p.catalogos.ver },
-  { grupo: null, texto: 'Datos', href: 'datos.html', permiso: (p) => p.ordenes.ver || p.detalle_compra.ver || p.catalogos.ver },
+
+  // "Ventas" agrupa todo el embudo: Negocios -> Cotizaciones -> Solicitudes de compra -> Órdenes
+  // -> Facturación, más Presupuesto y Reportes (que miden ese mismo embudo).
+  { grupo: 'Ventas', texto: 'Negocios', href: 'cotizaciones.html?tab=negocios', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Ventas', texto: 'Cotizaciones', href: 'cotizaciones.html?tab=visualizacion', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Ventas', texto: 'Solicitudes de compra', href: 'cotizaciones.html?tab=solicitudes-proveedor', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Ventas', texto: 'Órdenes', href: 'ordenes.html', permiso: (p) => p.ordenes.ver },
+  { grupo: 'Ventas', texto: 'Facturación', href: 'facturacion.html', permiso: (p) => p.facturacion.ver },
+  { grupo: 'Ventas', texto: 'Presupuesto de ventas', href: 'presupuesto.html', permiso: (p) => p.facturacion.ver },
+  { grupo: 'Ventas', texto: 'Reportes', href: 'reportes.html', permiso: (p) => p.ordenes.ver },
+
+  // "Seguimiento" agrupa lo que ya existia como subtabs de Inicio (Tareas/Calendario), ahora cada
+  // uno con su propio link (vía ?subtab=, ver pendientes.js) para que se puedan distinguir en la
+  // barra en vez de estar escondidos dentro de un solo item "Tareas".
+  { grupo: 'Seguimiento', texto: 'Tareas', href: 'index.html?subtab=tareas', permiso: (p) => p.catalogos.ver },
+  { grupo: 'Seguimiento', texto: 'Calendario', href: 'index.html?subtab=calendario', permiso: (p) => p.catalogos.ver },
+
+  // "Operación" agrupa lo que alimenta/soporta el inventario y la carga de datos, no es
+  // orientado a cliente como "Ventas".
+  { grupo: 'Operación', texto: 'Detalle de compra', href: 'detalle.html', permiso: (p) => p.detalle_compra.ver },
+  { grupo: 'Operación', texto: 'Carga inicial', href: 'carga.html', permiso: (p) => p.ordenes.editar || p.detalle_compra.editar },
+  { grupo: 'Operación', texto: 'Datos', href: 'datos.html', permiso: (p) => p.ordenes.ver || p.detalle_compra.ver || p.catalogos.ver },
 
   { grupo: 'Catálogos', texto: 'Hoteles / Locales', href: 'catalogos.html?tab=destinos&subtab=lista', permiso: (p) => p.catalogos.ver },
   { grupo: 'Catálogos', texto: 'Plaza', href: 'catalogos.html?tab=destinos&subtab=plaza', permiso: (p) => p.catalogos.ver },
@@ -123,12 +134,15 @@ const NAV_LATERAL = [
 // Paginas donde varios items de la barra apuntan al mismo archivo con distinto ?tab=: si la URL
 // actual no trae ?tab=, hay que saber cual pestana se activa por default para marcar el item
 // correcto (si no, ninguno o el equivocado quedaria resaltado).
-const TAB_POR_DEFECTO = { 'cotizaciones.html': 'negocios', 'catalogos.html': 'destinos' };
+// index.html no tiene "tab", solo subtab (Tareas/Calendario) - se usa esta misma llave igual
+// para poder reusar SUBTAB_POR_DEFECTO de abajo sin otro mecanismo aparte.
+const TAB_POR_DEFECTO = { 'cotizaciones.html': 'negocios', 'catalogos.html': 'destinos', 'index.html': 'tareas' };
 
 // Igual que TAB_POR_DEFECTO pero un nivel mas abajo: dentro de catalogos.html?tab=destinos,
 // varios items (Hoteles/Locales, Plaza, Grupo, Cadena) comparten el mismo tab pero distinto
-// ?subtab=. La llave es el tab efectivo (el de la URL, o el default de arriba).
-const SUBTAB_POR_DEFECTO = { destinos: 'lista' };
+// ?subtab=. La llave es el tab efectivo (el de la URL, o el default de arriba); para index.html
+// esa "llave" es el valor sintetico de TAB_POR_DEFECTO de arriba ('tareas').
+const SUBTAB_POR_DEFECTO = { destinos: 'lista', tareas: 'tareas' };
 
 function esItemActivo(item, archivoActual, tabActual, subtabActual) {
   const [archivoItem, queryItem] = item.href.split('?');
@@ -151,7 +165,7 @@ function insertarBarraLateral(datos) {
 
   const visibles = NAV_LATERAL.filter((item) => (item.soloAdmin ? datos.esAdmin : item.permiso(datos.permisos)));
   const grupos = [{ nombre: null, items: visibles.filter((i) => !i.grupo) }];
-  for (const nombreGrupo of ['Catálogos', 'Administración']) {
+  for (const nombreGrupo of ['Ventas', 'Seguimiento', 'Operación', 'Catálogos', 'Administración']) {
     const items = visibles.filter((i) => i.grupo === nombreGrupo);
     if (items.length) grupos.push({ nombre: nombreGrupo, items });
   }

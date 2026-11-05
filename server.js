@@ -4506,6 +4506,21 @@ app.post('/api/pendientes/:id/notas', requirePermiso('catalogos', 'editar'), ar(
 
 // Cantidades por Hotel (destino) + Articulo, para ordenes en un estatus determinado
 // (por defecto "Pendiente" si existe en el catalogo). Filtro opcional por texto de articulo.
+// Detalle de compra ACUMULA una fila por cada sincronizacion de NetSuite en la que aparece una
+// orden+articulo (no reemplaza), asi que sumar todas las filas infla cantidad/importe segun
+// cuantas veces se haya corrido el sync (mismo problema ya resuelto una vez para "Cantidad
+// pedida" en Facturacion). "detalle_vigente" se queda solo con la fila del import mas reciente
+// por (id, articulo) - la vigente - y es lo que deben usar TODOS los reportes de aqui en
+// adelante que agreguen cantidades/importes de Detalle de compra.
+const CTE_DETALLE_VIGENTE = `
+  WITH detalle_vigente AS (
+    SELECT DISTINCT ON (id, articulo) id, articulo, cantidad_vendida, importe, fecha
+    FROM detalle_de_compra
+    WHERE articulo IS NOT NULL AND articulo != ''
+    ORDER BY id, articulo, creado_en DESC
+  )
+`;
+
 app.get('/api/reportes/articulos', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
   const { estatus, articulo, hotel } = req.query;
 
@@ -4517,7 +4532,7 @@ app.get('/api/reportes/articulos', requirePermiso('ordenes', 'ver'), ar(async (r
     estatusIds = pendiente ? [String(pendiente.id_estatus)] : [];
   }
 
-  const condiciones = ["dc.articulo IS NOT NULL", "dc.articulo != ''"];
+  const condiciones = ['1=1'];
   const parametros = [];
 
   if (estatusIds.length) {
@@ -4525,7 +4540,7 @@ app.get('/api/reportes/articulos', requirePermiso('ordenes', 'ver'), ar(async (r
     parametros.push(...estatusIds);
   }
   if (articulo) {
-    condiciones.push('dc.articulo ILIKE ?');
+    condiciones.push('dv.articulo ILIKE ?');
     parametros.push(`%${articulo}%`);
   }
   if (hotel) {
@@ -4535,18 +4550,19 @@ app.get('/api/reportes/articulos', requirePermiso('ordenes', 'ver'), ar(async (r
 
   const where = `WHERE ${condiciones.join(' AND ')}`;
   const filas = await db.prepare(`
+    ${CTE_DETALLE_VIGENTE}
     SELECT
       d.destino AS hotel,
-      dc.articulo,
-      SUM(dc.cantidad_vendida) AS cantidad_total,
-      SUM(dc.importe) AS importe_total,
-      COUNT(DISTINCT dc.id) AS num_ordenes
-    FROM detalle_de_compra dc
-    JOIN ordenes o ON o.id = dc.id
+      dv.articulo,
+      SUM(dv.cantidad_vendida) AS cantidad_total,
+      SUM(dv.importe) AS importe_total,
+      COUNT(DISTINCT dv.id) AS num_ordenes
+    FROM detalle_vigente dv
+    JOIN ordenes o ON o.id = dv.id
     LEFT JOIN destinos d ON d.id_destino = o.destino_id
     ${where}
-    GROUP BY d.destino, dc.articulo
-    ORDER BY d.destino, dc.articulo
+    GROUP BY d.destino, dv.articulo
+    ORDER BY d.destino, dv.articulo
   `).all(...parametros);
 
   res.json({ estatusUsados: estatusIds, filas });
@@ -4565,7 +4581,7 @@ app.get('/api/reportes/ordenes', requirePermiso('ordenes', 'ver'), ar(async (req
     estatusIds = pendiente ? [String(pendiente.id_estatus)] : [];
   }
 
-  const condiciones = ['dc.articulo = ?'];
+  const condiciones = ['dv.articulo = ?'];
   const parametros = [articulo];
 
   if (hotel) {
@@ -4582,10 +4598,11 @@ app.get('/api/reportes/ordenes', requirePermiso('ordenes', 'ver'), ar(async (req
 
   const where = `WHERE ${condiciones.join(' AND ')}`;
   const rows = await db.prepare(`
+    ${CTE_DETALLE_VIGENTE}
     SELECT DISTINCT o.*, d.destino AS destino_nombre, TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre,
       ec.estatus AS estatus_nombre, ee.estado_entrega AS estado_entrega_nombre
     FROM ordenes o
-    JOIN detalle_de_compra dc ON dc.id = o.id
+    JOIN detalle_vigente dv ON dv.id = o.id
     LEFT JOIN destinos d ON d.id_destino = o.destino_id
     LEFT JOIN contactos c ON c.id_contacto = o.contacto_id
     LEFT JOIN estatus_catalogo ec ON ec.id_estatus = o.estatus_id
@@ -4595,6 +4612,97 @@ app.get('/api/reportes/ordenes', requirePermiso('ordenes', 'ver'), ar(async (req
   `).all(...parametros);
 
   res.json(rows);
+}));
+
+// ---------- Pendiente por facturar / Pendiente por entregar (por modelo) ----------
+// Dos reportes "por modelo" (no por hotel, como el de arriba): cuanto falta por facturar o por
+// entregar de cada articulo, sumado entre TODAS las ordenes/hoteles, con detalle por cliente y
+// fecha de pedido al hacer clic en un modelo.
+//
+// "Pendiente por facturar" = sin ninguna factura asociada (mismo criterio que el chip
+// "Pendientes de facturar" de Ordenes), excluyendo Cerrada/Cancelada: esas, sin factura, ya
+// estan muertas (nunca se van a facturar) y se excluyen tambien alla (ver ordenEsOcultaPorDefecto
+// en app.js).
+//
+// "Pendiente por entregar" = Estatus del sistema todavia no llega a facturacion/cierre:
+// "Ejecución de la orden pendiente" (nada entregado) o "Parcialmente ejecutada" (entrega
+// parcial) - el equivalente en español de los estatus nativos de NetSuite "Pending Fulfillment"/
+// "Partially Fulfilled".
+const ESTATUS_SISTEMA_PENDIENTE_ENTREGA = ['Ejecución de la orden pendiente', 'Parcialmente ejecutada'];
+
+function condicionPendienteFacturar() {
+  return `
+    NOT EXISTS (
+      SELECT 1 FROM facturacion_pedido_id fp JOIN facturacion f ON f.id = fp.id WHERE fp.pedido_id = o.id
+    )
+    AND o.estatus_sistema NOT IN ('Cerrada', 'Cancelada')
+  `;
+}
+
+app.get('/api/reportes/pendiente-facturar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const filas = await db.prepare(`
+    ${CTE_DETALLE_VIGENTE}
+    SELECT dv.articulo, SUM(dv.cantidad_vendida) AS cantidad_total, SUM(dv.importe) AS importe_total,
+      COUNT(DISTINCT dv.id) AS num_ordenes
+    FROM detalle_vigente dv
+    JOIN ordenes o ON o.id = dv.id
+    WHERE ${condicionPendienteFacturar()}
+    GROUP BY dv.articulo
+    ORDER BY importe_total DESC NULLS LAST
+  `).all();
+  res.json(filas);
+}));
+
+app.get('/api/reportes/pendiente-facturar/detalle', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const { articulo } = req.query;
+  if (!articulo) return res.status(400).json({ error: 'articulo es requerido' });
+
+  const filas = await db.prepare(`
+    ${CTE_DETALLE_VIGENTE}
+    SELECT o.id AS orden_id, o.fecha AS fecha_pedido, d.destino AS hotel,
+      TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre,
+      dv.cantidad_vendida AS cantidad, dv.importe AS importe
+    FROM detalle_vigente dv
+    JOIN ordenes o ON o.id = dv.id
+    LEFT JOIN destinos d ON d.id_destino = o.destino_id
+    LEFT JOIN contactos c ON c.id_contacto = o.contacto_id
+    WHERE dv.articulo = ? AND ${condicionPendienteFacturar()}
+    ORDER BY o.fecha DESC
+  `).all(articulo);
+  res.json(filas);
+}));
+
+app.get('/api/reportes/pendiente-entregar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const filas = await db.prepare(`
+    ${CTE_DETALLE_VIGENTE}
+    SELECT dv.articulo, SUM(dv.cantidad_vendida) AS cantidad_total, SUM(dv.importe) AS importe_total,
+      COUNT(DISTINCT dv.id) AS num_ordenes
+    FROM detalle_vigente dv
+    JOIN ordenes o ON o.id = dv.id
+    WHERE o.estatus_sistema IN (${ESTATUS_SISTEMA_PENDIENTE_ENTREGA.map(() => '?').join(',')})
+    GROUP BY dv.articulo
+    ORDER BY importe_total DESC NULLS LAST
+  `).all(...ESTATUS_SISTEMA_PENDIENTE_ENTREGA);
+  res.json(filas);
+}));
+
+app.get('/api/reportes/pendiente-entregar/detalle', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const { articulo } = req.query;
+  if (!articulo) return res.status(400).json({ error: 'articulo es requerido' });
+
+  const filas = await db.prepare(`
+    ${CTE_DETALLE_VIGENTE}
+    SELECT o.id AS orden_id, o.fecha AS fecha_pedido, d.destino AS hotel,
+      TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre,
+      dv.cantidad_vendida AS cantidad, dv.importe AS importe
+    FROM detalle_vigente dv
+    JOIN ordenes o ON o.id = dv.id
+    LEFT JOIN destinos d ON d.id_destino = o.destino_id
+    LEFT JOIN contactos c ON c.id_contacto = o.contacto_id
+    WHERE dv.articulo = ? AND o.estatus_sistema IN (${ESTATUS_SISTEMA_PENDIENTE_ENTREGA.map(() => '?').join(',')})
+    ORDER BY o.fecha DESC
+  `).all(articulo, ...ESTATUS_SISTEMA_PENDIENTE_ENTREGA);
+  res.json(filas);
 }));
 
 // ---------- Detalle de compra ----------

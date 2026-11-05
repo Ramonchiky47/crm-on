@@ -9,6 +9,122 @@ function formatoImporte(valor) {
   return Number(valor).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// ---------- Pendiente por facturar / Pendiente por entregar (por modelo) ----------
+// Dos reportes "por modelo" independientes del de Hotel/Artículo de abajo: ya vienen ordenados
+// por importe (desc) desde el servidor, asi que no tienen su propio encabezado ordenable (para no
+// chocar con el "th[data-campo]" generico, que es solo de la tabla de Hotel/Artículo).
+
+const REPORTES_PENDIENTE = {
+  facturar: {
+    endpoint: '/api/reportes/pendiente-facturar',
+    endpointDetalle: '/api/reportes/pendiente-facturar/detalle',
+    tbody: document.getElementById('tabla-pendiente-facturar'),
+    totalCantidad: document.getElementById('total-cantidad-pendiente-facturar'),
+    totalImporte: document.getElementById('total-importe-pendiente-facturar'),
+    estadoVacio: document.getElementById('estado-vacio-pendiente-facturar'),
+    titulo: 'Pendiente por facturar',
+  },
+  entregar: {
+    endpoint: '/api/reportes/pendiente-entregar',
+    endpointDetalle: '/api/reportes/pendiente-entregar/detalle',
+    tbody: document.getElementById('tabla-pendiente-entregar'),
+    totalCantidad: document.getElementById('total-cantidad-pendiente-entregar'),
+    totalImporte: document.getElementById('total-importe-pendiente-entregar'),
+    estadoVacio: document.getElementById('estado-vacio-pendiente-entregar'),
+    titulo: 'Pendiente por entregar',
+  },
+};
+
+async function cargarReportePendiente(clave) {
+  const cfg = REPORTES_PENDIENTE[clave];
+  const res = await fetch(cfg.endpoint);
+  const filas = await res.json();
+
+  cfg.tbody.innerHTML = '';
+  cfg.estadoVacio.hidden = filas.length !== 0;
+
+  let cantidadTotal = 0;
+  let importeTotal = 0;
+  for (const f of filas) {
+    cantidadTotal += Number(f.cantidad_total) || 0;
+    importeTotal += Number(f.importe_total) || 0;
+
+    const tr = document.createElement('tr');
+    tr.classList.add('fila-clicable');
+    tr.dataset.clave = clave;
+    tr.dataset.articulo = f.articulo;
+    tr.innerHTML = `
+      <td>${escaparHtml(f.articulo)}</td>
+      <td>${f.cantidad_total ?? ''}</td>
+      <td>${formatoImporte(f.importe_total)}</td>
+      <td>${f.num_ordenes}</td>
+    `;
+    cfg.tbody.appendChild(tr);
+  }
+
+  cfg.totalCantidad.textContent = filas.length ? cantidadTotal : '';
+  cfg.totalImporte.textContent = filas.length ? formatoImporte(importeTotal) : '';
+}
+
+const modalPendienteOverlay = document.getElementById('modal-pendiente-overlay');
+const modalPendienteContenido = document.getElementById('modal-pendiente-contenido');
+const modalPendienteCerrar = document.getElementById('modal-pendiente-cerrar');
+
+async function abrirDetallePendiente(clave, articulo) {
+  const cfg = REPORTES_PENDIENTE[clave];
+  const res = await fetch(`${cfg.endpointDetalle}?articulo=${encodeURIComponent(articulo)}`);
+  const filas = await res.json();
+
+  modalPendienteContenido.innerHTML = `
+    <h2>${escaparHtml(articulo)}</h2>
+    <p class="pista">${escaparHtml(cfg.titulo)} · ${filas.length} orden(es)</p>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr><th>Cliente</th><th>Fecha de pedido</th><th>Orden</th><th>Cantidad</th><th>Importe</th></tr>
+        </thead>
+        <tbody>
+          ${filas.map((f) => `
+            <tr>
+              <td>${escaparHtml(f.hotel || '(sin hotel/local)')}${f.contacto_nombre ? ` · ${escaparHtml(f.contacto_nombre)}` : ''}</td>
+              <td>${escaparHtml(f.fecha_pedido || '')}</td>
+              <td><a href="#" class="link-orden-pendiente" data-id="${escaparHtml(f.orden_id)}">${escaparHtml(f.orden_id)}</a></td>
+              <td>${f.cantidad ?? ''}</td>
+              <td>${formatoImporte(f.importe)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  modalPendienteOverlay.hidden = false;
+}
+
+function cerrarModalPendiente() {
+  modalPendienteOverlay.hidden = true;
+  modalPendienteContenido.innerHTML = '';
+}
+
+modalPendienteCerrar.addEventListener('click', cerrarModalPendiente);
+modalPendienteOverlay.addEventListener('click', (e) => {
+  if (e.target === modalPendienteOverlay) cerrarModalPendiente();
+});
+modalPendienteContenido.addEventListener('click', (e) => {
+  const link = e.target.closest('.link-orden-pendiente');
+  if (!link) return;
+  e.preventDefault();
+  abrirDetalle(link.dataset.id);
+});
+
+REPORTES_PENDIENTE.facturar.tbody.addEventListener('click', (e) => {
+  const fila = e.target.closest('tr[data-articulo]');
+  if (fila) abrirDetallePendiente(fila.dataset.clave, fila.dataset.articulo);
+});
+REPORTES_PENDIENTE.entregar.tbody.addEventListener('click', (e) => {
+  const fila = e.target.closest('tr[data-articulo]');
+  if (fila) abrirDetallePendiente(fila.dataset.clave, fila.dataset.articulo);
+});
+
 const filtroArticulo = document.getElementById('filtro-articulo');
 const filtroHotel = document.getElementById('filtro-hotel');
 const filtroEstatusBtn = document.getElementById('filtro-estatus-btn');
@@ -319,6 +435,11 @@ document.addEventListener('keydown', (e) => {
   else if (!modalOrdenesOverlay.hidden) cerrarModalOrdenes();
 });
 
+function cargarReportesPendientes() {
+  cargarReportePendiente('facturar');
+  cargarReportePendiente('entregar');
+}
+
 promesaAuth.then((sesion) => {
   if (!sesion) return;
   if (!sesion.permisos.ordenes.ver) {
@@ -326,7 +447,9 @@ promesaAuth.then((sesion) => {
     return;
   }
   cargarFiltroEstatus().then(cargarReporte);
+  cargarReportesPendientes();
 
   suscribirTiempoReal(['ordenes'], cargarReporte);
   suscribirTiempoReal(['estatus_catalogo'], () => cargarFiltroEstatus().then(cargarReporte));
+  suscribirTiempoReal(['ordenes', 'facturacion_pedido_id', 'detalle_de_compra'], cargarReportesPendientes);
 });

@@ -10,6 +10,56 @@
   <div class="contenedor">
     <h1>Reportes</h1>
 
+    <h2>Pendiente por facturar</h2>
+    <p class="pista">Por modelo: órdenes sin ninguna factura asociada (sin contar Cerrada/Cancelada, que ya no se van a facturar). Clic en un modelo para ver el detalle por cliente y fecha de pedido.</p>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Modelo</th>
+            <th>Cantidad</th>
+            <th>Importe</th>
+            <th>Órdenes</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-pendiente-facturar"></tbody>
+        <tfoot>
+          <tr>
+            <td><strong>Total</strong></td>
+            <td id="total-cantidad-pendiente-facturar"></td>
+            <td id="total-importe-pendiente-facturar"></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <p id="estado-vacio-pendiente-facturar" class="pista" hidden>No hay nada pendiente por facturar.</p>
+
+    <h2>Pendiente por entregar</h2>
+    <p class="pista">Por modelo: órdenes cuyo Estatus del sistema todavía no llega a facturación ("Ejecución de la orden pendiente" o "Parcialmente ejecutada"). Clic en un modelo para ver el detalle por cliente y fecha de pedido.</p>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Modelo</th>
+            <th>Cantidad</th>
+            <th>Importe</th>
+            <th>Órdenes</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-pendiente-entregar"></tbody>
+        <tfoot>
+          <tr>
+            <td><strong>Total</strong></td>
+            <td id="total-cantidad-pendiente-entregar"></td>
+            <td id="total-importe-pendiente-entregar"></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <p id="estado-vacio-pendiente-entregar" class="pista" hidden>No hay nada pendiente por entregar.</p>
+
     <h2>Cantidades por hotel y artículo</h2>
     <p class="pista">Por defecto muestra las órdenes con estatus "Pendiente". Ajusta el estatus o escribe un artículo para filtrar.</p>
 
@@ -54,6 +104,13 @@
     <div class="modal-caja" role="dialog" aria-modal="true">
       <button type="button" id="modal-ordenes-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
       <div id="modal-ordenes-contenido"></div>
+    </div>
+  </div>
+
+  <div id="modal-pendiente-overlay" class="modal-overlay" hidden>
+    <div class="modal-caja" role="dialog" aria-modal="true">
+      <button type="button" id="modal-pendiente-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
+      <div id="modal-pendiente-contenido"></div>
     </div>
   </div>
 

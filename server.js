@@ -4657,85 +4657,59 @@ function condicionPendienteFacturar() {
 // Filas "crudas" (una por Orden+Articulo, sin agregar): el cliente arma desde aqui las 3 vistas
 // (por pedido, por cliente/hotel, detalle por producto) sin pedirle al servidor un endpoint por
 // vista. Un pedido con varios articulos aparece en varias filas aqui, cada una con su propio
-// cantidad/importe.
-app.get('/api/reportes/pendiente-facturar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
-  const soloOcultas = req.query.ocultas === '1';
-  const filas = await db.prepare(`
-    ${CTE_DETALLE_VIGENTE}
-    SELECT o.id AS orden_id, d.destino AS hotel, o.estatus_sistema,
-      dv.articulo AS modelo, dv.cantidad_vendida AS cantidad, dv.importe AS importe
-    FROM detalle_vigente dv
-    JOIN ordenes o ON o.id = dv.id
-    LEFT JOIN destinos d ON d.id_destino = o.destino_id
-    WHERE ${condicionPendienteFacturar()}
-      AND ${soloOcultas ? 'EXISTS' : 'NOT EXISTS'} (
-        SELECT 1 FROM reportes_ocultos ro WHERE ro.reporte = 'pendiente-facturar' AND ro.orden_id = o.id
-      )
-    ORDER BY o.id, dv.articulo
-  `).all();
-  const { n: totalOcultas } = await db.prepare(`
-    SELECT COUNT(*) AS n FROM reportes_ocultos WHERE reporte = 'pendiente-facturar'
-  `).get();
-  res.json({ filas, totalOcultas: Number(totalOcultas) });
-}));
+// cantidad/importe. Se registra igual para "pendiente-facturar" y "pendiente-entregar".
+function registrarReportePendiente(clave, condicionSql, parametrosCondicion) {
+  app.get(`/api/reportes/${clave}`, requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+    const soloOcultas = req.query.ocultas === '1';
+    const filas = await db.prepare(`
+      ${CTE_DETALLE_VIGENTE}
+      SELECT o.id AS orden_id, d.destino AS hotel, o.estatus_sistema,
+        dv.articulo AS modelo, dv.cantidad_vendida AS cantidad, dv.importe AS importe
+      FROM detalle_vigente dv
+      JOIN ordenes o ON o.id = dv.id
+      LEFT JOIN destinos d ON d.id_destino = o.destino_id
+      WHERE ${condicionSql}
+        AND ${soloOcultas ? 'EXISTS' : 'NOT EXISTS'} (
+          SELECT 1 FROM reportes_ocultos ro WHERE ro.reporte = ? AND ro.orden_id = o.id
+        )
+      ORDER BY o.id, dv.articulo
+    `).all(...parametrosCondicion, clave);
+    const { n: totalOcultas } = await db.prepare(`
+      SELECT COUNT(*) AS n FROM reportes_ocultos WHERE reporte = ?
+    `).get(clave);
+    res.json({ filas, totalOcultas: Number(totalOcultas) });
+  }));
 
-app.post('/api/reportes/pendiente-facturar/ocultar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
-  const ordenes = Array.isArray(req.body.ordenes) ? req.body.ordenes.filter((v) => typeof v === 'string' && v.trim()) : [];
-  if (!ordenes.length) return res.status(400).json({ error: 'ordenes es requerido y debe ser un arreglo no vacio' });
+  app.post(`/api/reportes/${clave}/ocultar`, requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+    const ordenes = Array.isArray(req.body.ordenes) ? req.body.ordenes.filter((v) => typeof v === 'string' && v.trim()) : [];
+    if (!ordenes.length) return res.status(400).json({ error: 'ordenes es requerido y debe ser un arreglo no vacio' });
 
-  for (const ordenId of ordenes) {
-    await db.prepare(`
-      INSERT INTO reportes_ocultos (reporte, orden_id) VALUES ('pendiente-facturar', ?)
-      ON CONFLICT (reporte, orden_id) DO NOTHING
-    `).run(ordenId);
-  }
-  res.status(204).end();
-}));
+    for (const ordenId of ordenes) {
+      await db.prepare(`
+        INSERT INTO reportes_ocultos (reporte, orden_id) VALUES (?, ?)
+        ON CONFLICT (reporte, orden_id) DO NOTHING
+      `).run(clave, ordenId);
+    }
+    res.status(204).end();
+  }));
 
-app.post('/api/reportes/pendiente-facturar/restaurar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
-  const ordenes = Array.isArray(req.body.ordenes) ? req.body.ordenes.filter((v) => typeof v === 'string' && v.trim()) : [];
-  if (!ordenes.length) return res.status(400).json({ error: 'ordenes es requerido y debe ser un arreglo no vacio' });
+  app.post(`/api/reportes/${clave}/restaurar`, requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+    const ordenes = Array.isArray(req.body.ordenes) ? req.body.ordenes.filter((v) => typeof v === 'string' && v.trim()) : [];
+    if (!ordenes.length) return res.status(400).json({ error: 'ordenes es requerido y debe ser un arreglo no vacio' });
 
-  for (const ordenId of ordenes) {
-    await db.prepare(`DELETE FROM reportes_ocultos WHERE reporte = 'pendiente-facturar' AND orden_id = ?`).run(ordenId);
-  }
-  res.status(204).end();
-}));
+    for (const ordenId of ordenes) {
+      await db.prepare(`DELETE FROM reportes_ocultos WHERE reporte = ? AND orden_id = ?`).run(clave, ordenId);
+    }
+    res.status(204).end();
+  }));
+}
 
-app.get('/api/reportes/pendiente-entregar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
-  const filas = await db.prepare(`
-    ${CTE_DETALLE_VIGENTE}
-    SELECT dv.articulo, SUM(dv.cantidad_vendida) AS cantidad_total, SUM(dv.importe) AS importe_total,
-      COUNT(DISTINCT dv.id) AS num_ordenes
-    FROM detalle_vigente dv
-    JOIN ordenes o ON o.id = dv.id
-    WHERE o.estatus_sistema IN (${ESTATUS_SISTEMA_PENDIENTE_ENTREGA.map(() => '?').join(',')})
-      AND ${FECHA_DESDE_REPORTES}
-    GROUP BY dv.articulo
-    ORDER BY importe_total DESC NULLS LAST
-  `).all(...ESTATUS_SISTEMA_PENDIENTE_ENTREGA);
-  res.json(filas);
-}));
-
-app.get('/api/reportes/pendiente-entregar/detalle', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
-  const { articulo } = req.query;
-  if (!articulo) return res.status(400).json({ error: 'articulo es requerido' });
-
-  const filas = await db.prepare(`
-    ${CTE_DETALLE_VIGENTE}
-    SELECT o.id AS orden_id, o.fecha AS fecha_pedido, d.destino AS hotel,
-      TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre,
-      dv.cantidad_vendida AS cantidad, dv.importe AS importe
-    FROM detalle_vigente dv
-    JOIN ordenes o ON o.id = dv.id
-    LEFT JOIN destinos d ON d.id_destino = o.destino_id
-    LEFT JOIN contactos c ON c.id_contacto = o.contacto_id
-    WHERE dv.articulo = ? AND o.estatus_sistema IN (${ESTATUS_SISTEMA_PENDIENTE_ENTREGA.map(() => '?').join(',')})
-      AND ${FECHA_DESDE_REPORTES}
-    ORDER BY o.fecha DESC
-  `).all(articulo, ...ESTATUS_SISTEMA_PENDIENTE_ENTREGA);
-  res.json(filas);
-}));
+registrarReportePendiente('pendiente-facturar', condicionPendienteFacturar(), []);
+registrarReportePendiente(
+  'pendiente-entregar',
+  `o.estatus_sistema IN (${ESTATUS_SISTEMA_PENDIENTE_ENTREGA.map(() => '?').join(',')}) AND ${FECHA_DESDE_REPORTES}`,
+  ESTATUS_SISTEMA_PENDIENTE_ENTREGA
+);
 
 // ---------- Detalle de compra ----------
 // "id" enlaza con ordenes.id pero NO es unico aqui: una orden puede tener varios articulos.

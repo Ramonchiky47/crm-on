@@ -9,330 +9,212 @@ function formatoImporte(valor) {
   return Number(valor).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// ---------- Pendiente por facturar / Pendiente por entregar (por modelo) ----------
-// Dos reportes "por modelo" independientes del de Hotel/Artículo de abajo: ya vienen ordenados
-// por importe (desc) desde el servidor, asi que no tienen su propio encabezado ordenable (para no
-// chocar con el "th[data-campo]" generico, que es solo de la tabla de Hotel/Artículo).
-
-const REPORTES_PENDIENTE = {
-  entregar: {
-    endpoint: '/api/reportes/pendiente-entregar',
-    endpointDetalle: '/api/reportes/pendiente-entregar/detalle',
-    tbody: document.getElementById('tabla-pendiente-entregar'),
-    totalCantidad: document.getElementById('total-cantidad-pendiente-entregar'),
-    totalImporte: document.getElementById('total-importe-pendiente-entregar'),
-    estadoVacio: document.getElementById('estado-vacio-pendiente-entregar'),
-    titulo: 'Pendiente por entregar',
-  },
-};
-
-// "Pendiente por facturar" trae del servidor filas CRUDAS (una por Orden+Articulo, sin agregar) y
-// arma 3 vistas en el cliente a partir del mismo arreglo: Por pedido (checkbox para ocultar a
-// mano), Por cliente (agrupa por hotel) y Detalle por producto (agrupa por codigo). Asi un mismo
-// modelo fisico partido en dos codigos de NetSuite (ej. sufijo "_OLD") no se mezcla con otro
-// pedido/cliente, y cada vista se arma sin volver a pedir al servidor.
+// ---------- Pendiente por facturar / Pendiente por entregar ----------
+// El servidor manda filas CRUDAS (una por Orden+Articulo, sin agregar) y el cliente arma 3 vistas
+// a partir del mismo arreglo: Por pedido (checkbox para ocultar a mano), Por cliente (agrupa por
+// hotel) y Detalle por producto (agrupa por codigo). Asi un mismo modelo fisico partido en dos
+// codigos de NetSuite (ej. sufijo "_OLD") no se mezcla con otro pedido/cliente, y cada vista se
+// arma sin volver a pedir al servidor. Misma logica para los dos reportes ("facturar"/"entregar"),
+// por eso esta fabrica en vez de duplicar el codigo.
 //
 // A veces el sistema no puede distinguir una orden ya resuelta en la realidad de una pendiente de
 // verdad (ej. factura hecha fuera de NetSuite). Por eso, en la vista "Por pedido", hay un checkbox
 // para ocultarlas a mano (reportes_ocultos en el servidor) sin borrar la orden, con un chip para
 // verlas/restaurarlas.
-const encabezadoPendienteFacturar = document.getElementById('encabezado-pendiente-facturar');
-const tablaPendienteFacturar = document.getElementById('tabla-pendiente-facturar');
-const piePendienteFacturar = document.getElementById('pie-pendiente-facturar');
-const estadoVacioPendienteFacturar = document.getElementById('estado-vacio-pendiente-facturar');
-const barraSeleccionPendienteFacturar = document.getElementById('barra-seleccion-pendiente-facturar');
-const btnOcultarPendienteFacturar = document.getElementById('btn-ocultar-pendiente-facturar');
-const conteoSeleccionPendienteFacturar = document.getElementById('conteo-seleccion-pendiente-facturar');
-const chipVerOcultasPendienteFacturar = document.getElementById('chip-ver-ocultas-pendiente-facturar');
-const chipOcultasPendienteFacturarConteo = document.getElementById('chip-ocultas-pendiente-facturar-conteo');
-const resumenPedidosPendienteFacturar = document.getElementById('resumen-pedidos-pendiente-facturar');
-const resumenCodigosPendienteFacturar = document.getElementById('resumen-codigos-pendiente-facturar');
-const resumenCantidadPendienteFacturar = document.getElementById('resumen-cantidad-pendiente-facturar');
-const resumenImportePendienteFacturar = document.getElementById('resumen-importe-pendiente-facturar');
-const botonesVistaPendienteFacturar = document.querySelectorAll('#vistas-pendiente-facturar [data-vista]');
-
-let mostrarOcultasPendienteFacturar = false;
-let vistaPendienteFacturar = 'pedido';
-let filasCrudasPendienteFacturar = [];
-const seleccionPendienteFacturar = new Set();
-
 function enlacesPedidos(ids) {
   return [...ids].sort().map((id) => `<a href="ordenes.html?orden=${encodeURIComponent(id)}">${escaparHtml(id)}</a>`).join(', ');
 }
 
-function actualizarBarraSeleccionPendienteFacturar() {
-  conteoSeleccionPendienteFacturar.textContent = seleccionPendienteFacturar.size;
-  btnOcultarPendienteFacturar.hidden = seleccionPendienteFacturar.size === 0 || mostrarOcultasPendienteFacturar;
-  btnOcultarPendienteFacturar.textContent = mostrarOcultasPendienteFacturar
-    ? `Restaurar seleccionadas (${seleccionPendienteFacturar.size})`
-    : `Ocultar seleccionadas (${seleccionPendienteFacturar.size})`;
-}
+function crearReportePendiente(sufijo) {
+  const prefijo = `pendiente-${sufijo}`;
+  const encabezado = document.getElementById(`encabezado-${prefijo}`);
+  const tabla = document.getElementById(`tabla-${prefijo}`);
+  const pie = document.getElementById(`pie-${prefijo}`);
+  const estadoVacio = document.getElementById(`estado-vacio-${prefijo}`);
+  const barraSeleccion = document.getElementById(`barra-seleccion-${prefijo}`);
+  const btnOcultar = document.getElementById(`btn-ocultar-${prefijo}`);
+  const conteoSeleccion = document.getElementById(`conteo-seleccion-${prefijo}`);
+  const chipVerOcultas = document.getElementById(`chip-ver-ocultas-${prefijo}`);
+  const chipOcultasConteo = document.getElementById(`chip-ocultas-${prefijo}-conteo`);
+  const resumenPedidos = document.getElementById(`resumen-pedidos-${prefijo}`);
+  const resumenCodigos = document.getElementById(`resumen-codigos-${prefijo}`);
+  const resumenCantidad = document.getElementById(`resumen-cantidad-${prefijo}`);
+  const resumenImporte = document.getElementById(`resumen-importe-${prefijo}`);
+  const botonesVista = document.querySelectorAll(`#vistas-${prefijo} [data-vista]`);
 
-function renderVistaPedidoPendienteFacturar() {
-  const porOrden = new Map();
-  for (const f of filasCrudasPendienteFacturar) {
-    if (!porOrden.has(f.orden_id)) {
-      porOrden.set(f.orden_id, { hotel: f.hotel, estatus_sistema: f.estatus_sistema, modelos: new Set(), cantidad: 0, importe: 0 });
+  let mostrarOcultas = false;
+  let vista = 'pedido';
+  let filasCrudas = [];
+  const seleccion = new Set();
+
+  function actualizarBarraSeleccion() {
+    conteoSeleccion.textContent = seleccion.size;
+    btnOcultar.hidden = seleccion.size === 0 || mostrarOcultas;
+    btnOcultar.textContent = mostrarOcultas ? `Restaurar seleccionadas (${seleccion.size})` : `Ocultar seleccionadas (${seleccion.size})`;
+  }
+
+  function renderVistaPedido() {
+    const porOrden = new Map();
+    for (const f of filasCrudas) {
+      if (!porOrden.has(f.orden_id)) {
+        porOrden.set(f.orden_id, { hotel: f.hotel, estatus_sistema: f.estatus_sistema, modelos: new Set(), cantidad: 0, importe: 0 });
+      }
+      const g = porOrden.get(f.orden_id);
+      g.modelos.add(f.modelo);
+      g.cantidad += Number(f.cantidad) || 0;
+      g.importe += Number(f.importe) || 0;
     }
-    const g = porOrden.get(f.orden_id);
-    g.modelos.add(f.modelo);
-    g.cantidad += Number(f.cantidad) || 0;
-    g.importe += Number(f.importe) || 0;
-  }
-  const filas = [...porOrden.entries()].sort((a, b) => b[1].importe - a[1].importe);
+    const filas = [...porOrden.entries()].sort((a, b) => b[1].importe - a[1].importe);
 
-  encabezadoPendienteFacturar.innerHTML = `
-    <tr>
-      <th><input type="checkbox" id="check-todas-pendiente-facturar" /></th>
-      <th>Orden</th><th>Hotel</th><th>Estatus</th><th>Modelo</th><th>Cantidad</th><th>Importe</th>
-    </tr>
-  `;
-  tablaPendienteFacturar.innerHTML = filas.map(([ordenId, g]) => `
-    <tr>
-      <td><input type="checkbox" class="check-pendiente-facturar" data-orden="${escaparHtml(ordenId)}" /></td>
-      <td><a href="ordenes.html?orden=${encodeURIComponent(ordenId)}">${escaparHtml(ordenId)}</a></td>
-      <td>${escaparHtml(g.hotel || '(sin hotel/local)')}</td>
-      <td>${escaparHtml(g.estatus_sistema || '')}</td>
-      <td>${escaparHtml([...g.modelos].join(', '))}</td>
-      <td>${g.cantidad}</td>
-      <td>${formatoImporte(g.importe)}</td>
-    </tr>
-  `).join('');
-  piePendienteFacturar.innerHTML = `
-    <tr>
-      <td colspan="5"><strong>Total</strong></td>
-      <td>${filas.reduce((s, [, g]) => s + g.cantidad, 0)}</td>
-      <td>${formatoImporte(filas.reduce((s, [, g]) => s + g.importe, 0))}</td>
-    </tr>
-  `;
-
-  document.getElementById('check-todas-pendiente-facturar').addEventListener('change', (e) => {
-    const marcar = e.target.checked;
-    tablaPendienteFacturar.querySelectorAll('.check-pendiente-facturar').forEach((chk) => {
-      chk.checked = marcar;
-      if (marcar) seleccionPendienteFacturar.add(chk.dataset.orden);
-      else seleccionPendienteFacturar.delete(chk.dataset.orden);
-    });
-    actualizarBarraSeleccionPendienteFacturar();
-  });
-}
-
-function renderVistaClientePendienteFacturar() {
-  const porHotel = new Map();
-  for (const f of filasCrudasPendienteFacturar) {
-    const clave = f.hotel || '(sin hotel/local)';
-    if (!porHotel.has(clave)) porHotel.set(clave, { pedidos: new Set(), cantidad: 0, importe: 0 });
-    const g = porHotel.get(clave);
-    g.pedidos.add(f.orden_id);
-    g.cantidad += Number(f.cantidad) || 0;
-    g.importe += Number(f.importe) || 0;
-  }
-  const filas = [...porHotel.entries()].sort((a, b) => b[1].importe - a[1].importe);
-
-  encabezadoPendienteFacturar.innerHTML = `<tr><th>Hotel</th><th>Pedidos</th><th>Cantidad</th><th>Importe</th></tr>`;
-  tablaPendienteFacturar.innerHTML = filas.map(([hotel, g]) => `
-    <tr>
-      <td>${escaparHtml(hotel)}</td>
-      <td>${enlacesPedidos(g.pedidos)}</td>
-      <td>${g.cantidad}</td>
-      <td>${formatoImporte(g.importe)}</td>
-    </tr>
-  `).join('');
-  piePendienteFacturar.innerHTML = `
-    <tr>
-      <td><strong>Total</strong></td>
-      <td></td>
-      <td>${filas.reduce((s, [, g]) => s + g.cantidad, 0)}</td>
-      <td>${formatoImporte(filas.reduce((s, [, g]) => s + g.importe, 0))}</td>
-    </tr>
-  `;
-}
-
-function renderVistaProductoPendienteFacturar() {
-  const porModelo = new Map();
-  for (const f of filasCrudasPendienteFacturar) {
-    if (!porModelo.has(f.modelo)) porModelo.set(f.modelo, { pedidos: new Set(), cantidad: 0, importe: 0 });
-    const g = porModelo.get(f.modelo);
-    g.pedidos.add(f.orden_id);
-    g.cantidad += Number(f.cantidad) || 0;
-    g.importe += Number(f.importe) || 0;
-  }
-  const filas = [...porModelo.entries()].sort((a, b) => b[1].importe - a[1].importe);
-
-  encabezadoPendienteFacturar.innerHTML = `<tr><th>Código</th><th>Pedidos</th><th>Cantidad</th><th>Importe</th></tr>`;
-  tablaPendienteFacturar.innerHTML = filas.map(([modelo, g]) => `
-    <tr>
-      <td>${escaparHtml(modelo)}</td>
-      <td>${enlacesPedidos(g.pedidos)}</td>
-      <td>${g.cantidad}</td>
-      <td>${formatoImporte(g.importe)}</td>
-    </tr>
-  `).join('');
-  piePendienteFacturar.innerHTML = `
-    <tr>
-      <td><strong>Total</strong></td>
-      <td></td>
-      <td>${filas.reduce((s, [, g]) => s + g.cantidad, 0)}</td>
-      <td>${formatoImporte(filas.reduce((s, [, g]) => s + g.importe, 0))}</td>
-    </tr>
-  `;
-}
-
-function renderVistaPendienteFacturar() {
-  seleccionPendienteFacturar.clear();
-  barraSeleccionPendienteFacturar.hidden = vistaPendienteFacturar !== 'pedido';
-  if (vistaPendienteFacturar === 'pedido') renderVistaPedidoPendienteFacturar();
-  else if (vistaPendienteFacturar === 'cliente') renderVistaClientePendienteFacturar();
-  else renderVistaProductoPendienteFacturar();
-  actualizarBarraSeleccionPendienteFacturar();
-}
-
-async function cargarReportePendienteFacturar() {
-  const res = await fetch(`/api/reportes/pendiente-facturar${mostrarOcultasPendienteFacturar ? '?ocultas=1' : ''}`);
-  const { filas, totalOcultas } = await res.json();
-  filasCrudasPendienteFacturar = filas;
-
-  estadoVacioPendienteFacturar.hidden = filas.length !== 0;
-  chipOcultasPendienteFacturarConteo.textContent = `(${totalOcultas})`;
-  chipVerOcultasPendienteFacturar.classList.toggle('chip-estatus-activo', mostrarOcultasPendienteFacturar);
-
-  const pedidosDistintos = new Set();
-  const codigosDistintos = new Set();
-  let cantidadTotal = 0;
-  let importeTotal = 0;
-  for (const f of filas) {
-    pedidosDistintos.add(f.orden_id);
-    codigosDistintos.add(f.modelo);
-    cantidadTotal += Number(f.cantidad) || 0;
-    importeTotal += Number(f.importe) || 0;
-  }
-  resumenPedidosPendienteFacturar.textContent = pedidosDistintos.size;
-  resumenCodigosPendienteFacturar.textContent = codigosDistintos.size;
-  resumenCantidadPendienteFacturar.textContent = cantidadTotal;
-  resumenImportePendienteFacturar.textContent = `$${formatoImporte(importeTotal)}`;
-
-  renderVistaPendienteFacturar();
-}
-
-tablaPendienteFacturar.addEventListener('change', (e) => {
-  if (!e.target.classList.contains('check-pendiente-facturar')) return;
-  const ordenId = e.target.dataset.orden;
-  if (e.target.checked) seleccionPendienteFacturar.add(ordenId);
-  else seleccionPendienteFacturar.delete(ordenId);
-  actualizarBarraSeleccionPendienteFacturar();
-});
-
-btnOcultarPendienteFacturar.addEventListener('click', async () => {
-  const ordenes = [...seleccionPendienteFacturar];
-  if (!ordenes.length) return;
-  const accion = mostrarOcultasPendienteFacturar ? 'restaurar' : 'ocultar';
-  await fetch(`/api/reportes/pendiente-facturar/${accion}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ordenes }),
-  });
-  await cargarReportePendienteFacturar();
-});
-
-chipVerOcultasPendienteFacturar.addEventListener('click', async () => {
-  mostrarOcultasPendienteFacturar = !mostrarOcultasPendienteFacturar;
-  vistaPendienteFacturar = 'pedido';
-  botonesVistaPendienteFacturar.forEach((b) => b.classList.toggle('chip-estatus-activo', b.dataset.vista === 'pedido'));
-  await cargarReportePendienteFacturar();
-});
-
-botonesVistaPendienteFacturar.forEach((boton) => {
-  boton.addEventListener('click', () => {
-    vistaPendienteFacturar = boton.dataset.vista;
-    botonesVistaPendienteFacturar.forEach((b) => b.classList.toggle('chip-estatus-activo', b === boton));
-    if (vistaPendienteFacturar !== 'pedido' && mostrarOcultasPendienteFacturar) {
-      mostrarOcultasPendienteFacturar = false;
-      chipVerOcultasPendienteFacturar.classList.remove('chip-estatus-activo');
-      cargarReportePendienteFacturar();
-    } else {
-      renderVistaPendienteFacturar();
-    }
-  });
-});
-
-async function cargarReportePendiente(clave) {
-  const cfg = REPORTES_PENDIENTE[clave];
-  const res = await fetch(cfg.endpoint);
-  const filas = await res.json();
-
-  cfg.tbody.innerHTML = '';
-  cfg.estadoVacio.hidden = filas.length !== 0;
-
-  let cantidadTotal = 0;
-  let importeTotal = 0;
-  for (const f of filas) {
-    cantidadTotal += Number(f.cantidad_total) || 0;
-    importeTotal += Number(f.importe_total) || 0;
-
-    const tr = document.createElement('tr');
-    tr.classList.add('fila-clicable');
-    tr.dataset.clave = clave;
-    tr.dataset.articulo = f.articulo;
-    tr.innerHTML = `
-      <td>${escaparHtml(f.articulo)}</td>
-      <td>${f.cantidad_total ?? ''}</td>
-      <td>${formatoImporte(f.importe_total)}</td>
-      <td>${f.num_ordenes}</td>
+    encabezado.innerHTML = `
+      <tr>
+        <th><input type="checkbox" id="check-todas-${prefijo}" /></th>
+        <th>Orden</th><th>Hotel</th><th>Estatus</th><th>Modelo</th><th>Cantidad</th><th>Importe</th>
+      </tr>
     `;
-    cfg.tbody.appendChild(tr);
+    tabla.innerHTML = filas.map(([ordenId, g]) => `
+      <tr>
+        <td><input type="checkbox" class="check-${prefijo}" data-orden="${escaparHtml(ordenId)}" /></td>
+        <td><a href="ordenes.html?orden=${encodeURIComponent(ordenId)}">${escaparHtml(ordenId)}</a></td>
+        <td>${escaparHtml(g.hotel || '(sin hotel/local)')}</td>
+        <td>${escaparHtml(g.estatus_sistema || '')}</td>
+        <td>${escaparHtml([...g.modelos].join(', '))}</td>
+        <td>${g.cantidad}</td>
+        <td>${formatoImporte(g.importe)}</td>
+      </tr>
+    `).join('');
+    pie.innerHTML = `
+      <tr>
+        <td colspan="5"><strong>Total</strong></td>
+        <td>${filas.reduce((s, [, g]) => s + g.cantidad, 0)}</td>
+        <td>${formatoImporte(filas.reduce((s, [, g]) => s + g.importe, 0))}</td>
+      </tr>
+    `;
+
+    document.getElementById(`check-todas-${prefijo}`).addEventListener('change', (e) => {
+      const marcar = e.target.checked;
+      tabla.querySelectorAll(`.check-${prefijo}`).forEach((chk) => {
+        chk.checked = marcar;
+        if (marcar) seleccion.add(chk.dataset.orden);
+        else seleccion.delete(chk.dataset.orden);
+      });
+      actualizarBarraSeleccion();
+    });
   }
 
-  cfg.totalCantidad.textContent = filas.length ? cantidadTotal : '';
-  cfg.totalImporte.textContent = filas.length ? formatoImporte(importeTotal) : '';
+  function renderVistaAgrupada(agruparPor, etiquetaColumna) {
+    const grupos = new Map();
+    for (const f of filasCrudas) {
+      const clave = agruparPor === 'hotel' ? (f.hotel || '(sin hotel/local)') : f.modelo;
+      if (!grupos.has(clave)) grupos.set(clave, { pedidos: new Set(), cantidad: 0, importe: 0 });
+      const g = grupos.get(clave);
+      g.pedidos.add(f.orden_id);
+      g.cantidad += Number(f.cantidad) || 0;
+      g.importe += Number(f.importe) || 0;
+    }
+    const filas = [...grupos.entries()].sort((a, b) => b[1].importe - a[1].importe);
+
+    encabezado.innerHTML = `<tr><th>${etiquetaColumna}</th><th>Pedidos</th><th>Cantidad</th><th>Importe</th></tr>`;
+    tabla.innerHTML = filas.map(([clave, g]) => `
+      <tr>
+        <td>${escaparHtml(clave)}</td>
+        <td>${enlacesPedidos(g.pedidos)}</td>
+        <td>${g.cantidad}</td>
+        <td>${formatoImporte(g.importe)}</td>
+      </tr>
+    `).join('');
+    pie.innerHTML = `
+      <tr>
+        <td><strong>Total</strong></td>
+        <td></td>
+        <td>${filas.reduce((s, [, g]) => s + g.cantidad, 0)}</td>
+        <td>${formatoImporte(filas.reduce((s, [, g]) => s + g.importe, 0))}</td>
+      </tr>
+    `;
+  }
+
+  function renderVista() {
+    seleccion.clear();
+    barraSeleccion.hidden = vista !== 'pedido';
+    if (vista === 'pedido') renderVistaPedido();
+    else if (vista === 'cliente') renderVistaAgrupada('hotel', 'Hotel');
+    else renderVistaAgrupada('modelo', 'Código');
+    actualizarBarraSeleccion();
+  }
+
+  async function cargar() {
+    const res = await fetch(`/api/reportes/${prefijo}${mostrarOcultas ? '?ocultas=1' : ''}`);
+    const { filas, totalOcultas } = await res.json();
+    filasCrudas = filas;
+
+    estadoVacio.hidden = filas.length !== 0;
+    chipOcultasConteo.textContent = `(${totalOcultas})`;
+    chipVerOcultas.classList.toggle('chip-estatus-activo', mostrarOcultas);
+
+    const pedidosDistintos = new Set();
+    const codigosDistintos = new Set();
+    let cantidadTotal = 0;
+    let importeTotal = 0;
+    for (const f of filas) {
+      pedidosDistintos.add(f.orden_id);
+      codigosDistintos.add(f.modelo);
+      cantidadTotal += Number(f.cantidad) || 0;
+      importeTotal += Number(f.importe) || 0;
+    }
+    resumenPedidos.textContent = pedidosDistintos.size;
+    resumenCodigos.textContent = codigosDistintos.size;
+    resumenCantidad.textContent = cantidadTotal;
+    resumenImporte.textContent = `$${formatoImporte(importeTotal)}`;
+
+    renderVista();
+  }
+
+  tabla.addEventListener('change', (e) => {
+    if (!e.target.classList.contains(`check-${prefijo}`)) return;
+    const ordenId = e.target.dataset.orden;
+    if (e.target.checked) seleccion.add(ordenId);
+    else seleccion.delete(ordenId);
+    actualizarBarraSeleccion();
+  });
+
+  btnOcultar.addEventListener('click', async () => {
+    const ordenes = [...seleccion];
+    if (!ordenes.length) return;
+    const accion = mostrarOcultas ? 'restaurar' : 'ocultar';
+    await fetch(`/api/reportes/${prefijo}/${accion}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ordenes }),
+    });
+    await cargar();
+  });
+
+  chipVerOcultas.addEventListener('click', async () => {
+    mostrarOcultas = !mostrarOcultas;
+    vista = 'pedido';
+    botonesVista.forEach((b) => b.classList.toggle('chip-estatus-activo', b.dataset.vista === 'pedido'));
+    await cargar();
+  });
+
+  botonesVista.forEach((boton) => {
+    boton.addEventListener('click', () => {
+      vista = boton.dataset.vista;
+      botonesVista.forEach((b) => b.classList.toggle('chip-estatus-activo', b === boton));
+      if (vista !== 'pedido' && mostrarOcultas) {
+        mostrarOcultas = false;
+        chipVerOcultas.classList.remove('chip-estatus-activo');
+        cargar();
+      } else {
+        renderVista();
+      }
+    });
+  });
+
+  return { cargar };
 }
 
-const modalPendienteOverlay = document.getElementById('modal-pendiente-overlay');
-const modalPendienteContenido = document.getElementById('modal-pendiente-contenido');
-const modalPendienteCerrar = document.getElementById('modal-pendiente-cerrar');
-
-async function abrirDetallePendiente(clave, articulo) {
-  const cfg = REPORTES_PENDIENTE[clave];
-  const res = await fetch(`${cfg.endpointDetalle}?articulo=${encodeURIComponent(articulo)}`);
-  const filas = await res.json();
-
-  modalPendienteContenido.innerHTML = `
-    <h2>${escaparHtml(articulo)}</h2>
-    <p class="pista">${escaparHtml(cfg.titulo)} · ${filas.length} orden(es)</p>
-    <div class="tabla-scroll">
-      <table>
-        <thead>
-          <tr><th>Cliente</th><th>Fecha de pedido</th><th>Orden</th><th>Cantidad</th><th>Importe</th></tr>
-        </thead>
-        <tbody>
-          ${filas.map((f) => `
-            <tr>
-              <td>${escaparHtml(f.hotel || '(sin hotel/local)')}${f.contacto_nombre ? ` · ${escaparHtml(f.contacto_nombre)}` : ''}</td>
-              <td>${escaparHtml(f.fecha_pedido || '')}</td>
-              <td><a href="ordenes.html?orden=${encodeURIComponent(f.orden_id)}">${escaparHtml(f.orden_id)}</a></td>
-              <td>${f.cantidad ?? ''}</td>
-              <td>${formatoImporte(f.importe)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
-  modalPendienteOverlay.hidden = false;
-}
-
-function cerrarModalPendiente() {
-  modalPendienteOverlay.hidden = true;
-  modalPendienteContenido.innerHTML = '';
-}
-
-modalPendienteCerrar.addEventListener('click', cerrarModalPendiente);
-modalPendienteOverlay.addEventListener('click', (e) => {
-  if (e.target === modalPendienteOverlay) cerrarModalPendiente();
-});
-REPORTES_PENDIENTE.entregar.tbody.addEventListener('click', (e) => {
-  const fila = e.target.closest('tr[data-articulo]');
-  if (fila) abrirDetallePendiente(fila.dataset.clave, fila.dataset.articulo);
-});
+const reportePendienteFacturar = crearReportePendiente('facturar');
+const reportePendienteEntregar = crearReportePendiente('entregar');
 
 const filtroArticulo = document.getElementById('filtro-articulo');
 const filtroHotel = document.getElementById('filtro-hotel');
@@ -650,8 +532,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 function cargarReportesPendientes() {
-  cargarReportePendienteFacturar();
-  cargarReportePendiente('entregar');
+  reportePendienteFacturar.cargar();
+  reportePendienteEntregar.cargar();
 }
 
 promesaAuth.then((sesion) => {

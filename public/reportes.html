@@ -80,26 +80,43 @@
     <p id="estado-vacio-pendiente-facturar" class="pista" hidden>No hay nada pendiente por facturar.</p>
 
     <h2 id="pendiente-entregar">Pendiente por entregar</h2>
-    <p class="pista">Por modelo: órdenes cuyo Estatus del sistema todavía no llega a facturación ("Ejecución de la orden pendiente" o "Parcialmente ejecutada"). Clic en un modelo para ver el detalle por cliente y fecha de pedido.</p>
+    <p class="pista">Órdenes cuyo Estatus del sistema todavía no llega a facturación ("Ejecución de la orden pendiente" o "Parcialmente ejecutada"). Si el sistema no distingue una orden que ya está resuelta, en la vista "Por pedido" selecciónala y ocúltala del reporte.</p>
+
+    <div class="hero-comparativas" id="resumen-pendiente-entregar">
+      <div class="hero-comparativa">
+        <span class="hero-comparativa__etiqueta">Pedidos</span>
+        <span class="hero-comparativa__valor" id="resumen-pedidos-pendiente-entregar">0</span>
+      </div>
+      <div class="hero-comparativa">
+        <span class="hero-comparativa__etiqueta">Códigos distintos</span>
+        <span class="hero-comparativa__valor" id="resumen-codigos-pendiente-entregar">0</span>
+      </div>
+      <div class="hero-comparativa">
+        <span class="hero-comparativa__etiqueta">Unidades</span>
+        <span class="hero-comparativa__valor" id="resumen-cantidad-pendiente-entregar">0</span>
+      </div>
+      <div class="hero-comparativa">
+        <span class="hero-comparativa__etiqueta">Importe</span>
+        <span class="hero-comparativa__valor" id="resumen-importe-pendiente-entregar">$0.00</span>
+      </div>
+    </div>
+
+    <div class="fila-filtros" id="vistas-pendiente-entregar" style="align-items:center; gap:0.5rem;">
+      <button type="button" class="chip-estatus chip-estatus-activo" data-vista="pedido">Por pedido</button>
+      <button type="button" class="chip-estatus" data-vista="cliente">Por cliente</button>
+      <button type="button" class="chip-estatus" data-vista="producto">Detalle por producto</button>
+    </div>
+
+    <div class="fila-filtros" id="barra-seleccion-pendiente-entregar" style="align-items:center; gap:0.75rem;">
+      <button type="button" id="btn-ocultar-pendiente-entregar" hidden>Ocultar seleccionadas (<span id="conteo-seleccion-pendiente-entregar">0</span>)</button>
+      <button type="button" id="chip-ver-ocultas-pendiente-entregar" class="chip-estatus chip-ocultas">Ocultadas manualmente <span class="chip-estatus-conteo" id="chip-ocultas-pendiente-entregar-conteo">(0)</span></button>
+    </div>
+
     <div class="tabla-scroll">
       <table>
-        <thead>
-          <tr>
-            <th>Modelo</th>
-            <th>Cantidad</th>
-            <th>Importe</th>
-            <th>Órdenes</th>
-          </tr>
-        </thead>
+        <thead id="encabezado-pendiente-entregar"></thead>
         <tbody id="tabla-pendiente-entregar"></tbody>
-        <tfoot>
-          <tr>
-            <td><strong>Total</strong></td>
-            <td id="total-cantidad-pendiente-entregar"></td>
-            <td id="total-importe-pendiente-entregar"></td>
-            <td></td>
-          </tr>
-        </tfoot>
+        <tfoot id="pie-pendiente-entregar"></tfoot>
       </table>
     </div>
     <p id="estado-vacio-pendiente-entregar" class="pista" hidden>No hay nada pendiente por entregar.</p>
@@ -149,13 +166,6 @@
     <div class="modal-caja" role="dialog" aria-modal="true">
       <button type="button" id="modal-ordenes-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
       <div id="modal-ordenes-contenido"></div>
-    </div>
-  </div>
-
-  <div id="modal-pendiente-overlay" class="modal-overlay" hidden>
-    <div class="modal-caja" role="dialog" aria-modal="true">
-      <button type="button" id="modal-pendiente-cerrar" class="modal-cerrar" aria-label="Cerrar">✕</button>
-      <div id="modal-pendiente-contenido"></div>
     </div>
   </div>
 

@@ -4512,12 +4512,20 @@ app.post('/api/pendientes/:id/notas', requirePermiso('catalogos', 'editar'), ar(
 // pedida" en Facturacion). "detalle_vigente" se queda solo con la fila del import mas reciente
 // por (id, articulo) - la vigente - y es lo que deben usar TODOS los reportes de aqui en
 // adelante que agreguen cantidades/importes de Detalle de compra.
+//
+// NetSuite tambien renombra items: cuando descontinua un codigo, el historico de ese renglon
+// queda a veces sincronizado con el sufijo "_OLD" (el nombre viejo del item) y otras veces con el
+// nombre nuevo, segun el momento exacto del sync (confirmado contra NetSuite en SO5910: el mismo
+// renglon de 90 piezas aparece importado una vez como "HG55U800FNFXZA" y otra como
+// "HG55U800FNFXZA_OLD", NO son 180 piezas reales). Por eso el agrupado de "vigente" ignora el
+// sufijo "_OLD" al decidir que es el "mismo" articulo, y usa como nombre visible el mas reciente.
 const CTE_DETALLE_VIGENTE = `
   WITH detalle_vigente AS (
-    SELECT DISTINCT ON (id, articulo) id, articulo, cantidad_vendida, importe, fecha
+    SELECT DISTINCT ON (id, REGEXP_REPLACE(articulo, '_OLD$', ''))
+      id, articulo, cantidad_vendida, importe, fecha
     FROM detalle_de_compra
     WHERE articulo IS NOT NULL AND articulo != ''
-    ORDER BY id, articulo, creado_en DESC
+    ORDER BY id, REGEXP_REPLACE(articulo, '_OLD$', ''), creado_en DESC
   )
 `;
 

@@ -15,15 +15,6 @@ function formatoImporte(valor) {
 // chocar con el "th[data-campo]" generico, que es solo de la tabla de Hotel/Artículo).
 
 const REPORTES_PENDIENTE = {
-  facturar: {
-    endpoint: '/api/reportes/pendiente-facturar',
-    endpointDetalle: '/api/reportes/pendiente-facturar/detalle',
-    tbody: document.getElementById('tabla-pendiente-facturar'),
-    totalCantidad: document.getElementById('total-cantidad-pendiente-facturar'),
-    totalImporte: document.getElementById('total-importe-pendiente-facturar'),
-    estadoVacio: document.getElementById('estado-vacio-pendiente-facturar'),
-    titulo: 'Pendiente por facturar',
-  },
   entregar: {
     endpoint: '/api/reportes/pendiente-entregar',
     endpointDetalle: '/api/reportes/pendiente-entregar/detalle',
@@ -34,6 +25,41 @@ const REPORTES_PENDIENTE = {
     titulo: 'Pendiente por entregar',
   },
 };
+
+// "Pendiente por facturar" es una fila por Pedido (no por modelo, como "por entregar" de abajo):
+// asi un mismo modelo fisico partido en dos codigos de NetSuite (ej. "_OLD") no fragmenta el
+// reporte, y cada fila ya trae hotel + estatus sin necesidad de un modal de detalle.
+const tablaPendienteFacturar = document.getElementById('tabla-pendiente-facturar');
+const totalCantidadPendienteFacturar = document.getElementById('total-cantidad-pendiente-facturar');
+const totalImportePendienteFacturar = document.getElementById('total-importe-pendiente-facturar');
+const estadoVacioPendienteFacturar = document.getElementById('estado-vacio-pendiente-facturar');
+
+async function cargarReportePendienteFacturar() {
+  const res = await fetch('/api/reportes/pendiente-facturar');
+  const filas = await res.json();
+
+  estadoVacioPendienteFacturar.hidden = filas.length !== 0;
+
+  let cantidadTotal = 0;
+  let importeTotal = 0;
+  tablaPendienteFacturar.innerHTML = filas.map((f) => {
+    cantidadTotal += Number(f.cantidad_total) || 0;
+    importeTotal += Number(f.importe_total) || 0;
+    return `
+      <tr>
+        <td><a href="ordenes.html?orden=${encodeURIComponent(f.orden_id)}">${escaparHtml(f.orden_id)}</a></td>
+        <td>${escaparHtml(f.hotel || '(sin hotel/local)')}</td>
+        <td>${escaparHtml(f.estatus_sistema || '')}</td>
+        <td>${escaparHtml(f.modelos || '')}</td>
+        <td>${f.cantidad_total ?? ''}</td>
+        <td>${formatoImporte(f.importe_total)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  totalCantidadPendienteFacturar.textContent = filas.length ? cantidadTotal : '';
+  totalImportePendienteFacturar.textContent = filas.length ? formatoImporte(importeTotal) : '';
+}
 
 async function cargarReportePendiente(clave) {
   const cfg = REPORTES_PENDIENTE[clave];
@@ -108,10 +134,6 @@ function cerrarModalPendiente() {
 modalPendienteCerrar.addEventListener('click', cerrarModalPendiente);
 modalPendienteOverlay.addEventListener('click', (e) => {
   if (e.target === modalPendienteOverlay) cerrarModalPendiente();
-});
-REPORTES_PENDIENTE.facturar.tbody.addEventListener('click', (e) => {
-  const fila = e.target.closest('tr[data-articulo]');
-  if (fila) abrirDetallePendiente(fila.dataset.clave, fila.dataset.articulo);
 });
 REPORTES_PENDIENTE.entregar.tbody.addEventListener('click', (e) => {
   const fila = e.target.closest('tr[data-articulo]');
@@ -434,7 +456,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 function cargarReportesPendientes() {
-  cargarReportePendiente('facturar');
+  cargarReportePendienteFacturar();
   cargarReportePendiente('entregar');
 }
 

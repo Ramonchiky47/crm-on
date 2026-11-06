@@ -38,24 +38,25 @@
     </div>
 
     <h2 id="pendiente-facturar">Pendiente por facturar</h2>
-    <p class="pista">Por modelo: órdenes sin ninguna factura asociada (sin contar Cerrada/Cancelada, que ya no se van a facturar). Clic en un modelo para ver el detalle por cliente y fecha de pedido.</p>
+    <p class="pista">Por pedido: órdenes sin ninguna factura asociada (sin contar Cerrada/Cancelada, que ya no se van a facturar). Clic en un pedido para abrirlo en Órdenes.</p>
     <div class="tabla-scroll">
       <table>
         <thead>
           <tr>
+            <th>Orden</th>
+            <th>Hotel</th>
+            <th>Estatus</th>
             <th>Modelo</th>
             <th>Cantidad</th>
             <th>Importe</th>
-            <th>Órdenes</th>
           </tr>
         </thead>
         <tbody id="tabla-pendiente-facturar"></tbody>
         <tfoot>
           <tr>
-            <td><strong>Total</strong></td>
+            <td colspan="4"><strong>Total</strong></td>
             <td id="total-cantidad-pendiente-facturar"></td>
             <td id="total-importe-pendiente-facturar"></td>
-            <td></td>
           </tr>
         </tfoot>
       </table>

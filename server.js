@@ -4644,36 +4644,24 @@ function condicionPendienteFacturar() {
   `;
 }
 
+// Una fila por Pedido (no por Modelo): un mismo modelo fisico a veces queda partido en dos
+// codigos de NetSuite (ej. "HG55U800FNFXZA" y "HG55U800FNFXZA_OLD" cuando NetSuite renombra el
+// SKU), lo que inflaba/fragmentaba el reporte agrupado por articulo. Agrupando por pedido cada
+// orden aparece una sola vez con su hotel, estatus y el/los modelo(s) que trae, sin importar
+// cuantos codigos distintos use NetSuite para el mismo producto.
 app.get('/api/reportes/pendiente-facturar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
   const filas = await db.prepare(`
     ${CTE_DETALLE_VIGENTE}
-    SELECT dv.articulo, SUM(dv.cantidad_vendida) AS cantidad_total, SUM(dv.importe) AS importe_total,
-      COUNT(DISTINCT dv.id) AS num_ordenes
-    FROM detalle_vigente dv
-    JOIN ordenes o ON o.id = dv.id
-    WHERE ${condicionPendienteFacturar()}
-    GROUP BY dv.articulo
-    ORDER BY importe_total DESC NULLS LAST
-  `).all();
-  res.json(filas);
-}));
-
-app.get('/api/reportes/pendiente-facturar/detalle', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
-  const { articulo } = req.query;
-  if (!articulo) return res.status(400).json({ error: 'articulo es requerido' });
-
-  const filas = await db.prepare(`
-    ${CTE_DETALLE_VIGENTE}
-    SELECT o.id AS orden_id, o.fecha AS fecha_pedido, d.destino AS hotel,
-      TRIM(c.nombre || ' ' || COALESCE(c.apellido, '')) AS contacto_nombre,
-      dv.cantidad_vendida AS cantidad, dv.importe AS importe
+    SELECT o.id AS orden_id, o.fecha AS fecha_pedido, d.destino AS hotel, o.estatus_sistema,
+      STRING_AGG(DISTINCT dv.articulo, ', ' ORDER BY dv.articulo) AS modelos,
+      SUM(dv.cantidad_vendida) AS cantidad_total, SUM(dv.importe) AS importe_total
     FROM detalle_vigente dv
     JOIN ordenes o ON o.id = dv.id
     LEFT JOIN destinos d ON d.id_destino = o.destino_id
-    LEFT JOIN contactos c ON c.id_contacto = o.contacto_id
-    WHERE dv.articulo = ? AND ${condicionPendienteFacturar()}
-    ORDER BY o.fecha DESC
-  `).all(articulo);
+    WHERE ${condicionPendienteFacturar()}
+    GROUP BY o.id, o.fecha, d.destino, o.estatus_sistema
+    ORDER BY importe_total DESC NULLS LAST
+  `).all();
   res.json(filas);
 }));
 

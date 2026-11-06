@@ -29,16 +29,40 @@ const REPORTES_PENDIENTE = {
 // "Pendiente por facturar" es una fila por Pedido (no por modelo, como "por entregar" de abajo):
 // asi un mismo modelo fisico partido en dos codigos de NetSuite (ej. "_OLD") no fragmenta el
 // reporte, y cada fila ya trae hotel + estatus sin necesidad de un modal de detalle.
+//
+// A veces el sistema no puede distinguir una orden ya resuelta en la realidad de una pendiente de
+// verdad (ej. factura hecha fuera de NetSuite). Por eso hay un checkbox para ocultarlas a mano
+// (reportes_ocultos en el servidor) sin borrar la orden, con un chip para verlas/restaurarlas.
 const tablaPendienteFacturar = document.getElementById('tabla-pendiente-facturar');
 const totalCantidadPendienteFacturar = document.getElementById('total-cantidad-pendiente-facturar');
 const totalImportePendienteFacturar = document.getElementById('total-importe-pendiente-facturar');
 const estadoVacioPendienteFacturar = document.getElementById('estado-vacio-pendiente-facturar');
+const checkTodasPendienteFacturar = document.getElementById('check-todas-pendiente-facturar');
+const btnOcultarPendienteFacturar = document.getElementById('btn-ocultar-pendiente-facturar');
+const conteoSeleccionPendienteFacturar = document.getElementById('conteo-seleccion-pendiente-facturar');
+const chipVerOcultasPendienteFacturar = document.getElementById('chip-ver-ocultas-pendiente-facturar');
+const chipOcultasPendienteFacturarConteo = document.getElementById('chip-ocultas-pendiente-facturar-conteo');
+
+let mostrarOcultasPendienteFacturar = false;
+const seleccionPendienteFacturar = new Set();
+
+function actualizarBarraSeleccionPendienteFacturar() {
+  conteoSeleccionPendienteFacturar.textContent = seleccionPendienteFacturar.size;
+  btnOcultarPendienteFacturar.hidden = seleccionPendienteFacturar.size === 0 || mostrarOcultasPendienteFacturar;
+  btnOcultarPendienteFacturar.textContent = mostrarOcultasPendienteFacturar
+    ? `Restaurar seleccionadas (${seleccionPendienteFacturar.size})`
+    : `Ocultar seleccionadas (${seleccionPendienteFacturar.size})`;
+  checkTodasPendienteFacturar.checked = false;
+}
 
 async function cargarReportePendienteFacturar() {
-  const res = await fetch('/api/reportes/pendiente-facturar');
-  const filas = await res.json();
+  seleccionPendienteFacturar.clear();
+  const res = await fetch(`/api/reportes/pendiente-facturar${mostrarOcultasPendienteFacturar ? '?ocultas=1' : ''}`);
+  const { filas, totalOcultas } = await res.json();
 
   estadoVacioPendienteFacturar.hidden = filas.length !== 0;
+  chipOcultasPendienteFacturarConteo.textContent = `(${totalOcultas})`;
+  chipVerOcultasPendienteFacturar.classList.toggle('chip-estatus-activo', mostrarOcultasPendienteFacturar);
 
   let cantidadTotal = 0;
   let importeTotal = 0;
@@ -47,6 +71,7 @@ async function cargarReportePendienteFacturar() {
     importeTotal += Number(f.importe_total) || 0;
     return `
       <tr>
+        <td><input type="checkbox" class="check-pendiente-facturar" data-orden="${escaparHtml(f.orden_id)}" /></td>
         <td><a href="ordenes.html?orden=${encodeURIComponent(f.orden_id)}">${escaparHtml(f.orden_id)}</a></td>
         <td>${escaparHtml(f.hotel || '(sin hotel/local)')}</td>
         <td>${escaparHtml(f.estatus_sistema || '')}</td>
@@ -59,7 +84,47 @@ async function cargarReportePendienteFacturar() {
 
   totalCantidadPendienteFacturar.textContent = filas.length ? cantidadTotal : '';
   totalImportePendienteFacturar.textContent = filas.length ? formatoImporte(importeTotal) : '';
+  actualizarBarraSeleccionPendienteFacturar();
 }
+
+tablaPendienteFacturar.addEventListener('change', (e) => {
+  if (!e.target.classList.contains('check-pendiente-facturar')) return;
+  const ordenId = e.target.dataset.orden;
+  if (e.target.checked) seleccionPendienteFacturar.add(ordenId);
+  else seleccionPendienteFacturar.delete(ordenId);
+  actualizarBarraSeleccionPendienteFacturar();
+});
+
+checkTodasPendienteFacturar.addEventListener('change', () => {
+  const marcar = checkTodasPendienteFacturar.checked;
+  tablaPendienteFacturar.querySelectorAll('.check-pendiente-facturar').forEach((chk) => {
+    chk.checked = marcar;
+    if (marcar) seleccionPendienteFacturar.add(chk.dataset.orden);
+    else seleccionPendienteFacturar.delete(chk.dataset.orden);
+  });
+  conteoSeleccionPendienteFacturar.textContent = seleccionPendienteFacturar.size;
+  btnOcultarPendienteFacturar.hidden = seleccionPendienteFacturar.size === 0;
+  btnOcultarPendienteFacturar.textContent = mostrarOcultasPendienteFacturar
+    ? `Restaurar seleccionadas (${seleccionPendienteFacturar.size})`
+    : `Ocultar seleccionadas (${seleccionPendienteFacturar.size})`;
+});
+
+btnOcultarPendienteFacturar.addEventListener('click', async () => {
+  const ordenes = [...seleccionPendienteFacturar];
+  if (!ordenes.length) return;
+  const accion = mostrarOcultasPendienteFacturar ? 'restaurar' : 'ocultar';
+  await fetch(`/api/reportes/pendiente-facturar/${accion}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ordenes }),
+  });
+  await cargarReportePendienteFacturar();
+});
+
+chipVerOcultasPendienteFacturar.addEventListener('click', async () => {
+  mostrarOcultasPendienteFacturar = !mostrarOcultasPendienteFacturar;
+  await cargarReportePendienteFacturar();
+});
 
 async function cargarReportePendiente(clave) {
   const cfg = REPORTES_PENDIENTE[clave];

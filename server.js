@@ -4639,7 +4639,7 @@ function condicionPendienteFacturar() {
     NOT EXISTS (
       SELECT 1 FROM facturacion_pedido_id fp JOIN facturacion f ON f.id = fp.id WHERE fp.pedido_id = o.id
     )
-    AND o.estatus_sistema NOT IN ('Cerrada', 'Cancelada')
+    AND o.estatus_sistema NOT IN ('Cerrada', 'Cancelada', 'Facturada')
     AND ${FECHA_DESDE_REPORTES}
   `;
 }
@@ -4649,7 +4649,13 @@ function condicionPendienteFacturar() {
 // SKU), lo que inflaba/fragmentaba el reporte agrupado por articulo. Agrupando por pedido cada
 // orden aparece una sola vez con su hotel, estatus y el/los modelo(s) que trae, sin importar
 // cuantos codigos distintos use NetSuite para el mismo producto.
+//
+// "reportes_ocultos" es un escape manual: a veces el sistema no puede distinguir una orden que
+// ya esta resuelta en la realidad (ej. factura hecha fuera de NetSuite, o un desfase de
+// sincronizacion) de una pendiente de verdad. El usuario la oculta a mano desde la UI y queda
+// fuera del reporte (sin borrar la orden), con opcion de revertir.
 app.get('/api/reportes/pendiente-facturar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const soloOcultas = req.query.ocultas === '1';
   const filas = await db.prepare(`
     ${CTE_DETALLE_VIGENTE}
     SELECT o.id AS orden_id, o.fecha AS fecha_pedido, d.destino AS hotel, o.estatus_sistema,
@@ -4659,10 +4665,39 @@ app.get('/api/reportes/pendiente-facturar', requirePermiso('ordenes', 'ver'), ar
     JOIN ordenes o ON o.id = dv.id
     LEFT JOIN destinos d ON d.id_destino = o.destino_id
     WHERE ${condicionPendienteFacturar()}
+      AND ${soloOcultas ? 'EXISTS' : 'NOT EXISTS'} (
+        SELECT 1 FROM reportes_ocultos ro WHERE ro.reporte = 'pendiente-facturar' AND ro.orden_id = o.id
+      )
     GROUP BY o.id, o.fecha, d.destino, o.estatus_sistema
     ORDER BY importe_total DESC NULLS LAST
   `).all();
-  res.json(filas);
+  const { n: totalOcultas } = await db.prepare(`
+    SELECT COUNT(*) AS n FROM reportes_ocultos WHERE reporte = 'pendiente-facturar'
+  `).get();
+  res.json({ filas, totalOcultas: Number(totalOcultas) });
+}));
+
+app.post('/api/reportes/pendiente-facturar/ocultar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const ordenes = Array.isArray(req.body.ordenes) ? req.body.ordenes.filter((v) => typeof v === 'string' && v.trim()) : [];
+  if (!ordenes.length) return res.status(400).json({ error: 'ordenes es requerido y debe ser un arreglo no vacio' });
+
+  for (const ordenId of ordenes) {
+    await db.prepare(`
+      INSERT INTO reportes_ocultos (reporte, orden_id) VALUES ('pendiente-facturar', ?)
+      ON CONFLICT (reporte, orden_id) DO NOTHING
+    `).run(ordenId);
+  }
+  res.status(204).end();
+}));
+
+app.post('/api/reportes/pendiente-facturar/restaurar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const ordenes = Array.isArray(req.body.ordenes) ? req.body.ordenes.filter((v) => typeof v === 'string' && v.trim()) : [];
+  if (!ordenes.length) return res.status(400).json({ error: 'ordenes es requerido y debe ser un arreglo no vacio' });
+
+  for (const ordenId of ordenes) {
+    await db.prepare(`DELETE FROM reportes_ocultos WHERE reporte = 'pendiente-facturar' AND orden_id = ?`).run(ordenId);
+  }
+  res.status(204).end();
 }));
 
 app.get('/api/reportes/pendiente-entregar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {

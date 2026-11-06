@@ -38,11 +38,18 @@
     </div>
 
     <h2 id="pendiente-facturar">Pendiente por facturar</h2>
-    <p class="pista">Por pedido: órdenes sin ninguna factura asociada (sin contar Cerrada/Cancelada, que ya no se van a facturar). Clic en un pedido para abrirlo en Órdenes.</p>
+    <p class="pista">Por pedido: órdenes sin ninguna factura asociada (sin contar Cerrada/Cancelada/Facturada). Clic en un pedido para abrirlo en Órdenes. Si el sistema no distingue una orden que ya está resuelta, selecciónala y ocúltala del reporte.</p>
+
+    <div class="fila-filtros" style="align-items:center; gap:0.75rem;">
+      <button type="button" id="btn-ocultar-pendiente-facturar" hidden>Ocultar seleccionadas (<span id="conteo-seleccion-pendiente-facturar">0</span>)</button>
+      <button type="button" id="chip-ver-ocultas-pendiente-facturar" class="chip-estatus chip-ocultas">Ocultadas manualmente <span class="chip-estatus-conteo" id="chip-ocultas-pendiente-facturar-conteo">(0)</span></button>
+    </div>
+
     <div class="tabla-scroll">
       <table>
         <thead>
           <tr>
+            <th><input type="checkbox" id="check-todas-pendiente-facturar" /></th>
             <th>Orden</th>
             <th>Hotel</th>
             <th>Estatus</th>
@@ -54,7 +61,7 @@
         <tbody id="tabla-pendiente-facturar"></tbody>
         <tfoot>
           <tr>
-            <td colspan="4"><strong>Total</strong></td>
+            <td colspan="5"><strong>Total</strong></td>
             <td id="total-cantidad-pendiente-facturar"></td>
             <td id="total-importe-pendiente-facturar"></td>
           </tr>

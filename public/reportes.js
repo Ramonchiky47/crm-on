@@ -42,6 +42,10 @@ const btnOcultarPendienteFacturar = document.getElementById('btn-ocultar-pendien
 const conteoSeleccionPendienteFacturar = document.getElementById('conteo-seleccion-pendiente-facturar');
 const chipVerOcultasPendienteFacturar = document.getElementById('chip-ver-ocultas-pendiente-facturar');
 const chipOcultasPendienteFacturarConteo = document.getElementById('chip-ocultas-pendiente-facturar-conteo');
+const resumenPedidosPendienteFacturar = document.getElementById('resumen-pedidos-pendiente-facturar');
+const resumenCodigosPendienteFacturar = document.getElementById('resumen-codigos-pendiente-facturar');
+const resumenCantidadPendienteFacturar = document.getElementById('resumen-cantidad-pendiente-facturar');
+const resumenImportePendienteFacturar = document.getElementById('resumen-importe-pendiente-facturar');
 
 let mostrarOcultasPendienteFacturar = false;
 const seleccionPendienteFacturar = new Set();
@@ -66,9 +70,11 @@ async function cargarReportePendienteFacturar() {
 
   let cantidadTotal = 0;
   let importeTotal = 0;
+  const codigosDistintos = new Set();
   tablaPendienteFacturar.innerHTML = filas.map((f) => {
     cantidadTotal += Number(f.cantidad_total) || 0;
     importeTotal += Number(f.importe_total) || 0;
+    for (const codigo of (f.modelos || '').split(',').map((c) => c.trim()).filter(Boolean)) codigosDistintos.add(codigo);
     return `
       <tr>
         <td><input type="checkbox" class="check-pendiente-facturar" data-orden="${escaparHtml(f.orden_id)}" /></td>
@@ -84,6 +90,10 @@ async function cargarReportePendienteFacturar() {
 
   totalCantidadPendienteFacturar.textContent = filas.length ? cantidadTotal : '';
   totalImportePendienteFacturar.textContent = filas.length ? formatoImporte(importeTotal) : '';
+  resumenPedidosPendienteFacturar.textContent = filas.length;
+  resumenCodigosPendienteFacturar.textContent = codigosDistintos.size;
+  resumenCantidadPendienteFacturar.textContent = cantidadTotal;
+  resumenImportePendienteFacturar.textContent = `$${formatoImporte(importeTotal)}`;
   actualizarBarraSeleccionPendienteFacturar();
 }
 

@@ -38,7 +38,7 @@
     </div>
 
     <h2 id="pendiente-facturar">Pendiente por facturar</h2>
-    <p class="pista">Por pedido: órdenes sin ninguna factura asociada (sin contar Cerrada/Cancelada/Facturada). Clic en un pedido para abrirlo en Órdenes. Si el sistema no distingue una orden que ya está resuelta, selecciónala y ocúltala del reporte.</p>
+    <p class="pista">Órdenes sin ninguna factura asociada (sin contar Cerrada/Cancelada/Facturada). Si el sistema no distingue una orden que ya está resuelta, en la vista "Por pedido" selecciónala y ocúltala del reporte.</p>
 
     <div class="hero-comparativas" id="resumen-pendiente-facturar">
       <div class="hero-comparativa">
@@ -59,32 +59,22 @@
       </div>
     </div>
 
-    <div class="fila-filtros" style="align-items:center; gap:0.75rem;">
+    <div class="fila-filtros" id="vistas-pendiente-facturar" style="align-items:center; gap:0.5rem;">
+      <button type="button" id="vista-pedido-pendiente-facturar" class="chip-estatus chip-estatus-activo" data-vista="pedido">Por pedido</button>
+      <button type="button" id="vista-cliente-pendiente-facturar" class="chip-estatus" data-vista="cliente">Por cliente</button>
+      <button type="button" id="vista-producto-pendiente-facturar" class="chip-estatus" data-vista="producto">Detalle por producto</button>
+    </div>
+
+    <div class="fila-filtros" id="barra-seleccion-pendiente-facturar" style="align-items:center; gap:0.75rem;">
       <button type="button" id="btn-ocultar-pendiente-facturar" hidden>Ocultar seleccionadas (<span id="conteo-seleccion-pendiente-facturar">0</span>)</button>
       <button type="button" id="chip-ver-ocultas-pendiente-facturar" class="chip-estatus chip-ocultas">Ocultadas manualmente <span class="chip-estatus-conteo" id="chip-ocultas-pendiente-facturar-conteo">(0)</span></button>
     </div>
 
     <div class="tabla-scroll">
       <table>
-        <thead>
-          <tr>
-            <th><input type="checkbox" id="check-todas-pendiente-facturar" /></th>
-            <th>Orden</th>
-            <th>Hotel</th>
-            <th>Estatus</th>
-            <th>Modelo</th>
-            <th>Cantidad</th>
-            <th>Importe</th>
-          </tr>
-        </thead>
+        <thead id="encabezado-pendiente-facturar"></thead>
         <tbody id="tabla-pendiente-facturar"></tbody>
-        <tfoot>
-          <tr>
-            <td colspan="5"><strong>Total</strong></td>
-            <td id="total-cantidad-pendiente-facturar"></td>
-            <td id="total-importe-pendiente-facturar"></td>
-          </tr>
-        </tfoot>
+        <tfoot id="pie-pendiente-facturar"></tfoot>
       </table>
     </div>
     <p id="estado-vacio-pendiente-facturar" class="pista" hidden>No hay nada pendiente por facturar.</p>

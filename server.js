@@ -4654,13 +4654,16 @@ function condicionPendienteFacturar() {
 // ya esta resuelta en la realidad (ej. factura hecha fuera de NetSuite, o un desfase de
 // sincronizacion) de una pendiente de verdad. El usuario la oculta a mano desde la UI y queda
 // fuera del reporte (sin borrar la orden), con opcion de revertir.
+// Filas "crudas" (una por Orden+Articulo, sin agregar): el cliente arma desde aqui las 3 vistas
+// (por pedido, por cliente/hotel, detalle por producto) sin pedirle al servidor un endpoint por
+// vista. Un pedido con varios articulos aparece en varias filas aqui, cada una con su propio
+// cantidad/importe.
 app.get('/api/reportes/pendiente-facturar', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
   const soloOcultas = req.query.ocultas === '1';
   const filas = await db.prepare(`
     ${CTE_DETALLE_VIGENTE}
-    SELECT o.id AS orden_id, o.fecha AS fecha_pedido, d.destino AS hotel, o.estatus_sistema,
-      STRING_AGG(DISTINCT dv.articulo, ', ' ORDER BY dv.articulo) AS modelos,
-      SUM(dv.cantidad_vendida) AS cantidad_total, SUM(dv.importe) AS importe_total
+    SELECT o.id AS orden_id, d.destino AS hotel, o.estatus_sistema,
+      dv.articulo AS modelo, dv.cantidad_vendida AS cantidad, dv.importe AS importe
     FROM detalle_vigente dv
     JOIN ordenes o ON o.id = dv.id
     LEFT JOIN destinos d ON d.id_destino = o.destino_id
@@ -4668,8 +4671,7 @@ app.get('/api/reportes/pendiente-facturar', requirePermiso('ordenes', 'ver'), ar
       AND ${soloOcultas ? 'EXISTS' : 'NOT EXISTS'} (
         SELECT 1 FROM reportes_ocultos ro WHERE ro.reporte = 'pendiente-facturar' AND ro.orden_id = o.id
       )
-    GROUP BY o.id, o.fecha, d.destino, o.estatus_sistema
-    ORDER BY importe_total DESC NULLS LAST
+    ORDER BY o.id, dv.articulo
   `).all();
   const { n: totalOcultas } = await db.prepare(`
     SELECT COUNT(*) AS n FROM reportes_ocultos WHERE reporte = 'pendiente-facturar'

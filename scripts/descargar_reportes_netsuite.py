@@ -179,6 +179,15 @@ def asegurar_login(page, target_url: str):
                     k_sec, v_sec = par.split(":", 1)
                     respuestas_conocidas[k_sec.strip().lower()] = v_sec.strip()
 
+            # Diagnóstico: campos de la pantalla de pregunta (sin valores).
+            try:
+                for info in page.eval_on_selector_all(
+                    "input, button",
+                    "els => els.map(e => [e.tagName, e.type, e.name, e.id, e.value && e.type==='submit' ? e.value : '', e.offsetParent !== null])",
+                ):
+                    print(f"   [Campo]: {info}")
+            except Exception:
+                pass
             body_lower = body_text.lower()
             respuesta_elegida = None
             for clave_preg, resp in respuestas_conocidas.items():

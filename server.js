@@ -3263,6 +3263,18 @@ app.get('/api/ordenes/:id/facturas', requirePermiso('ordenes', 'ver'), ar(async 
   res.json(rows);
 }));
 
+// Articulos "vigentes" de esta orden (una fila por articulo real, sin las filas duplicadas que
+// Detalle de compra acumula en cada sincronizacion de NetSuite - ver CTE_DETALLE_VIGENTE). Lo usa
+// la vista de detalle de la orden para no mostrar el mismo renglon repetido ni inflar el chequeo
+// de "Comprometido" contra la cantidad total.
+app.get('/api/ordenes/:id/articulos-vigentes', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const rows = await db.prepare(`
+    ${CTE_DETALLE_VIGENTE}
+    SELECT * FROM detalle_vigente WHERE id = ? ORDER BY articulo
+  `).all(req.params.id);
+  res.json(rows);
+}));
+
 // "Comprometido" (cantidad de inventario comprometida) no viene en ningun reporte masivo de
 // NetSuite, solo en el registro individual de cada orden - se consulta bajo demanda (agente
 // Playwright local, ver scripts/descargar_reportes_netsuite.py --comprometido) y se guarda aqui
@@ -4519,13 +4531,19 @@ app.post('/api/pendientes/:id/notas', requirePermiso('catalogos', 'editar'), ar(
 // renglon de 90 piezas aparece importado una vez como "HG55U800FNFXZA" y otra como
 // "HG55U800FNFXZA_OLD", NO son 180 piezas reales). Por eso el agrupado de "vigente" ignora el
 // sufijo "_OLD" al decidir que es el "mismo" articulo, y usa como nombre visible el mas reciente.
+//
+// A veces NetSuite renombra un articulo por completo, sin sufijo "_OLD" ni relacion textual (ej.
+// confirmado en SO7808: el mismo renglon de 171 piezas aparece como "43UK670" y luego como
+// "43UJ770H"). Eso no se puede detectar por texto, asi que se resuelve a mano con la tabla
+// "articulos_alias" (articulo_viejo -> articulo_actual) conforme se van encontrando estos casos.
 const CTE_DETALLE_VIGENTE = `
   WITH detalle_vigente AS (
-    SELECT DISTINCT ON (id, REGEXP_REPLACE(articulo, '_OLD$', ''))
-      id, articulo, cantidad_vendida, importe, fecha
-    FROM detalle_de_compra
-    WHERE articulo IS NOT NULL AND articulo != ''
-    ORDER BY id, REGEXP_REPLACE(articulo, '_OLD$', ''), creado_en DESC
+    SELECT DISTINCT ON (dc.id, COALESCE(aa.articulo_actual, REGEXP_REPLACE(dc.articulo, '_OLD$', '')))
+      dc.id, dc.articulo, dc.tipo, dc.numero_serie, dc.cantidad_vendida, dc.importe, dc.fecha
+    FROM detalle_de_compra dc
+    LEFT JOIN articulos_alias aa ON aa.articulo_viejo = dc.articulo
+    WHERE dc.articulo IS NOT NULL AND dc.articulo != ''
+    ORDER BY dc.id, COALESCE(aa.articulo_actual, REGEXP_REPLACE(dc.articulo, '_OLD$', '')), dc.creado_en DESC
   )
 `;
 

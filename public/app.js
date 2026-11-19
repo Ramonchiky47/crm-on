@@ -149,7 +149,7 @@ function htmlComprometido(comprometido, articulos) {
 async function abrirDetalle(id) {
   const [orden, articulos, facturas, comprometido] = await Promise.all([
     fetch(`/api/ordenes/${encodeURIComponent(id)}`).then((r) => r.json()),
-    fetch(`/api/detalle-compra?id=${encodeURIComponent(id)}`).then((r) => r.json()),
+    fetch(`/api/ordenes/${encodeURIComponent(id)}/articulos-vigentes`).then((r) => r.json()),
     fetch(`/api/ordenes/${encodeURIComponent(id)}/facturas`).then((r) => r.json()),
     fetch(`/api/ordenes/${encodeURIComponent(id)}/comprometido`).then((r) => r.json()),
   ]);

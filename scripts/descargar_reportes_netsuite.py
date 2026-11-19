@@ -197,6 +197,20 @@ def asegurar_login(page, target_url: str):
                     campo_resp.press("Enter")
                 page.wait_for_load_state("domcontentloaded", timeout=30000)
                 time.sleep(3)
+                # Si NetSuite sigue en la pantalla de preguntas, mostrar qué
+                # dice (respuesta incorrecta, otra pregunta, etc.) para no
+                # quedarse solo con "no se completó el inicio de sesión".
+                if "securityquestions.nl" in page.url.lower():
+                    try:
+                        texto_despues = page.locator("body").inner_text(timeout=3000)
+                    except Exception:
+                        texto_despues = ""
+                    for linea in texto_despues.splitlines():
+                        s = linea.strip()
+                        if s:
+                            print(f"   [Tras responder]: {s[:140]}")
+                    if any(p in texto_despues.lower() for p in ("incorrect", "no es correcta", "no coincide", "no válida", "no valida", "inválid", "invalid")):
+                        raise RuntimeError("❌ NetSuite rechazó la respuesta de la pregunta de seguridad. Revisa NETSUITE_SEC_EXTRA en .env.")
             else:
                 raise RuntimeError("❌ NetSuite mostró una pregunta de seguridad nueva que aún no tenemos registrada. Revisa la línea 'Pregunta:' arriba.")
 

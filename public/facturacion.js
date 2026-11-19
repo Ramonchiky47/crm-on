@@ -269,9 +269,35 @@ btnCompletarPedidosNetsuite.addEventListener('click', async () => {
   btnCompletarPedidosNetsuite.disabled = true;
   btnCompletarPedidosNetsuite.textContent = 'Consultando NetSuite…';
   try {
-    const res = await fetch('http://127.0.0.1:4567/completar-pedidos', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    // Puede tardar hasta 30 min: se lanza en segundo plano y se consulta el
+    // avance (Safari corta una conexión que pasa de ~60 s).
+    const base = 'http://127.0.0.1:4567';
+    const inicio = await fetch(`${base}/completar-pedidos?async=1`, { method: 'POST' });
+    let status = inicio.status;
+    let data = await inicio.json().catch(() => ({}));
+    if (status === 202) {
+      const t0 = Date.now();
+      let fallos = 0;
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 4000));
+        let estado;
+        try {
+          estado = await (await fetch(`${base}/completar-pedidos/estado`)).json();
+          fallos = 0;
+        } catch (_) {
+          if (++fallos >= 10) throw new Error('Se perdió la conexión con el servicio local mientras trabajaba.');
+          continue;
+        }
+        const seg = Math.round((Date.now() - t0) / 1000);
+        btnCompletarPedidosNetsuite.textContent = `Consultando NetSuite… ${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}`;
+        if ((estado.estado === 'ok' || estado.estado === 'error') && estado.resultado) {
+          status = estado.resultado.status;
+          data = estado.resultado.body || {};
+          break;
+        }
+      }
+    }
+    if (status < 200 || status >= 300) throw new Error(data.error || `Error ${status}`);
     let mensaje = data.resumen || 'Proceso terminado.';
     if (data.detalle && data.detalle.length) {
       mensaje += '\n\n' + data.detalle.join('\n');

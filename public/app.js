@@ -1065,27 +1065,70 @@ form.addEventListener('submit', async (e) => {
 btnCancelar.addEventListener('click', cerrarFormulario);
 btnMostrarForm.addEventListener('click', abrirFormulario);
 
+// Lanza un trabajo largo en el agente local (sincronizar / completar-pedidos)
+// y consulta su avance cada 3 s. La descarga de NetSuite tarda ~3-4 min y
+// Safari corta un fetch que pasa de ~60 s: antes eso se veía como "el servicio
+// no está respondiendo" aunque el agente sí estaba trabajando.
+// Regresa { status, data } con la respuesta final del trabajo.
+async function trabajoAgenteNetsuite(nombre, body, alAvanzar) {
+  const base = 'http://127.0.0.1:4567';
+  const res = await fetch(`${base}/${nombre}?async=1`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  if (res.status !== 202) {
+    // Servicio sin modo asíncrono (versión anterior): respuesta directa.
+    return { status: res.status, data: await res.json().catch(() => ({})) };
+  }
+  const inicio = Date.now();
+  let fallosSeguidos = 0;
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 3000));
+    let estado;
+    try {
+      estado = await (await fetch(`${base}/${nombre}/estado`)).json();
+      fallosSeguidos = 0;
+    } catch (_) {
+      fallosSeguidos += 1;
+      if (fallosSeguidos >= 10) throw new Error('Se perdió la conexión con el servicio local del agente NetSuite (puerto 4567) mientras trabajaba.');
+      continue;
+    }
+    if (alAvanzar) alAvanzar(Math.round((Date.now() - inicio) / 1000));
+    if ((estado.estado === 'ok' || estado.estado === 'error') && estado.resultado) {
+      return { status: estado.resultado.status, data: estado.resultado.body || {} };
+    }
+    if (Date.now() - inicio > 40 * 60 * 1000) throw new Error('El trabajo en NetSuite lleva más de 40 minutos sin terminar.');
+  }
+}
+
 async function sincronizarNetsuiteConAgente(passwordOpcional = '') {
   btnActualizarOrdenesNetsuite.disabled = true;
   btnActualizarOrdenesNetsuite.textContent = 'Descargando de NetSuite...';
 
   try {
     let res;
+    let data;
     try {
-      res = await fetch('http://127.0.0.1:4567/sincronizar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(passwordOpcional ? { password: passwordOpcional } : {}),
+      const r = await trabajoAgenteNetsuite('sincronizar', passwordOpcional ? { password: passwordOpcional } : {}, (seg) => {
+        btnActualizarOrdenesNetsuite.textContent = `Descargando de NetSuite... ${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}`;
       });
-    } catch (_) {
+      res = { status: r.status, ok: r.status >= 200 && r.status < 300 };
+      data = r.data;
+    } catch (errLocal) {
+      // Se cayó la conexión ya con el trabajo en marcha: avisar tal cual.
+      if (errLocal && errLocal.message && errLocal.message.includes('mientras trabajaba')) {
+        alert(errLocal.message);
+        return;
+      }
+      // El servicio local no contestó ni al arrancar: plan B en el servidor.
       res = await fetch('/api/netsuite/sincronizar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(passwordOpcional ? { password: passwordOpcional } : {}),
       });
+      data = await res.json().catch(() => ({}));
     }
-
-    const data = await res.json().catch(() => ({}));
 
     if (res.status === 401 && data && data.errorPassword) {
       const nueva = prompt('La contraseña de NetSuite cambió o venció.\nIngresa la nueva contraseña de NetSuite:');

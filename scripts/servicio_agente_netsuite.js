@@ -47,6 +47,127 @@ function ejecutarComando(cmd, args, timeoutMs = 240000) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Trabajos largos en segundo plano.
+// La descarga de NetSuite tarda ~3-4 min y "Completar pedidos" hasta 30 min.
+// Safari corta un fetch que pasa de ~60 s, así que el navegador veía la
+// conexión caída y mostraba "el servicio no está respondiendo" aunque el
+// agente sí estaba trabajando. Con ?async=1 el POST responde al instante (202)
+// y la página consulta GET /<trabajo>/estado cada pocos segundos.
+// Sin ?async=1 se conserva el comportamiento anterior (espera y responde al
+// final) para la tarea programada de lunes a viernes.
+// ---------------------------------------------------------------------------
+const trabajos = {
+  sincronizar: { estado: 'inactivo' },
+  'completar-pedidos': { estado: 'inactivo' },
+};
+
+async function leerCuerpo(req) {
+  let bodyStr = '';
+  for await (const chunk of req) {
+    bodyStr += chunk;
+  }
+  try {
+    return bodyStr ? JSON.parse(bodyStr) : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+async function correrSincronizacion(body) {
+  const nuevoPassword = typeof body.password === 'string' ? body.password.trim() : '';
+  const pyArgs = ['-u', PY_SCRIPT, '--todos', '--headless'];
+  if (nuevoPassword) {
+    pyArgs.push('--password', nuevoPassword);
+  }
+
+  console.log(`[${new Date().toISOString()}] Iniciando descarga de los reportes de NetSuite...`);
+  try {
+    await ejecutarComando('python3', pyArgs, 360000);
+  } catch (e) {
+    const salida = e.combinado || e.message || '';
+    console.error('Error en descarga NetSuite:', salida);
+    if (salida.toLowerCase().includes('contraseña no válida') || salida.toLowerCase().includes('invalid login')) {
+      return { status: 401, body: { errorPassword: true, error: 'NetSuite rechazó la contraseña actual. Ingresa la nueva contraseña.' } };
+    }
+    if (e.killed) {
+      return { status: 500, body: { error: 'La descarga de NetSuite tardó más de 6 minutos y se canceló. Intenta de nuevo.' } };
+    }
+    return { status: 500, body: { error: `Error al descargar de NetSuite: ${salida.trim().split('\n').slice(-4).join(' | ')}` } };
+  }
+
+  console.log(`[${new Date().toISOString()}] Subiendo reportes al CRM...`);
+  try {
+    const stdoutUpload = await ejecutarComando(process.execPath, ['--env-file=.env', UPLOAD_SCRIPT], 180000);
+    const lineas = stdoutUpload.split('\n').map((l) => l.trim()).filter(Boolean);
+    return { status: 200, body: { ok: true, resumen: lineas } };
+  } catch (e) {
+    const salida = e.combinado || e.message || '';
+    console.error('Error al subir al CRM:', salida);
+    return { status: 500, body: { error: `Los reportes se descargaron pero falló la subida al CRM: ${salida.trim()}` } };
+  }
+}
+
+async function correrCompletarPedidos() {
+  console.log(`[${new Date().toISOString()}] Completando pedidos sin asociar desde NetSuite ("Creado desde")...`);
+  let salida;
+  try {
+    salida = await ejecutarComando(process.execPath, ['--env-file=.env', COMPLETAR_PEDIDOS_SCRIPT], 1800000);
+    console.log(salida);
+  } catch (e) {
+    const combinado = e.combinado || e.message || '';
+    console.error('Error al completar pedidos desde NetSuite:', combinado);
+    return { status: 500, body: { error: `Error al completar pedidos: ${combinado.trim().split('\n').slice(-4).join(' | ')}` } };
+  }
+  const lineas = salida.split('\n').map((l) => l.trim()).filter(Boolean);
+  const resumen = lineas.find((l) => l.startsWith('Total consultadas:')) || null;
+  const detalle = lineas.filter((l) => /^(✅|❌).*->/.test(l));
+  return { status: 200, body: { ok: true, resumen, detalle } };
+}
+
+const EJECUTORES = {
+  sincronizar: correrSincronizacion,
+  'completar-pedidos': correrCompletarPedidos,
+};
+
+function responderJson(res, status, body) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(body));
+}
+
+async function atenderTrabajo(nombre, req, res) {
+  const asincrono = new URL(req.url, 'http://localhost').searchParams.get('async') === '1';
+  const trabajo = trabajos[nombre];
+  const body = await leerCuerpo(req);
+
+  if (trabajo.estado === 'corriendo') {
+    // Ya hay uno en curso (p.ej. doble clic u otra pestaña): no se lanza otro.
+    if (asincrono) {
+      return responderJson(res, 202, { enCurso: true, inicio: trabajo.inicio });
+    }
+    return responderJson(res, 409, { error: 'Ya hay una sincronización en curso; espera a que termine.' });
+  }
+
+  trabajos[nombre] = { estado: 'corriendo', inicio: new Date().toISOString() };
+  const promesa = EJECUTORES[nombre](body)
+    .catch((e) => ({ status: 500, body: { error: `Error inesperado: ${e.message || e}` } }))
+    .then((resultado) => {
+      trabajos[nombre] = {
+        estado: resultado.status === 200 ? 'ok' : 'error',
+        inicio: trabajos[nombre].inicio,
+        fin: new Date().toISOString(),
+        resultado,
+      };
+      return resultado;
+    });
+
+  if (asincrono) {
+    return responderJson(res, 202, { iniciado: true, inicio: trabajos[nombre].inicio });
+  }
+  const resultado = await promesa;
+  return responderJson(res, resultado.status, resultado.body);
+}
+
 const server = http.createServer(async (req, res) => {
   setCorsHeaders(req, res);
 
@@ -58,64 +179,18 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ ok: true, status: 'Agente NetSuite activo' }));
+    res.end(JSON.stringify({ ok: true, status: 'Agente NetSuite activo', asincrono: true }));
     return;
   }
 
-  if (req.method === 'POST' && req.url === '/sincronizar') {
-    let bodyStr = '';
-    for await (const chunk of req) {
-      bodyStr += chunk;
-    }
-    let body = {};
-    try {
-      body = bodyStr ? JSON.parse(bodyStr) : {};
-    } catch (_) {}
-
-    const nuevoPassword = typeof body.password === 'string' ? body.password.trim() : '';
-    const pyArgs = ['-u', PY_SCRIPT, '--todos', '--headless'];
-    if (nuevoPassword) {
-      pyArgs.push('--password', nuevoPassword);
-    }
-
-    console.log(`[${new Date().toISOString()}] Iniciando descarga de los 3 reportes de NetSuite...`);
-    try {
-      await ejecutarComando('python3', pyArgs, 240000);
-    } catch (e) {
-      const salida = e.combinado || e.message || '';
-      console.error('Error en descarga NetSuite:', salida);
-      if (salida.toLowerCase().includes('contraseña no válida') || salida.toLowerCase().includes('invalid login')) {
-        res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({
-          errorPassword: true,
-          error: 'NetSuite rechazó la contraseña actual. Ingresa la nueva contraseña.',
-        }));
-        return;
-      }
-      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({
-        error: `Error al descargar de NetSuite: ${salida.trim().split('\n').slice(-4).join(' | ')}`,
-      }));
-      return;
-    }
-
-    console.log(`[${new Date().toISOString()}] Subiendo reportes al CRM...`);
-    try {
-      const stdoutUpload = await ejecutarComando(process.execPath, ['--env-file=.env', UPLOAD_SCRIPT], 120000);
-      const lineas = stdoutUpload
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean);
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ ok: true, resumen: lineas }));
-    } catch (e) {
-      const salida = e.combinado || e.message || '';
-      console.error('Error al subir al CRM:', salida);
-      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({
-        error: `Los reportes se descargaron pero falló la subida al CRM: ${salida.trim()}`,
-      }));
-    }
+  const rutaTrabajo = new URL(req.url, 'http://localhost').pathname.replace(/^\//, '');
+  if (req.method === 'POST' && EJECUTORES[rutaTrabajo]) {
+    await atenderTrabajo(rutaTrabajo, req, res);
+    return;
+  }
+  const estadoMatch = rutaTrabajo.match(/^(sincronizar|completar-pedidos)\/estado$/);
+  if (req.method === 'GET' && estadoMatch) {
+    responderJson(res, 200, trabajos[estadoMatch[1]]);
     return;
   }
 
@@ -182,29 +257,6 @@ const server = http.createServer(async (req, res) => {
 
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(lineaResultado.slice('RESULTADO_JSON:'.length));
-    return;
-  }
-
-  if (req.method === 'POST' && req.url === '/completar-pedidos') {
-    console.log(`[${new Date().toISOString()}] Completando pedidos sin asociar desde NetSuite ("Creado desde")...`);
-    let salida;
-    try {
-      salida = await ejecutarComando(process.execPath, ['--env-file=.env', COMPLETAR_PEDIDOS_SCRIPT], 1800000);
-      console.log(salida);
-    } catch (e) {
-      const combinado = e.combinado || e.message || '';
-      console.error('Error al completar pedidos desde NetSuite:', combinado);
-      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: `Error al completar pedidos: ${combinado.trim().split('\n').slice(-4).join(' | ')}` }));
-      return;
-    }
-
-    const lineas = salida.split('\n').map((l) => l.trim()).filter(Boolean);
-    const resumen = lineas.find((l) => l.startsWith('Total consultadas:')) || null;
-    const detalle = lineas.filter((l) => /^(✅|❌).*->/.test(l));
-
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ ok: true, resumen, detalle }));
     return;
   }
 

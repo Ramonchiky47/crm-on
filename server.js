@@ -5812,24 +5812,6 @@ app.get('/api/panel/resumen', ar(async (req, res) => {
       WHERE fecha_compromiso = ? ORDER BY nombre
     `).all(hoy);
 
-    // "Que hacer hoy": cotizaciones cuya Fecha de seguimiento ya paso sin que se haya cerrado
-    // la etapa (el vendedor prometio llamar y no quedo registro de que lo hizo), y tareas cuyo
-    // compromiso ya paso. A diferencia de "Cotizaciones vencidas" (la cotizacion en si caduco),
-    // esto es sobre el seguimiento del vendedor, no sobre la validez de la cotizacion.
-    resultado.seguimientosAtrasados = cotizaciones
-      .filter((c) => ['Negociacion', 'Pendiente'].includes(c.etapa) && c.fecha_seguimiento && c.fecha_seguimiento < hoy)
-      .sort((a, b) => a.fecha_seguimiento.localeCompare(b.fecha_seguimiento))
-      .map((c) => ({
-        id_cotizacion: c.id_cotizacion, nombre: c.nombre, destino_nombre: c.destino_nombre,
-        contacto_nombre: c.contacto_nombre, gran_total: c.gran_total, moneda: c.moneda,
-        fecha_seguimiento: c.fecha_seguimiento,
-      }));
-
-    resultado.tareasAtrasadas = await db.prepare(`
-      SELECT id_pendiente, nombre, fecha_compromiso FROM pendientes
-      WHERE fecha_compromiso < ? ORDER BY fecha_compromiso
-    `).all(hoy);
-
     // Resumen del periodo, default el mes en curso: cuantas cotizaciones se crearon (por Fecha
     // de creacion) y cuantas se ganaron/perdieron (por Fecha de cierre, NO de creacion: una
     // cotizacion creada hace un mes y ganada hoy debe contar como ganada "esta semana", no

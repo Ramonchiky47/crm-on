@@ -30,6 +30,7 @@ if (!SECRETO) {
 const PY_SCRIPT = path.join(BASE_DIR, 'scripts', 'descargar_reportes_netsuite.py');
 const UPLOAD_SCRIPT = path.join(BASE_DIR, 'scripts', 'subir_ordenes_netsuite.js');
 const COMPLETAR_PEDIDOS_SCRIPT = path.join(BASE_DIR, 'scripts', 'completar_pedidos_desde_netsuite.js');
+const COMPLETAR_DIRECCION_ENVIO_SCRIPT = path.join(BASE_DIR, 'scripts', 'completar_direccion_envio_ordenes.js');
 
 function setCorsHeaders(req, res) {
   const origin = req.headers.origin || '*';
@@ -105,15 +106,31 @@ async function correrSincronizacion(body) {
   }
 
   console.log(`[${new Date().toISOString()}] Subiendo reportes al CRM...`);
+  let lineas;
   try {
     const stdoutUpload = await ejecutarComando(process.execPath, ['--env-file=.env', UPLOAD_SCRIPT], 180000);
-    const lineas = stdoutUpload.split('\n').map((l) => l.trim()).filter(Boolean);
-    return { status: 200, body: { ok: true, resumen: lineas } };
+    lineas = stdoutUpload.split('\n').map((l) => l.trim()).filter(Boolean);
   } catch (e) {
     const salida = e.combinado || e.message || '';
     console.error('Error al subir al CRM:', salida);
     return { status: 500, body: { error: `Los reportes se descargaron pero falló la subida al CRM: ${salida.trim()}` } };
   }
+
+  // Completar Hotel/Local, Contacto y Entrega de las ordenes nuevas (ver
+  // completar_direccion_envio_ordenes.js) es un paso adicional, no critico: si falla, la
+  // sincronizacion igual se reporta como exitosa (los reportes ya se subieron), solo se agrega
+  // un aviso al resumen para que se note en el boton "Actualizar".
+  console.log(`[${new Date().toISOString()}] Completando Hotel/Contacto/Entrega desde "Dirección de envío"...`);
+  try {
+    const stdoutDireccion = await ejecutarComando(process.execPath, ['--env-file=.env', COMPLETAR_DIRECCION_ENVIO_SCRIPT], 1800000);
+    lineas.push('', ...stdoutDireccion.split('\n').map((l) => l.trim()).filter(Boolean));
+  } catch (e) {
+    const salida = e.combinado || e.message || '';
+    console.error('Error al completar Hotel/Contacto/Entrega:', salida);
+    lineas.push('', `(Aviso: no se pudo completar Hotel/Contacto/Entrega: ${salida.trim().split('\n').slice(-2).join(' | ')})`);
+  }
+
+  return { status: 200, body: { ok: true, resumen: lineas } };
 }
 
 async function correrCompletarPedidos() {

@@ -25,6 +25,12 @@ reporte 3 y la lista de Facturas no traen esa columna). Usa un cache local
 (scripts/.netsuite_ids_factura.json, poblado al consultar desde la lista de Facturas,
 Transaction_TYPE=CustInvc) para traducir "INV1234" al ID interno.
 
+Y --direccion-envio consulta "Dirección de envío" de UNA orden puntual (mismo registro individual
+que --comprometido, salesord.nl?id=<ID interno>): de ahí se deduce Contacto (primera línea),
+Hotel/Local (segunda línea) y Entrega/Estado (del renglón "CP CIUDAD, EDO" se toma la
+abreviatura del estado y se expande a su nombre completo, ver ESTADOS_ABREVIATURA). Tampoco viene
+en ningún reporte masivo.
+
 Uso:
   python3 scripts/descargar_reportes_netsuite.py --paso 1
   python3 scripts/descargar_reportes_netsuite.py --paso 2
@@ -34,6 +40,8 @@ Uso:
   python3 scripts/descargar_reportes_netsuite.py --comprometido SO7808
   python3 scripts/descargar_reportes_netsuite.py --pedido-factura INV9604
   python3 scripts/descargar_reportes_netsuite.py --pedidos-lote INV9604,INV9605,CM180
+  python3 scripts/descargar_reportes_netsuite.py --direccion-envio SO7808
+  python3 scripts/descargar_reportes_netsuite.py --direccion-envio-lote SO7808,SO7809
 """
 
 import argparse
@@ -395,6 +403,169 @@ def consultar_comprometido(page, numero_so: str) -> list:
     return filas
 
 
+# Abreviaturas de estado tal como aparecen en el renglon "CP CIUDAD, EDO" de una direccion postal
+# mexicana -> nombre completo. Los valores del lado derecho se escriben SIN acentos y con la misma
+# ortografia que ya existe en el catalogo estados_entrega (ver tabla en Supabase) para reusar esas
+# filas en vez de crear duplicados "Mexico" / "México"; las abreviaturas que no tengan fila
+# todavia (ej. Baja California Sur) se crean igual, vía obtenerOCrearEstadoEntrega en el CRM.
+ESTADOS_ABREVIATURA = {
+    "AGS": "Aguascalientes", "AGU": "Aguascalientes",
+    "BC": "Baja California", "BCN": "Baja California",
+    "BCS": "Baja California Sur",
+    "CAMP": "Campeche", "CAM": "Campeche",
+    "CDMX": "Ciudad de Mexico", "DF": "Ciudad de Mexico", "CMX": "Ciudad de Mexico",
+    "COAH": "Coahuila", "COA": "Coahuila",
+    "COL": "Colima",
+    "CHIS": "Chiapas", "CHP": "Chiapas",
+    "CHIH": "Chihuahua", "CHH": "Chihuahua",
+    "DGO": "Durango", "DUR": "Durango",
+    "GTO": "Guanajuato", "GUA": "Guanajuato",
+    "GRO": "Guerrero",
+    "HGO": "Hidalgo", "HID": "Hidalgo",
+    "JAL": "Jalisco",
+    "MEX": "Estado de Mexico", "EDOMEX": "Estado de Mexico",
+    "MICH": "Michoacan", "MIC": "Michoacan",
+    "MOR": "Morelos",
+    "NAY": "Nayarit",
+    "NL": "Nuevo Leon", "NLE": "Nuevo Leon",
+    "OAX": "Oaxaca",
+    "PUE": "Puebla",
+    "QRO": "Queretaro", "QUE": "Queretaro",
+    "QROO": "Quintana Roo", "QR": "Quintana Roo", "ROO": "Quintana Roo",
+    "SLP": "San Luis Potosi",
+    "SIN": "Sinaloa",
+    "SON": "Sonora",
+    "TAB": "Tabasco",
+    "TAMPS": "Tamaulipas", "TAM": "Tamaulipas",
+    "TLAX": "Tlaxcala", "TLA": "Tlaxcala",
+    "VER": "Veracruz",
+    "YUC": "Yucatan",
+    "ZAC": "Zacatecas",
+}
+
+
+def parsear_direccion_envio(texto: str) -> dict:
+    """
+    Interpreta el texto crudo del bloque "Dirección de envío" (lo que devuelve
+    consultar_direccion_envio) con el formato usual de una direccion postal mexicana:
+
+        ENVÍO A
+        NOMBRE DEL CONTACTO TELEFONO
+        NOMBRE DEL HOTEL/LOCAL (nota opcional)
+        CALLE Y NUMERO
+        COLONIA, CIUDAD
+        CP CIUDAD, ESTADO
+        PAÍS [Mapa]
+
+    Regresa {'contacto': ..., 'hotel': ..., 'estado': ...} (cadenas vacias si no se pudo deducir
+    alguno). No valida que el contacto/hotel "existan" en ningun catalogo - eso lo decide el CRM
+    al guardarlos (crea el registro si no hay coincidencia exacta, igual que la carga manual).
+    """
+    lineas = [l.strip() for l in texto.split("\n") if l.strip()]
+    if lineas and re.match(r"^env[ií]o a$", lineas[0], re.IGNORECASE):
+        lineas = lineas[1:]
+
+    contacto = lineas[0] if len(lineas) > 0 else ""
+    hotel = lineas[1] if len(lineas) > 1 else ""
+
+    estado = ""
+    for linea in lineas:
+        # El renglon de CP: empieza con 4-5 digitos y termina en ", ESTADO" (abreviatura corta).
+        if not re.match(r"^\d{4,5}\b", linea):
+            continue
+        m = re.search(r",\s*([A-Za-zÁÉÍÓÚáéíóúÑñ]{2,8})\s*$", linea)
+        if not m:
+            continue
+        abreviatura = m.group(1).strip().upper()
+        estado = ESTADOS_ABREVIATURA.get(abreviatura, "")
+        if estado:
+            break
+
+    return {"contacto": contacto, "hotel": hotel, "estado": estado}
+
+
+def consultar_direccion_envio(page, numero_so: str) -> dict:
+    """
+    Abre el registro individual de una orden (salesord.nl?id=..., mismo registro que
+    consultar_comprometido) y lee el bloque "Dirección de envío" ("ENVÍO A ..."), para deducir
+    Contacto, Hotel/Local y Entrega (estado) - ninguno de los 3 viene en el reporte masivo "Vista
+    predeterminada Transacción", solo en el registro individual de cada orden.
+    """
+    numero_so = numero_so.strip().upper()
+
+    cache = {}
+    if CACHE_IDS_ORDEN.exists():
+        try:
+            cache = json.loads(CACHE_IDS_ORDEN.read_text(encoding="utf-8"))
+        except Exception:
+            cache = {}
+
+    id_interno = cache.get(numero_so)
+    if not id_interno:
+        print(f"-> {numero_so} no está en el cache de IDs; actualizando desde 'Vista predeterminada Transacción'...")
+        asegurar_login(page, URL_REPORTE_1)
+        try:
+            page.wait_for_load_state("networkidle", timeout=30000)
+        except Exception:
+            pass
+        time.sleep(2)
+        actualizar_cache_ids_orden(page)
+        cache = json.loads(CACHE_IDS_ORDEN.read_text(encoding="utf-8")) if CACHE_IDS_ORDEN.exists() else {}
+        id_interno = cache.get(numero_so)
+
+    if not id_interno:
+        raise RuntimeError(
+            f"No se encontró el ID interno de {numero_so} en la lista de Órdenes. "
+            "Verifica que el número sea correcto y que la orden aparezca en 'Vista predeterminada Transacción'."
+        )
+
+    url_orden = f"https://{APP_HOST}/app/accounting/transactions/salesord.nl?id={id_interno}&whence="
+    print(f"-> Abriendo {numero_so} (ID interno {id_interno}): {url_orden}")
+    asegurar_login(page, url_orden)
+    try:
+        page.wait_for_load_state("networkidle", timeout=30000)
+    except Exception:
+        pass
+    time.sleep(2)
+
+    # Busca, en cualquier frame, el elemento MAS PEQUEÑO (menos texto envolvente) cuyo texto
+    # empiece con "ENVÍO A" - esa es la etiqueta visible justo arriba del bloque de direccion
+    # (confirmado contra captura real). No depende de un id/clase especifico de NetSuite, que
+    # puede variar entre cuentas/versiones.
+    texto_bloque = None
+    deadline = time.time() + 20
+    while time.time() < deadline and not texto_bloque:
+        for frame in page.frames:
+            try:
+                texto_bloque = frame.evaluate("""() => {
+                    const candidatos = Array.from(document.querySelectorAll('body *')).filter(el => {
+                        const t = (el.innerText || '').trim();
+                        return /^env[ií]o a\\b/i.test(t) && t.length < 400;
+                    });
+                    if (!candidatos.length) return null;
+                    candidatos.sort((a, b) => (a.innerText || '').length - (b.innerText || '').length);
+                    return candidatos[0].innerText;
+                }""")
+            except Exception:
+                continue
+            if texto_bloque:
+                break
+        if not texto_bloque:
+            time.sleep(1)
+
+    if not texto_bloque:
+        print(f"-> No se encontró el bloque 'Dirección de envío' de {numero_so} ({len(page.frames)} frame(s) revisados).")
+        resultado = {"orden": numero_so, "contacto": "", "hotel": "", "estado": ""}
+        print(f"RESULTADO_JSON:{json.dumps(resultado, ensure_ascii=False)}")
+        return resultado
+
+    datos = parsear_direccion_envio(texto_bloque)
+    print(f"✅ Dirección de envío de {numero_so}: contacto={datos['contacto']!r} hotel={datos['hotel']!r} estado={datos['estado']!r}")
+    resultado = {"orden": numero_so, **datos}
+    print(f"RESULTADO_JSON:{json.dumps(resultado, ensure_ascii=False)}")
+    return resultado
+
+
 def actualizar_cache_ids_factura(page):
     """
     Mismo problema que con Ordenes (ver actualizar_cache_ids_orden): el registro individual de
@@ -722,13 +893,16 @@ def main():
     parser.add_argument("--comprometido", type=str, metavar="SO1234", help="Consultar 'Comprometido' de una sola orden (no descarga reportes)")
     parser.add_argument("--pedido-factura", type=str, metavar="INV1234", help="Consultar la Orden de venta ('Creado desde') de una sola factura (no descarga reportes)")
     parser.add_argument("--pedidos-lote", type=str, metavar="INV1,INV2,...", help="Igual que --pedido-factura pero para varias facturas separadas por coma, en UNA sola sesion de navegador (una linea RESULTADO_JSON por factura)")
+    parser.add_argument("--direccion-envio", type=str, metavar="SO1234", help="Consultar 'Dirección de envío' de una sola orden: deduce Contacto, Hotel/Local y Entrega (no descarga reportes)")
+    parser.add_argument("--direccion-envio-lote", type=str, metavar="SO1,SO2,...", help="Igual que --direccion-envio pero para varias ordenes separadas por coma, en UNA sola sesion de navegador (una linea RESULTADO_JSON por orden)")
     parser.add_argument("--subir", action="store_true", help="Subir al CRM al terminar usando subir_ordenes_netsuite.js")
     parser.add_argument("--password", type=str, help="Actualizar y usar nueva contraseña de NetSuite")
     parser.add_argument("--preguntar-password", action="store_true", help="Preguntar interactivamente si cambió la contraseña")
     parser.add_argument("--headless", action="store_true", help="Ejecutar sin ventana visible")
     args = parser.parse_args()
 
-    if not args.paso and not args.todos and not args.comprometido and not args.pedido_factura and not args.pedidos_lote:
+    if not any([args.paso, args.todos, args.comprometido, args.pedido_factura, args.pedidos_lote,
+                args.direccion_envio, args.direccion_envio_lote]):
         args.paso = 1
 
     cargar_env()
@@ -777,6 +951,22 @@ def main():
                     except Exception as e:
                         print(f"   ❌ {e}")
                         print(f"RESULTADO_JSON:{json.dumps({'factura': numero, 'pedido_id': None, 'error': str(e)}, ensure_ascii=False)}")
+                return
+
+            if args.direccion_envio:
+                consultar_direccion_envio(page, args.direccion_envio)
+                return
+
+            if args.direccion_envio_lote:
+                numeros = [n.strip().upper() for n in args.direccion_envio_lote.split(",") if n.strip()]
+                print(f"-> Consultando 'Dirección de envío' de {len(numeros)} orden(es) en esta sesión...")
+                for i, numero in enumerate(numeros, start=1):
+                    print(f"\n[{i}/{len(numeros)}] {numero}")
+                    try:
+                        consultar_direccion_envio(page, numero)
+                    except Exception as e:
+                        print(f"   ❌ {e}")
+                        print(f"RESULTADO_JSON:{json.dumps({'orden': numero, 'contacto': '', 'hotel': '', 'estado': '', 'error': str(e)}, ensure_ascii=False)}")
                 return
 
             if args.paso == 1 or args.todos:

@@ -564,6 +564,39 @@ async function obtenerOCrearEmpresa(nombre, fuente = db) {
   return (await fuente.prepare('INSERT INTO empresas (empresa) VALUES (?)').run(limpio)).lastInsertRowid;
 }
 
+// Mismo patron que obtenerOCrearEmpresa: usadas tanto por la carga masiva (CSV/Excel de NetSuite,
+// ver procesarRegistrosOrdenes) como por /api/ordenes/:id/completar-direccion-envio (completar
+// Hotel/Contacto/Entrega de una sola orden a partir de la "Direccion de envio" de NetSuite).
+async function obtenerOCrearDestino(nombre, fuente = db, creados) {
+  const limpio = String(nombre || '').trim();
+  if (!limpio) return null;
+  const existente = await fuente.prepare('SELECT id_destino FROM destinos WHERE destino = ?').get(limpio);
+  if (existente) return existente.id_destino;
+  const info = await fuente.prepare('INSERT INTO destinos (destino) VALUES (?)').run(limpio);
+  if (creados) creados.add(limpio);
+  return info.lastInsertRowid;
+}
+
+async function obtenerOCrearContacto(nombre, fuente = db, creados) {
+  const limpio = String(nombre || '').trim();
+  if (!limpio) return null;
+  const existente = await fuente.prepare('SELECT id_contacto FROM contactos WHERE nombre = ?').get(limpio);
+  if (existente) return existente.id_contacto;
+  const info = await fuente.prepare("INSERT INTO contactos (id_publico, nombre, creado_en) VALUES (?, ?, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))").run(await generarIdContacto(), limpio);
+  if (creados) creados.add(limpio);
+  return info.lastInsertRowid;
+}
+
+async function obtenerOCrearEstadoEntrega(nombre, fuente = db, creados) {
+  const limpio = String(nombre || '').trim();
+  if (!limpio) return null;
+  const existente = await fuente.prepare('SELECT id_estado_entrega FROM estados_entrega WHERE estado_entrega = ?').get(limpio);
+  if (existente) return existente.id_estado_entrega;
+  const info = await fuente.prepare('INSERT INTO estados_entrega (estado_entrega) VALUES (?)').run(limpio);
+  if (creados) creados.add(limpio);
+  return info.lastInsertRowid;
+}
+
 async function empresasDeDestino(destinoId) {
   const filas = await db.prepare(`
     SELECT e.empresa FROM destino_empresas de
@@ -3303,6 +3336,47 @@ app.post('/api/ordenes/:id/comprometido', requirePermiso('ordenes', 'editar'), a
   res.json(rows);
 }));
 
+// Ordenes a las que les falta Hotel/Local, Contacto o Entrega (estado) - normalmente las que
+// acaban de llegar de NetSuite via el reporte masivo, que no trae esos 3 campos (solo viven en
+// "Direccion de envio" del registro individual de cada orden). Usado por
+// scripts/completar_direccion_envio_ordenes.js para saber que ordenes consultar en NetSuite.
+app.get('/api/ordenes/sin-direccion-envio', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const filas = await db.prepare(`
+    SELECT id FROM ordenes
+    WHERE destino_id IS NULL OR contacto_id IS NULL OR estado_entrega_id IS NULL
+    ORDER BY fecha DESC
+  `).all();
+  res.json(filas.map((f) => f.id));
+}));
+
+// Completa Hotel/Local, Contacto y/o Entrega (estado) de UNA orden a partir del texto de
+// "Direccion de envio" que lee el agente de NetSuite (ver consultar_direccion_envio en
+// descargar_reportes_netsuite.py). Solo llena lo que esta vacio - nunca pisa un dato ya
+// capturado a mano (igual que el resto de la carga de NetSuite no sobreescribe estos campos).
+app.post('/api/ordenes/:id/completar-direccion-envio', requirePermiso('ordenes', 'editar'), ar(async (req, res) => {
+  const orden = await db.prepare('SELECT * FROM ordenes WHERE id = ?').get(req.params.id);
+  if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
+
+  const cambios = {};
+  if (!orden.destino_id && req.body.hotel) {
+    cambios.destino_id = await obtenerOCrearDestino(req.body.hotel);
+  }
+  if (!orden.contacto_id && req.body.contacto) {
+    cambios.contacto_id = await obtenerOCrearContacto(req.body.contacto);
+  }
+  if (!orden.estado_entrega_id && req.body.estado) {
+    cambios.estado_entrega_id = await obtenerOCrearEstadoEntrega(req.body.estado);
+  }
+
+  if (!Object.keys(cambios).length) return res.json({ ok: true, sinCambios: true });
+
+  const campos = Object.keys(cambios);
+  await db.prepare(`UPDATE ordenes SET ${campos.map((c) => `${c} = @${c}`).join(', ')} WHERE id = @id`)
+    .run({ ...cambios, id: req.params.id });
+
+  res.json({ ok: true, cambios });
+}));
+
 // Cotizaciones candidatas para asociar a esta orden (la direccion inversa de "Marcar como
 // ganada" en Cotizaciones): del mismo Hotel/Local que la orden (no el contacto individual: la
 // misma propiedad puede tener varios contactos cotizando/ordenando), todavia en Negociacion y
@@ -3451,26 +3525,6 @@ async function procesarRegistrosOrdenes(db, registros) {
     let insertadas = 0;
     let actualizadas = 0;
 
-    async function obtenerOCrearDestino(nombre) {
-      const limpio = nombre.trim();
-      if (!limpio) return null;
-      const existente = await db.prepare('SELECT id_destino FROM destinos WHERE destino = ?').get(limpio);
-      if (existente) return existente.id_destino;
-      const info = await db.prepare('INSERT INTO destinos (destino) VALUES (?)').run(limpio);
-      destinosCreados.add(limpio);
-      return info.lastInsertRowid;
-    }
-
-    async function obtenerOCrearContacto(nombre) {
-      const limpio = nombre.trim();
-      if (!limpio) return null;
-      const existente = await db.prepare('SELECT id_contacto FROM contactos WHERE nombre = ?').get(limpio);
-      if (existente) return existente.id_contacto;
-      const info = await db.prepare("INSERT INTO contactos (id_publico, nombre, creado_en) VALUES (?, ?, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))").run(await generarIdContacto(), limpio);
-      contactosCreados.add(limpio);
-      return info.lastInsertRowid;
-    }
-
     async function agregarEmpresaSiNoExiste(destinoId, empresa) {
       const limpio = (empresa || '').trim();
       if (!limpio || !destinoId) return;
@@ -3489,16 +3543,6 @@ async function procesarRegistrosOrdenes(db, registros) {
       if (existente) return existente.id_estatus;
       const info = await db.prepare('INSERT INTO estatus_catalogo (estatus) VALUES (?)').run(limpio);
       estatusCreados.add(limpio);
-      return info.lastInsertRowid;
-    }
-
-    async function obtenerOCrearEstadoEntrega(nombre) {
-      const limpio = nombre.trim();
-      if (!limpio) return null;
-      const existente = await db.prepare('SELECT id_estado_entrega FROM estados_entrega WHERE estado_entrega = ?').get(limpio);
-      if (existente) return existente.id_estado_entrega;
-      const info = await db.prepare('INSERT INTO estados_entrega (estado_entrega) VALUES (?)').run(limpio);
-      estadosEntregaCreados.add(limpio);
       return info.lastInsertRowid;
     }
 
@@ -3542,9 +3586,9 @@ async function procesarRegistrosOrdenes(db, registros) {
           actualizadas++;
         } else {
           const estatusId = registro.estatus ? await obtenerOCrearEstatus(registro.estatus) : null;
-          const destinoId = registro.destino ? await obtenerOCrearDestino(registro.destino) : null;
-          const contactoId = registro.contacto ? await obtenerOCrearContacto(registro.contacto) : null;
-          const estadoEntregaId = registro.estado_entrega ? await obtenerOCrearEstadoEntrega(registro.estado_entrega) : null;
+          const destinoId = registro.destino ? await obtenerOCrearDestino(registro.destino, db, destinosCreados) : null;
+          const contactoId = registro.contacto ? await obtenerOCrearContacto(registro.contacto, db, contactosCreados) : null;
+          const estadoEntregaId = registro.estado_entrega ? await obtenerOCrearEstadoEntrega(registro.estado_entrega, db, estadosEntregaCreados) : null;
           if (destinoId && registro.empresa) await agregarEmpresaSiNoExiste(destinoId, registro.empresa);
 
           await db.prepare(`

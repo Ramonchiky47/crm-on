@@ -17,7 +17,6 @@ const btnGuardar = document.getElementById('btn-guardar');
 const btnCancelar = document.getElementById('btn-cancelar');
 const btnMostrarForm = document.getElementById('btn-mostrar-form');
 const btnCompletarPedidos = document.getElementById('btn-completar-pedidos');
-const btnCompletarPedidosNetsuite = document.getElementById('btn-completar-pedidos-netsuite');
 const btnBuscarPedidoNetsuite = document.getElementById('btn-buscar-pedido-netsuite');
 const tabla = document.getElementById('tabla-facturacion');
 const estadoVacio = document.getElementById('estado-vacio');
@@ -261,57 +260,6 @@ btnCompletarPedidos.addEventListener('click', async () => {
   }
 });
 
-// Corre el mismo proceso que la tarea programada de lunes a viernes: busca en NetSuite el
-// "Creado desde" de TODAS las facturas sin Pedido asociado (no solo las serializadas) y guarda
-// cada resultado directamente. Puede tardar varios minutos si hay muchas facturas pendientes.
-btnCompletarPedidosNetsuite.addEventListener('click', async () => {
-  if (!confirm('Esto va a buscar en NetSuite, para cada factura sin Pedido asociado, el campo "Creado desde" (la Orden de venta que la originó) y va a guardarlo directamente. Puede tardar varios minutos. ¿Continuar?')) return;
-  btnCompletarPedidosNetsuite.disabled = true;
-  btnCompletarPedidosNetsuite.textContent = 'Consultando NetSuite…';
-  try {
-    // Puede tardar hasta 30 min: se lanza en segundo plano y se consulta el
-    // avance (Safari corta una conexión que pasa de ~60 s).
-    const inicio = await fetchAgenteNetsuite('/completar-pedidos?async=1', { method: 'POST' });
-    let status = inicio.status;
-    let data = await inicio.json().catch(() => ({}));
-    if (status === 202) {
-      const t0 = Date.now();
-      let fallos = 0;
-      for (;;) {
-        await new Promise((r) => setTimeout(r, 4000));
-        let estado;
-        try {
-          estado = await (await fetchAgenteNetsuite('/completar-pedidos/estado')).json();
-          fallos = 0;
-        } catch (_) {
-          if (++fallos >= 10) throw new Error('Se perdió la conexión con el servicio del agente NetSuite mientras trabajaba.');
-          continue;
-        }
-        const seg = Math.round((Date.now() - t0) / 1000);
-        btnCompletarPedidosNetsuite.textContent = `Consultando NetSuite… ${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}`;
-        if ((estado.estado === 'ok' || estado.estado === 'error') && estado.resultado) {
-          status = estado.resultado.status;
-          data = estado.resultado.body || {};
-          break;
-        }
-      }
-    }
-    if (status < 200 || status >= 300) throw new Error(data.error || `Error ${status}`);
-    let mensaje = data.resumen || 'Proceso terminado.';
-    if (data.detalle && data.detalle.length) {
-      mensaje += '\n\n' + data.detalle.join('\n');
-    }
-    alert(mensaje);
-    cargarFacturacion();
-  } catch (e) {
-    alert('No se pudo completar pedidos desde NetSuite: ' + e.message
-      + '\n\n¿Está corriendo el servicio del agente NetSuite en la Mac?');
-  } finally {
-    btnCompletarPedidosNetsuite.disabled = false;
-    btnCompletarPedidosNetsuite.textContent = 'Completar pedidos desde NetSuite';
-  }
-});
-
 // Consulta "Creado desde" (el vinculo exacto a la Orden de venta) de la factura que esta en el
 // formulario, via el agente local de NetSuite. Solo llena el campo — no guarda solo, para que se
 // revise antes de confirmar con "Guardar cambios"/"Agregar registro".
@@ -395,7 +343,6 @@ promesaAuth.then((sesion) => {
   if (!permisosFacturacion.editar) {
     btnMostrarForm.hidden = true;
     btnCompletarPedidos.hidden = true;
-    btnCompletarPedidosNetsuite.hidden = true;
   }
 
   // Se llego desde el detalle de una orden ("Facturas asociadas"): precarga el buscador con ese

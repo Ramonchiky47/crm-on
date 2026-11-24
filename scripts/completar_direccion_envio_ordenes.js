@@ -8,6 +8,7 @@
 // Uso: node --env-file=.env scripts/completar_direccion_envio_ordenes.js
 const path = require('path');
 const { execFile } = require('child_process');
+const candado = require('./candado_netsuite');
 
 const BASE_DIR = path.resolve(__dirname, '..');
 const PY_SCRIPT = path.join(BASE_DIR, 'scripts', 'descargar_reportes_netsuite.py');
@@ -51,6 +52,28 @@ function ejecutarPython(args, timeoutMs) {
     process.exit(1);
   }
 
+  // Si NETSUITE_CANDADO_HEREDADO esta presente, un proceso padre (correrSincronizacion en
+  // servicio_agente_netsuite.js) ya adquirio el candado compartido para TODA la sincronizacion -
+  // no hay que pedirlo de nuevo aqui. Si se corre este script suelto (barrido manual del rezago
+  // historico, por ejemplo), si hay que pedirlo.
+  const candadoPropio = !process.env.NETSUITE_CANDADO_HEREDADO;
+  if (candadoPropio && !candado.intentarAdquirir('completar-direccion-envio (manual)')) {
+    const otro = candado.quienLoTiene();
+    console.error(`Hay otra operación de NetSuite en curso (${otro ? otro.etiqueta : 'desconocida'}); espera a que termine e intenta de nuevo.`);
+    process.exit(1);
+  }
+
+  try {
+    await correr(baseUrl, usuario, password);
+  } finally {
+    if (candadoPropio) candado.liberar();
+  }
+})().catch((e) => {
+  console.error(e.message);
+  process.exit(1);
+});
+
+async function correr(baseUrl, usuario, password) {
   console.log(`[${new Date().toISOString()}] Iniciando sesión en ${baseUrl}...`);
   const cookie = await iniciarSesion(baseUrl, usuario, password);
 
@@ -76,8 +99,8 @@ function ejecutarPython(args, timeoutMs) {
   try {
     salida = await ejecutarPython(['-u', PY_SCRIPT, '--direccion-envio-lote', sinDireccion.join(','), '--headless'], timeoutMs);
   } catch (e) {
-    console.error('Error al consultar NetSuite:', e.combinado || e.message);
-    process.exit(1);
+    // throw (no process.exit) para que el try/finally de arriba libere el candado antes de salir.
+    throw new Error(`Error al consultar NetSuite: ${e.combinado || e.message}`);
   }
   console.log(salida);
 
@@ -107,7 +130,4 @@ function ejecutarPython(args, timeoutMs) {
   }
 
   console.log(`\nTotal consultadas: ${resultados.length} | Completadas: ${completadas} | Sin "Dirección de envío": ${sinDatos}`);
-})().catch((e) => {
-  console.error(e.message);
-  process.exit(1);
-});
+}

@@ -16,6 +16,7 @@
 const http = require('http');
 const path = require('path');
 const { execFile } = require('child_process');
+const candado = require('./candado_netsuite');
 
 const PORT = 4567;
 const BASE_DIR = path.resolve(__dirname, '..');
@@ -75,11 +76,12 @@ const trabajos = {
 // /pedido-factura) usa el MISMO perfil persistente de Chrome (.netsuite_session) via Playwright.
 // Chrome no permite dos procesos abriendo el mismo perfil a la vez (falla con "Failed to create a
 // ProcessSingleton..."), asi que ademas de que cada trabajo evite duplicarse a si mismo (ver
-// `trabajos` arriba), se necesita este candado GLOBAL para que un trabajo distinto no arranque
+// `trabajos` arriba), se necesita un candado GLOBAL para que un trabajo distinto no arranque
 // mientras otro ya esta usando el navegador - antes de este candado, un clic en "Completar
 // pedidos" mientras una sincronizacion seguia trabajando (el paso de "Direccion de envio" puede
-// tardar ~15-20 min) tronaba con ese error de Chrome.
-let ocupadoPor = null;
+// tardar ~15-20 min) tronaba con ese error de Chrome. Se implementa con un archivo (ver
+// candado_netsuite.js), no solo una variable en memoria, para que tambien lo respete un script
+// corrido aparte del agente (p.ej. un barrido manual del rezago historico).
 
 async function leerCuerpo(req) {
   let bodyStr = '';
@@ -197,13 +199,17 @@ async function atenderTrabajo(nombre, req, res) {
     return responderJson(res, 409, { error: 'Ya hay una sincronización en curso; espera a que termine.' });
   }
 
-  if (ocupadoPor) {
-    const msg = `Hay otra operación de NetSuite en curso (${ocupadoPor}); espera a que termine e intenta de nuevo.`;
+  if (!candado.intentarAdquirir(nombre)) {
+    const otro = candado.quienLoTiene();
+    const msg = `Hay otra operación de NetSuite en curso (${otro ? otro.etiqueta : 'desconocida'}); espera a que termine e intenta de nuevo.`;
     return responderJson(res, 409, { error: msg });
   }
 
   trabajos[nombre] = { estado: 'corriendo', inicio: new Date().toISOString() };
-  ocupadoPor = nombre;
+  // Los scripts hijos (completar_direccion_envio_ordenes.js, completar_pedidos_desde_netsuite.js)
+  // revisan esta variable para NO pedir el candado otra vez - ya lo tiene este mismo trabajo para
+  // toda su duracion (ver ejecutarComando, que siempre hereda process.env a los hijos).
+  process.env.NETSUITE_CANDADO_HEREDADO = '1';
   const promesa = EJECUTORES[nombre](body)
     .catch((e) => ({ status: 500, body: { error: `Error inesperado: ${e.message || e}` } }))
     .then((resultado) => {
@@ -213,7 +219,8 @@ async function atenderTrabajo(nombre, req, res) {
         fin: new Date().toISOString(),
         resultado,
       };
-      ocupadoPor = null;
+      delete process.env.NETSUITE_CANDADO_HEREDADO;
+      candado.liberar();
       return resultado;
     });
 
@@ -265,14 +272,14 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: 'Falta el parametro ?orden=SO1234' }));
       return;
     }
-    if (ocupadoPor) {
+    if (!candado.intentarAdquirir('comprometido')) {
+      const otro = candado.quienLoTiene();
       res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: `Hay otra operación de NetSuite en curso (${ocupadoPor}); espera a que termine e intenta de nuevo.` }));
+      res.end(JSON.stringify({ error: `Hay otra operación de NetSuite en curso (${otro ? otro.etiqueta : 'desconocida'}); espera a que termine e intenta de nuevo.` }));
       return;
     }
 
     console.log(`[${new Date().toISOString()}] Consultando Comprometido de ${orden}...`);
-    ocupadoPor = 'comprometido';
     let salida;
     try {
       salida = await ejecutarComando('python3', ['-u', PY_SCRIPT, '--comprometido', orden, '--headless'], 120000);
@@ -282,10 +289,10 @@ const server = http.createServer(async (req, res) => {
       console.error('Error al consultar Comprometido:', combinado);
       res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ error: `Error al consultar Comprometido: ${combinado.trim().split('\n').slice(-4).join(' | ')}` }));
-      ocupadoPor = null;
+      candado.liberar();
       return;
     }
-    ocupadoPor = null;
+    candado.liberar();
 
     const lineaResultado = salida.split('\n').find((l) => l.startsWith('RESULTADO_JSON:'));
     if (!lineaResultado) {
@@ -306,14 +313,14 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: 'Falta el parametro ?factura=INV1234' }));
       return;
     }
-    if (ocupadoPor) {
+    if (!candado.intentarAdquirir('pedido-factura')) {
+      const otro = candado.quienLoTiene();
       res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: `Hay otra operación de NetSuite en curso (${ocupadoPor}); espera a que termine e intenta de nuevo.` }));
+      res.end(JSON.stringify({ error: `Hay otra operación de NetSuite en curso (${otro ? otro.etiqueta : 'desconocida'}); espera a que termine e intenta de nuevo.` }));
       return;
     }
 
     console.log(`[${new Date().toISOString()}] Consultando "Creado desde" de ${factura}...`);
-    ocupadoPor = 'pedido-factura';
     let salida;
     try {
       salida = await ejecutarComando('python3', ['-u', PY_SCRIPT, '--pedido-factura', factura, '--headless'], 120000);
@@ -323,10 +330,10 @@ const server = http.createServer(async (req, res) => {
       console.error('Error al consultar pedido de factura:', combinado);
       res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ error: `Error al consultar la Orden de venta: ${combinado.trim().split('\n').slice(-4).join(' | ')}` }));
-      ocupadoPor = null;
+      candado.liberar();
       return;
     }
-    ocupadoPor = null;
+    candado.liberar();
 
     const lineaResultado = salida.split('\n').find((l) => l.startsWith('RESULTADO_JSON:'));
     if (!lineaResultado) {

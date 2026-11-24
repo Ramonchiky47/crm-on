@@ -355,6 +355,40 @@ function quitarAcentos(valor) {
   return valor.replace(/[áéíóúüÁÉÍÓÚÜ]/g, (c) => MAPA_ACENTOS[c]);
 }
 
+// Usado solo para COMPARAR nombres de Hotel/Local (nunca para decidir como se guardan): acentos,
+// mayusculas, puntuacion y notas entre parentesis (ej. "(almacen de mtto)") no deberian impedir
+// reconocer el mismo hotel que ya esta en el catalogo.
+function normalizarNombreDestino(texto) {
+  return quitarAcentos(String(texto || ''))
+    .toUpperCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^A-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function trigramasDeTexto(texto) {
+  const t = `  ${texto} `;
+  const set = new Set();
+  for (let i = 0; i < t.length - 2; i++) set.add(t.slice(i, i + 3));
+  return set;
+}
+
+// Similitud de Dice sobre trigramas de caracteres (0 a 1). Sin dependencias externas: alcanza
+// para detectar typos/variantes de acentuacion de un MISMO nombre, pero deliberadamente NO
+// confunde nombres que solo comparten marca + ciudad pero son sucursales distintas (ver el umbral
+// 0.85 en obtenerOCrearDestino: calibrado contra el catalogo real, "Hilton Los Cabos" vs "Hilton
+// Beach Los Cabos" -que son 2 hoteles reales distintos- da 0.79, por debajo del umbral).
+function similitudTrigramas(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const ta = trigramasDeTexto(a);
+  const tb = trigramasDeTexto(b);
+  let interseccion = 0;
+  for (const tri of ta) if (tb.has(tri)) interseccion++;
+  return (2 * interseccion) / (ta.size + tb.size);
+}
+
 // Cuenta cuantas ordenes usan un valor de catalogo, para bloquear el borrado con un
 // mensaje claro en vez de dejar que falle en silencio por la restriccion de llave foranea.
 async function contarOrdenesQueUsan(columna, id) {
@@ -567,11 +601,29 @@ async function obtenerOCrearEmpresa(nombre, fuente = db) {
 // Mismo patron que obtenerOCrearEmpresa: usadas tanto por la carga masiva (CSV/Excel de NetSuite,
 // ver procesarRegistrosOrdenes) como por /api/ordenes/:id/completar-direccion-envio (completar
 // Hotel/Contacto/Entrega de una sola orden a partir de la "Direccion de envio" de NetSuite).
-async function obtenerOCrearDestino(nombre, fuente = db, creados) {
+// opciones.fuzzy: SOLO lo usa /api/ordenes/:id/completar-direccion-envio (texto libre de
+// "Direccion de envio" de NetSuite, propenso a typos/notas entre parentesis). La carga normal
+// (CSV/Excel) sigue exigiendo coincidencia exacta - no cambiar ese comportamiento existente.
+async function obtenerOCrearDestino(nombre, fuente = db, creados, opciones = {}) {
   const limpio = String(nombre || '').trim();
   if (!limpio) return null;
   const existente = await fuente.prepare('SELECT id_destino FROM destinos WHERE destino = ?').get(limpio);
   if (existente) return existente.id_destino;
+
+  if (opciones.fuzzy) {
+    const normalizadoBuscado = normalizarNombreDestino(limpio);
+    const candidatos = await fuente.prepare('SELECT id_destino, destino FROM destinos').all();
+    let mejor = null;
+    let mejorPuntaje = 0;
+    for (const c of candidatos) {
+      const puntaje = similitudTrigramas(normalizadoBuscado, normalizarNombreDestino(c.destino));
+      if (puntaje > mejorPuntaje) { mejorPuntaje = puntaje; mejor = c; }
+    }
+    // Umbral calibrado contra el catalogo real (ver similitudTrigramas): suficiente para typos
+    // claros del MISMO nombre, no para confundir sucursales distintas de una misma marca.
+    if (mejor && mejorPuntaje >= 0.85) return mejor.id_destino;
+  }
+
   const info = await fuente.prepare('INSERT INTO destinos (destino) VALUES (?)').run(limpio);
   if (creados) creados.add(limpio);
   return info.lastInsertRowid;
@@ -3283,11 +3335,17 @@ app.get('/api/ordenes/anios', requirePermiso('ordenes', 'ver'), ar(async (req, r
 // scripts/completar_direccion_envio_ordenes.js para saber que ordenes consultar en NetSuite.
 // Debe ir antes de '/api/ordenes/:id' (mismo motivo que '/api/ordenes/anios' arriba): si no,
 // Express la interpreta como :id = "sin-direccion-envio" y nunca llega aqui.
+//
+// LIMIT: cuando se agrego esta funcion ya habia ~376 ordenes historicas sin estos 3 campos (de
+// antes de que existiera esta automatizacion). Consultarlas TODAS en cada sincronizacion (~45s
+// por orden en NetSuite) tomaria horas y haria que "Actualizar" dejara de ser rapido. Se procesan
+// las mas recientes primero y el resto se va completando solo, un lote por sincronizacion.
 app.get('/api/ordenes/sin-direccion-envio', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
   const filas = await db.prepare(`
     SELECT id FROM ordenes
     WHERE destino_id IS NULL OR contacto_id IS NULL OR estado_entrega_id IS NULL
     ORDER BY fecha DESC
+    LIMIT 20
   `).all();
   res.json(filas.map((f) => f.id));
 }));
@@ -3361,7 +3419,7 @@ app.post('/api/ordenes/:id/completar-direccion-envio', requirePermiso('ordenes',
 
   const cambios = {};
   if (!orden.destino_id && req.body.hotel) {
-    cambios.destino_id = await obtenerOCrearDestino(req.body.hotel);
+    cambios.destino_id = await obtenerOCrearDestino(req.body.hotel, db, undefined, { fuzzy: true });
   }
   if (!orden.contacto_id && req.body.contacto) {
     cambios.contacto_id = await obtenerOCrearContacto(req.body.contacto);

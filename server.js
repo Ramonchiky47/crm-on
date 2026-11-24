@@ -604,7 +604,9 @@ async function obtenerOCrearEmpresa(nombre, fuente = db) {
 // opciones.fuzzy: SOLO lo usa /api/ordenes/:id/completar-direccion-envio (texto libre de
 // "Direccion de envio" de NetSuite, propenso a typos/notas entre parentesis). La carga normal
 // (CSV/Excel) sigue exigiendo coincidencia exacta - no cambiar ese comportamiento existente.
-async function obtenerOCrearDestino(nombre, fuente = db, creados, opciones = {}) {
+// usuarioId es obligatorio para la fila nueva (destinos.usuario_id es NOT NULL, igual que en el
+// alta manual de POST /api/destinos) - sin el, el INSERT truena con "violates not-null constraint".
+async function obtenerOCrearDestino(nombre, fuente = db, creados, opciones = {}, usuarioId = null) {
   const limpio = String(nombre || '').trim();
   if (!limpio) return null;
   const existente = await fuente.prepare('SELECT id_destino FROM destinos WHERE destino = ?').get(limpio);
@@ -624,17 +626,19 @@ async function obtenerOCrearDestino(nombre, fuente = db, creados, opciones = {})
     if (mejor && mejorPuntaje >= 0.85) return mejor.id_destino;
   }
 
-  const info = await fuente.prepare('INSERT INTO destinos (destino) VALUES (?)').run(limpio);
+  const info = await fuente.prepare('INSERT INTO destinos (destino, usuario_id) VALUES (?, ?)').run(limpio, usuarioId);
   if (creados) creados.add(limpio);
   return info.lastInsertRowid;
 }
 
-async function obtenerOCrearContacto(nombre, fuente = db, creados) {
+// usuarioId es obligatorio para la fila nueva (contactos.usuario_id es NOT NULL, igual que en el
+// alta manual de POST /api/contactos) - sin el, el INSERT truena con "violates not-null constraint".
+async function obtenerOCrearContacto(nombre, fuente = db, creados, usuarioId = null) {
   const limpio = String(nombre || '').trim();
   if (!limpio) return null;
   const existente = await fuente.prepare('SELECT id_contacto FROM contactos WHERE nombre = ?').get(limpio);
   if (existente) return existente.id_contacto;
-  const info = await fuente.prepare("INSERT INTO contactos (id_publico, nombre, creado_en) VALUES (?, ?, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))").run(await generarIdContacto(), limpio);
+  const info = await fuente.prepare("INSERT INTO contactos (id_publico, nombre, usuario_id, creado_en) VALUES (?, ?, ?, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))").run(await generarIdContacto(), limpio, usuarioId);
   if (creados) creados.add(limpio);
   return info.lastInsertRowid;
 }
@@ -3419,10 +3423,10 @@ app.post('/api/ordenes/:id/completar-direccion-envio', requirePermiso('ordenes',
 
   const cambios = {};
   if (!orden.destino_id && req.body.hotel) {
-    cambios.destino_id = await obtenerOCrearDestino(req.body.hotel, db, undefined, { fuzzy: true });
+    cambios.destino_id = await obtenerOCrearDestino(req.body.hotel, db, undefined, { fuzzy: true }, req.session.usuarioId);
   }
   if (!orden.contacto_id && req.body.contacto) {
-    cambios.contacto_id = await obtenerOCrearContacto(req.body.contacto);
+    cambios.contacto_id = await obtenerOCrearContacto(req.body.contacto, db, undefined, req.session.usuarioId);
   }
   if (!orden.estado_entrega_id && req.body.estado) {
     cambios.estado_entrega_id = await obtenerOCrearEstadoEntrega(req.body.estado);
@@ -3575,7 +3579,7 @@ app.delete('/api/ordenes/:id', requirePermiso('ordenes', 'borrar'), ar(async (re
 // campo) y aqui se decide, fila por fila, si se inserta una orden nueva o se actualiza una que
 // ya existe (protegiendo Estatus/Observaciones/Destino/Contacto/Empresa/Estado de la Republica,
 // que solo se cargan la primera vez).
-async function procesarRegistrosOrdenes(db, registros) {
+async function procesarRegistrosOrdenes(db, registros, usuarioId = null) {
   const destinosCreados = new Set();
     const contactosCreados = new Set();
     const empresasAgregadas = new Set();
@@ -3646,8 +3650,8 @@ async function procesarRegistrosOrdenes(db, registros) {
           actualizadas++;
         } else {
           const estatusId = registro.estatus ? await obtenerOCrearEstatus(registro.estatus) : null;
-          const destinoId = registro.destino ? await obtenerOCrearDestino(registro.destino, db, destinosCreados) : null;
-          const contactoId = registro.contacto ? await obtenerOCrearContacto(registro.contacto, db, contactosCreados) : null;
+          const destinoId = registro.destino ? await obtenerOCrearDestino(registro.destino, db, destinosCreados, {}, usuarioId) : null;
+          const contactoId = registro.contacto ? await obtenerOCrearContacto(registro.contacto, db, contactosCreados, usuarioId) : null;
           const estadoEntregaId = registro.estado_entrega ? await obtenerOCrearEstadoEntrega(registro.estado_entrega, db, estadosEntregaCreados) : null;
           if (destinoId && registro.empresa) await agregarEmpresaSiNoExiste(destinoId, registro.empresa);
 
@@ -3700,7 +3704,7 @@ app.post('/api/ordenes/importar-csv', requirePermiso('ordenes', 'editar'), ar(as
   }
 
   const registros = filasCsvAObjetos(parsearCSV(req.body));
-  const resultado = await transaction((db) => procesarRegistrosOrdenes(db, registros));
+  const resultado = await transaction((db) => procesarRegistrosOrdenes(db, registros, req.session.usuarioId));
   res.json({ total: registros.length, ...resultado });
 }));
 
@@ -3773,7 +3777,7 @@ app.post('/api/ordenes/importar-excel-netsuite', requirePermiso('ordenes', 'edit
     return res.status(400).json({ error: `No se pudo leer el archivo Excel: ${e.message}` });
   }
 
-  const resultado = await transaction((db) => procesarRegistrosOrdenes(db, registros));
+  const resultado = await transaction((db) => procesarRegistrosOrdenes(db, registros, req.session.usuarioId));
   res.json({ total: registros.length, ...resultado });
 }));
 
@@ -5667,7 +5671,7 @@ app.post('/api/netsuite/sincronizar', requirePermiso('ordenes', 'editar'), ar(as
   const archOrdenes = buscarMasReciente('vistapredeterminadatransaccion');
   if (archOrdenes) {
     const reg = await netsuiteXlsxARegistros(fs.readFileSync(archOrdenes.ruta));
-    const data = await transaction((dbConn) => procesarRegistrosOrdenes(dbConn, reg));
+    const data = await transaction((dbConn) => procesarRegistrosOrdenes(dbConn, reg, req.session.usuarioId));
     resumen.push(`${archOrdenes.nombre} -> Ordenes: procesadas ${reg.length}, nuevas ${data.insertadas}, actualizadas ${data.actualizadas}, errores ${data.errores.length}`);
   }
 

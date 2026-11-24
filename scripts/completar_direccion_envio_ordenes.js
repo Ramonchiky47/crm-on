@@ -54,7 +54,12 @@ function ejecutarPython(args, timeoutMs) {
   console.log(`[${new Date().toISOString()}] Iniciando sesión en ${baseUrl}...`);
   const cookie = await iniciarSesion(baseUrl, usuario, password);
 
-  const sinDireccion = await fetch(`${baseUrl}/api/ordenes/sin-direccion-envio`, { headers: { Cookie: cookie } }).then((r) => r.json());
+  // LIMITE_DIRECCION_ENVIO: para un barrido manual puntual del rezago historico (ver nota junto a
+  // ?limit en GET /api/ordenes/sin-direccion-envio). En uso normal (encadenado desde
+  // correrSincronizacion) se deja vacio y aplica el default (20).
+  const limite = parseInt(process.env.LIMITE_DIRECCION_ENVIO, 10);
+  const urlConsulta = `${baseUrl}/api/ordenes/sin-direccion-envio${limite ? `?limit=${limite}` : ''}`;
+  const sinDireccion = await fetch(urlConsulta, { headers: { Cookie: cookie } }).then((r) => r.json());
 
   console.log(`Órdenes sin Hotel/Contacto/Entrega: ${sinDireccion.length}`);
   if (!sinDireccion.length) {

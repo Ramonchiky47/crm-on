@@ -3340,17 +3340,19 @@ app.get('/api/ordenes/anios', requirePermiso('ordenes', 'ver'), ar(async (req, r
 // Debe ir antes de '/api/ordenes/:id' (mismo motivo que '/api/ordenes/anios' arriba): si no,
 // Express la interpreta como :id = "sin-direccion-envio" y nunca llega aqui.
 //
-// LIMIT: cuando se agrego esta funcion ya habia ~376 ordenes historicas sin estos 3 campos (de
-// antes de que existiera esta automatizacion). Consultarlas TODAS en cada sincronizacion (~45s
-// por orden en NetSuite) tomaria horas y haria que "Actualizar" dejara de ser rapido. Se procesan
-// las mas recientes primero y el resto se va completando solo, un lote por sincronizacion.
+// ?limit=N (default 20, tope 500): cuando se agrego esta funcion ya habia ~376 ordenes historicas
+// sin estos 3 campos (de antes de que existiera esta automatizacion). Consultarlas TODAS en cada
+// sincronizacion (~45s por orden en NetSuite) tomaria horas y haria que "Actualizar" dejara de ser
+// rapido, asi que el default se queda chico; un N mas grande es solo para un barrido manual puntual
+// del rezago historico (ver scripts/completar_direccion_envio_ordenes.js).
 app.get('/api/ordenes/sin-direccion-envio', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const limite = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 500);
   const filas = await db.prepare(`
     SELECT id FROM ordenes
     WHERE destino_id IS NULL OR contacto_id IS NULL OR estado_entrega_id IS NULL
     ORDER BY fecha DESC
-    LIMIT 20
-  `).all();
+    LIMIT ?
+  `).all(limite);
   res.json(filas.map((f) => f.id));
 }));
 

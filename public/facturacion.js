@@ -271,8 +271,7 @@ btnCompletarPedidosNetsuite.addEventListener('click', async () => {
   try {
     // Puede tardar hasta 30 min: se lanza en segundo plano y se consulta el
     // avance (Safari corta una conexión que pasa de ~60 s).
-    const base = 'http://127.0.0.1:4567';
-    const inicio = await fetch(`${base}/completar-pedidos?async=1`, { method: 'POST' });
+    const inicio = await fetchAgenteNetsuite('/completar-pedidos?async=1', { method: 'POST' });
     let status = inicio.status;
     let data = await inicio.json().catch(() => ({}));
     if (status === 202) {
@@ -282,10 +281,10 @@ btnCompletarPedidosNetsuite.addEventListener('click', async () => {
         await new Promise((r) => setTimeout(r, 4000));
         let estado;
         try {
-          estado = await (await fetch(`${base}/completar-pedidos/estado`)).json();
+          estado = await (await fetchAgenteNetsuite('/completar-pedidos/estado')).json();
           fallos = 0;
         } catch (_) {
-          if (++fallos >= 10) throw new Error('Se perdió la conexión con el servicio local mientras trabajaba.');
+          if (++fallos >= 10) throw new Error('Se perdió la conexión con el servicio del agente NetSuite mientras trabajaba.');
           continue;
         }
         const seg = Math.round((Date.now() - t0) / 1000);
@@ -306,7 +305,7 @@ btnCompletarPedidosNetsuite.addEventListener('click', async () => {
     cargarFacturacion();
   } catch (e) {
     alert('No se pudo completar pedidos desde NetSuite: ' + e.message
-      + '\n\n¿Está corriendo el servicio local del agente NetSuite (puerto 4567) en esta Mac, en Chrome?');
+      + '\n\n¿Está corriendo el servicio del agente NetSuite en la Mac?');
   } finally {
     btnCompletarPedidosNetsuite.disabled = false;
     btnCompletarPedidosNetsuite.textContent = 'Completar pedidos desde NetSuite';
@@ -323,7 +322,7 @@ btnBuscarPedidoNetsuite.addEventListener('click', async () => {
   btnBuscarPedidoNetsuite.disabled = true;
   btnBuscarPedidoNetsuite.textContent = 'Buscando…';
   try {
-    const res = await fetch(`http://127.0.0.1:4567/pedido-factura?factura=${encodeURIComponent(idFactura)}`);
+    const res = await fetchAgenteNetsuite(`/pedido-factura?factura=${encodeURIComponent(idFactura)}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
     if (!data.pedido_id) {
@@ -333,7 +332,7 @@ btnBuscarPedidoNetsuite.addEventListener('click', async () => {
     campos.pedido_id.value = data.pedido_id;
   } catch (e) {
     alert('No se pudo consultar NetSuite: ' + e.message
-      + '\n\n¿Está corriendo el servicio local del agente NetSuite (puerto 4567) en esta Mac, en Chrome?');
+      + '\n\n¿Está corriendo el servicio del agente NetSuite en la Mac?');
   } finally {
     btnBuscarPedidoNetsuite.disabled = false;
     btnBuscarPedidoNetsuite.textContent = 'Buscar en NetSuite';

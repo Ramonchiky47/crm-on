@@ -3881,6 +3881,40 @@ app.post('/api/google-tasks/desconectar', requireAdmin, ar(async (req, res) => {
   res.status(204).end();
 }));
 
+// El agente NetSuite corre en la Mac de Ramon (Playwright con sesion de NetSuite) y se expone
+// a internet via un Cloudflare Quick Tunnel cuya URL cambia cada vez que el servicio reinicia.
+// El agente registra aqui su URL vigente (autenticado con AGENTE_NETSUITE_SECRET) y el frontend
+// la consulta por sesion de CRM para hablarle directo, sin depender de que el navegador este
+// en esa misma Mac (antes el frontend llamaba a http://127.0.0.1:4567 a secas).
+app.post('/api/agente-netsuite/registrar', ar(async (req, res) => {
+  const secreto = process.env.AGENTE_NETSUITE_SECRET || '';
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!secreto || token !== secreto) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+
+  const url = typeof req.body.url === 'string' ? req.body.url.trim().replace(/\/+$/, '') : '';
+  if (!url) return res.status(400).json({ error: 'Falta "url"' });
+
+  await db.prepare(`
+    INSERT INTO agente_netsuite_conexion (id, url, actualizado_en)
+    VALUES (1, ?, now())
+    ON CONFLICT (id) DO UPDATE SET url = EXCLUDED.url, actualizado_en = now()
+  `).run(url);
+  res.json({ ok: true });
+}));
+
+app.get('/api/agente-netsuite/url', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const secreto = process.env.AGENTE_NETSUITE_SECRET || '';
+  if (!secreto) return res.status(503).json({ error: 'El agente NetSuite no esta configurado en este servidor (falta AGENTE_NETSUITE_SECRET)' });
+
+  const fila = await db.prepare('SELECT url, actualizado_en FROM agente_netsuite_conexion WHERE id = 1').get();
+  if (!fila || !fila.url) return res.status(503).json({ error: 'El agente NetSuite de la Mac aun no se ha registrado' });
+
+  res.json({ url: fila.url, token: secreto, actualizadoEn: fila.actualizado_en });
+}));
+
 // Sentido Google -> CRM: revisa cada pendiente ya enlazado a una tarea de Google; si esa tarea
 // esta completada o ya no existe, borra el pendiente del CRM (se considera resuelto).
 app.post('/api/pendientes/sincronizar-google', requirePermiso('catalogos', 'editar'), ar(async (req, res) => {

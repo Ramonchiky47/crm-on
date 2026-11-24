@@ -19,6 +19,14 @@ const { execFile } = require('child_process');
 
 const PORT = 4567;
 const BASE_DIR = path.resolve(__dirname, '..');
+// Mismo secreto que AGENTE_NETSUITE_SECRET en Vercel (ver scripts/tunel_agente_netsuite.js):
+// una vez que el servicio se publica a internet por tunel, ya no basta con que solo escuche en
+// 127.0.0.1 para protegerlo.
+const SECRETO = (process.env.AGENTE_NETSUITE_SECRET || '').trim();
+if (!SECRETO) {
+  console.error('Falta AGENTE_NETSUITE_SECRET en el entorno (.env). El servicio no arrancara sin el.');
+  process.exit(1);
+}
 const PY_SCRIPT = path.join(BASE_DIR, 'scripts', 'descargar_reportes_netsuite.py');
 const UPLOAD_SCRIPT = path.join(BASE_DIR, 'scripts', 'subir_ordenes_netsuite.js');
 const COMPLETAR_PEDIDOS_SCRIPT = path.join(BASE_DIR, 'scripts', 'completar_pedidos_desde_netsuite.js');
@@ -174,6 +182,14 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (token !== SECRETO) {
+    res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'No autorizado' }));
     return;
   }
 

@@ -264,6 +264,46 @@ const promesaSupabaseRealtime = new Promise((resolve) => {
 // Suscribe `recargar` a cualquier INSERT/UPDATE/DELETE en una o mas tablas de Postgres, con un
 // pequeno debounce para no disparar varias veces seguidas si llegan varios cambios juntos (ej.
 // una carga masiva). Uso: suscribirTiempoReal(['destinos', 'destino_empresas'], cargarDestinos).
+// ---------- Agente NetSuite (servicio local en la Mac, expuesto por tunel) ----------
+// El agente corre en la Mac via Playwright y se publica a internet con un Cloudflare Quick
+// Tunnel cuya URL cambia cada vez que el servicio se reinicia (scripts/tunel_agente_netsuite.js
+// la registra en el servidor). Antes el frontend llamaba directo a http://127.0.0.1:4567, lo que
+// solo funcionaba si el navegador corria en esa misma Mac; ahora se descubre la URL vigente (y el
+// token para autenticarse con el agente) por sesion de CRM, para que funcione desde cualquier
+// maquina/navegador con sesion iniciada.
+let promesaAgenteNetsuite = null;
+
+function datosAgenteNetsuite(forzarRefresco = false) {
+  if (forzarRefresco || !promesaAgenteNetsuite) {
+    promesaAgenteNetsuite = fetch('/api/agente-netsuite/url')
+      .then(async (res) => {
+        const datos = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(datos.error || `Error ${res.status}`);
+        return datos;
+      });
+  }
+  return promesaAgenteNetsuite;
+}
+
+// fetch() hacia el agente NetSuite: resuelve la URL/token vigentes y agrega el header de
+// autorizacion. Si la URL guardada ya no responde (el tunel se reinicio con otra), reintenta una
+// vez forzando un refresco por si el agente ya alcanzo a registrar la nueva.
+async function fetchAgenteNetsuite(ruta, opciones = {}) {
+  const intentar = async (forzarRefresco) => {
+    const { url, token } = await datosAgenteNetsuite(forzarRefresco);
+    return fetch(`${url}${ruta}`, {
+      ...opciones,
+      headers: { ...(opciones.headers || {}), Authorization: `Bearer ${token}` },
+    });
+  };
+
+  try {
+    return await intentar(false);
+  } catch (_) {
+    return await intentar(true);
+  }
+}
+
 function suscribirTiempoReal(tablas, recargar) {
   promesaSupabaseRealtime.then((cliente) => {
     if (!cliente) return;

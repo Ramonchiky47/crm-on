@@ -257,7 +257,7 @@ async function abrirDetalle(id) {
           <div class="bloque-comprometido">
             <div class="tarjeta-articulos-encabezado">
               <h4>Comprometido</h4>
-              ${permisosOrdenes.editar ? `<button type="button" id="btn-consultar-comprometido" class="btn-mini" title="Consulta NetSuite en vivo vía el agente local (puerto 4567) — requiere Chrome con el servicio corriendo">Consultar comprometido</button>` : ''}
+              ${permisosOrdenes.editar ? `<button type="button" id="btn-consultar-comprometido" class="btn-mini" title="Consulta NetSuite en vivo vía el agente NetSuite">Consultar comprometido</button>` : ''}
             </div>
             ${htmlComprometido(comprometido, articulos)}
           </div>
@@ -305,7 +305,7 @@ async function abrirDetalle(id) {
       btnConsultarComprometido.disabled = true;
       btnConsultarComprometido.textContent = 'Consultando…';
       try {
-        const res = await fetch(`http://127.0.0.1:4567/comprometido?orden=${encodeURIComponent(orden.id)}`);
+        const res = await fetchAgenteNetsuite(`/comprometido?orden=${encodeURIComponent(orden.id)}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
         await fetch(`/api/ordenes/${encodeURIComponent(orden.id)}/comprometido`, {
@@ -316,7 +316,7 @@ async function abrirDetalle(id) {
         abrirDetalle(orden.id);
       } catch (e) {
         alert('No se pudo consultar Comprometido: ' + e.message
-          + '\n\n¿Está corriendo el servicio local del agente NetSuite (puerto 4567) en esta Mac, en Chrome?');
+          + '\n\n¿Está corriendo el servicio del agente NetSuite en la Mac?');
         btnConsultarComprometido.disabled = false;
         btnConsultarComprometido.textContent = 'Consultar comprometido';
       }
@@ -1071,8 +1071,7 @@ btnMostrarForm.addEventListener('click', abrirFormulario);
 // no está respondiendo" aunque el agente sí estaba trabajando.
 // Regresa { status, data } con la respuesta final del trabajo.
 async function trabajoAgenteNetsuite(nombre, body, alAvanzar) {
-  const base = 'http://127.0.0.1:4567';
-  const res = await fetch(`${base}/${nombre}?async=1`, {
+  const res = await fetchAgenteNetsuite(`/${nombre}?async=1`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}),
@@ -1087,11 +1086,11 @@ async function trabajoAgenteNetsuite(nombre, body, alAvanzar) {
     await new Promise((r) => setTimeout(r, 3000));
     let estado;
     try {
-      estado = await (await fetch(`${base}/${nombre}/estado`)).json();
+      estado = await (await fetchAgenteNetsuite(`/${nombre}/estado`)).json();
       fallosSeguidos = 0;
     } catch (_) {
       fallosSeguidos += 1;
-      if (fallosSeguidos >= 10) throw new Error('Se perdió la conexión con el servicio local del agente NetSuite (puerto 4567) mientras trabajaba.');
+      if (fallosSeguidos >= 10) throw new Error('Se perdió la conexión con el servicio del agente NetSuite mientras trabajaba.');
       continue;
     }
     if (alAvanzar) alAvanzar(Math.round((Date.now() - inicio) / 1000));
@@ -1139,7 +1138,7 @@ async function sincronizarNetsuiteConAgente(passwordOpcional = '') {
     }
 
     if (!res.ok || data.modoManual) {
-      alert(data.error || 'El servicio local del agente NetSuite (puerto 4567) no está respondiendo en esta Mac.');
+      alert(data.error || 'El servicio del agente NetSuite no está respondiendo.');
       return;
     }
 

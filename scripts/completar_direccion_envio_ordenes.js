@@ -7,7 +7,7 @@
 //
 // Uso: node --env-file=.env scripts/completar_direccion_envio_ordenes.js
 const path = require('path');
-const { execFile } = require('child_process');
+const { spawn } = require('child_process');
 const candado = require('./candado_netsuite');
 
 const BASE_DIR = path.resolve(__dirname, '..');
@@ -27,18 +27,52 @@ async function iniciarSesion(baseUrl, usuario, password) {
   return cookies.join('; ');
 }
 
+// Por streaming (spawn, no execFile): imprime cada linea de stdout de Python EN VIVO (console.log
+// normal, va a la salida de este mismo proceso) ademas de acumularla. Asi, cuando este script
+// corre como hijo de servicio_agente_netsuite.js (via ejecutarComandoProgreso), el agente puede
+// leer el avance ("[12/337] SO1234") linea por linea en vez de hasta que todo termine - es lo que
+// alimenta el medidor de avance del boton "Actualizar".
 function ejecutarPython(args, timeoutMs) {
   return new Promise((resolve, reject) => {
     const env = {
       ...process.env,
       PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
     };
-    execFile('python3', args, { cwd: BASE_DIR, env, timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) {
-        err.combinado = `${stdout || ''}\n${stderr || ''}`;
+    const proc = spawn('python3', args, { cwd: BASE_DIR, env });
+    let stdout = '';
+    let stderr = '';
+    let terminado = false;
+
+    const temporizador = setTimeout(() => {
+      terminado = true;
+      proc.kill('SIGKILL');
+      const err = new Error(`python3 tardó más de ${Math.round(timeoutMs / 1000)}s y se canceló.`);
+      err.killed = true;
+      err.combinado = `${stdout}\n${stderr}`;
+      reject(err);
+    }, timeoutMs);
+
+    proc.stdout.on('data', (chunk) => {
+      stdout += chunk;
+      process.stdout.write(chunk);
+    });
+    proc.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    proc.on('error', (err) => {
+      if (terminado) return;
+      clearTimeout(temporizador);
+      err.combinado = `${stdout}\n${stderr}`;
+      reject(err);
+    });
+    proc.on('close', (code) => {
+      if (terminado) return;
+      clearTimeout(temporizador);
+      if (code !== 0) {
+        const err = new Error(`python3 terminó con código ${code}`);
+        err.combinado = `${stdout}\n${stderr}`;
         return reject(err);
       }
-      resolve(stdout || '');
+      resolve(stdout);
     });
   });
 }

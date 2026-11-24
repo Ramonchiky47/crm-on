@@ -1,13 +1,13 @@
 // Busca en el CRM todas las facturas sin Pedido (pedido_id) asociado, consulta a NetSuite el
 // campo "Creado desde" de cada una (el vinculo exacto a la Orden de venta que la origino) via el
-// agente local de Playwright, y guarda el resultado. Pensado para correr tanto a mano (boton
-// "Completar pedidos desde NetSuite" en Facturacion, que llama a este mismo flujo via el
-// servicio local) como programado (launchd, lunes a viernes 9am - ver
-// com.gonpal.completar-pedidos.plist).
+// agente local de Playwright, y guarda el resultado. Corre como un paso mas de la sincronizacion
+// unificada (ver correrSincronizacion en servicio_agente_netsuite.js, que dispara tanto el boton
+// "Actualizar" de Ordenes como la tarea programada de lunes a viernes 9am via
+// scripts/disparar_sincronizacion.js); tambien se puede correr suelto a mano.
 //
 // Uso: node --env-file=.env scripts/completar_pedidos_desde_netsuite.js
 const path = require('path');
-const { execFile } = require('child_process');
+const { spawn } = require('child_process');
 const candado = require('./candado_netsuite');
 
 const BASE_DIR = path.resolve(__dirname, '..');
@@ -27,18 +27,50 @@ async function iniciarSesion(baseUrl, usuario, password) {
   return cookies.join('; ');
 }
 
+// Por streaming (spawn, no execFile): imprime cada linea de stdout de Python EN VIVO ademas de
+// acumularla, para que el agente (servicio_agente_netsuite.js) pueda leer el avance en vivo y
+// alimentar el medidor del boton "Actualizar" (ver ejecutarComandoProgreso/parsearLineaProgreso).
 function ejecutarPython(args, timeoutMs) {
   return new Promise((resolve, reject) => {
     const env = {
       ...process.env,
       PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
     };
-    execFile('python3', args, { cwd: BASE_DIR, env, timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) {
-        err.combinado = `${stdout || ''}\n${stderr || ''}`;
+    const proc = spawn('python3', args, { cwd: BASE_DIR, env });
+    let stdout = '';
+    let stderr = '';
+    let terminado = false;
+
+    const temporizador = setTimeout(() => {
+      terminado = true;
+      proc.kill('SIGKILL');
+      const err = new Error(`python3 tardó más de ${Math.round(timeoutMs / 1000)}s y se canceló.`);
+      err.killed = true;
+      err.combinado = `${stdout}\n${stderr}`;
+      reject(err);
+    }, timeoutMs);
+
+    proc.stdout.on('data', (chunk) => {
+      stdout += chunk;
+      process.stdout.write(chunk);
+    });
+    proc.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    proc.on('error', (err) => {
+      if (terminado) return;
+      clearTimeout(temporizador);
+      err.combinado = `${stdout}\n${stderr}`;
+      reject(err);
+    });
+    proc.on('close', (code) => {
+      if (terminado) return;
+      clearTimeout(temporizador);
+      if (code !== 0) {
+        const err = new Error(`python3 terminó con código ${code}`);
+        err.combinado = `${stdout}\n${stderr}`;
         return reject(err);
       }
-      resolve(stdout || '');
+      resolve(stdout);
     });
   });
 }

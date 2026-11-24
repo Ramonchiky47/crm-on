@@ -15,7 +15,7 @@
 
 const http = require('http');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const candado = require('./candado_netsuite');
 
 const PORT = 4567;
@@ -57,6 +57,74 @@ function ejecutarComando(cmd, args, timeoutMs = 240000) {
   });
 }
 
+// Igual que ejecutarComando, pero por streaming (spawn, no execFile): invoca alLinea(linea) por
+// cada linea de stdout AL MOMENTO EN QUE LLEGA, no hasta que el proceso termina. Es lo que permite
+// el medidor de avance (ver trabajos[nombre].progreso): sin esto, el agente solo se entera del
+// progreso de un paso hasta que ese paso completo ya termino.
+function ejecutarComandoProgreso(cmd, args, timeoutMs, alLinea) {
+  return new Promise((resolve, reject) => {
+    const env = {
+      ...process.env,
+      PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
+    };
+    const proc = spawn(cmd, args, { cwd: BASE_DIR, env });
+    let stdout = '';
+    let stderr = '';
+    let bufferStdout = '';
+    let terminado = false;
+
+    const temporizador = setTimeout(() => {
+      terminado = true;
+      proc.kill('SIGKILL');
+      const err = new Error(`${cmd} tardó más de ${Math.round(timeoutMs / 1000)}s y se canceló.`);
+      err.killed = true;
+      err.combinado = `${stdout}\n${stderr}`;
+      reject(err);
+    }, timeoutMs);
+
+    proc.stdout.on('data', (chunk) => {
+      stdout += chunk;
+      bufferStdout += chunk;
+      const lineas = bufferStdout.split('\n');
+      bufferStdout = lineas.pop();
+      for (const linea of lineas) {
+        if (alLinea) alLinea(linea);
+      }
+    });
+    proc.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    proc.on('error', (err) => {
+      if (terminado) return;
+      clearTimeout(temporizador);
+      err.combinado = `${stdout}\n${stderr}`;
+      reject(err);
+    });
+    proc.on('close', (code) => {
+      if (terminado) return;
+      clearTimeout(temporizador);
+      if (code !== 0) {
+        const err = new Error(`${cmd} terminó con código ${code}`);
+        err.combinado = `${stdout}\n${stderr}`;
+        return reject(err);
+      }
+      resolve(stdout);
+    });
+  });
+}
+
+// Reconoce las lineas de avance que ya imprimen los scripts hijos:
+//   "=== PASO 2: Detalle de órdenes de venta por artículo (cr=33) ==="  (descarga de reportes)
+//   "[12/337] SO7850"                                                   (direccion de envio / pedidos de facturas, por lote)
+function parsearLineaProgreso(linea) {
+  const pasoReporte = linea.match(/^=== PASO (\d+): (.+?) ===$/);
+  if (pasoReporte) return { detalle: `Reporte ${pasoReporte[1]}/4: ${pasoReporte[2]}` };
+
+  const itemLote = linea.match(/^\[(\d+)\/(\d+)\]\s*(.*)$/);
+  if (itemLote) return { detalle: `${itemLote[1]}/${itemLote[2]}${itemLote[3] ? ` (${itemLote[3]})` : ''}` };
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Trabajos largos en segundo plano.
 // La descarga de NetSuite tarda ~3-4 min y "Completar pedidos" hasta 30 min.
@@ -95,7 +163,7 @@ async function leerCuerpo(req) {
   }
 }
 
-async function correrSincronizacion(body) {
+async function correrSincronizacion(body, actualizarProgreso = () => {}) {
   const nuevoPassword = typeof body.password === 'string' ? body.password.trim() : '';
   const pyArgs = ['-u', PY_SCRIPT, '--todos', '--headless'];
   if (nuevoPassword) {
@@ -103,8 +171,12 @@ async function correrSincronizacion(body) {
   }
 
   console.log(`[${new Date().toISOString()}] Iniciando descarga de los reportes de NetSuite...`);
+  actualizarProgreso({ paso: 1, totalPasos: 4, nombrePaso: 'Descargando reportes de NetSuite', detalle: null });
   try {
-    await ejecutarComando('python3', pyArgs, 360000);
+    await ejecutarComandoProgreso('python3', pyArgs, 360000, (linea) => {
+      const p = parsearLineaProgreso(linea);
+      if (p) actualizarProgreso(p);
+    });
   } catch (e) {
     const salida = e.combinado || e.message || '';
     console.error('Error en descarga NetSuite:', salida);
@@ -118,6 +190,7 @@ async function correrSincronizacion(body) {
   }
 
   console.log(`[${new Date().toISOString()}] Subiendo reportes al CRM...`);
+  actualizarProgreso({ paso: 2, totalPasos: 4, nombrePaso: 'Subiendo reportes al CRM', detalle: null });
   let lineas;
   try {
     const stdoutUpload = await ejecutarComando(process.execPath, ['--env-file=.env', UPLOAD_SCRIPT], 180000);
@@ -133,8 +206,12 @@ async function correrSincronizacion(body) {
   // sincronizacion igual se reporta como exitosa (los reportes ya se subieron), solo se agrega
   // un aviso al resumen para que se note en el boton "Actualizar".
   console.log(`[${new Date().toISOString()}] Completando Hotel/Contacto/Entrega desde "Dirección de envío"...`);
+  actualizarProgreso({ paso: 3, totalPasos: 4, nombrePaso: 'Completando Hotel/Contacto/Entrega', detalle: null });
   try {
-    const stdoutDireccion = await ejecutarComando(process.execPath, ['--env-file=.env', COMPLETAR_DIRECCION_ENVIO_SCRIPT], 1800000);
+    const stdoutDireccion = await ejecutarComandoProgreso(process.execPath, ['--env-file=.env', COMPLETAR_DIRECCION_ENVIO_SCRIPT], 1800000, (linea) => {
+      const p = parsearLineaProgreso(linea);
+      if (p) actualizarProgreso(p);
+    });
     lineas.push('', ...stdoutDireccion.split('\n').map((l) => l.trim()).filter(Boolean));
   } catch (e) {
     const salida = e.combinado || e.message || '';
@@ -147,8 +224,12 @@ async function correrSincronizacion(body) {
   // programada independiente; ahora es un paso mas de esta misma sincronización unificada, con
   // el mismo criterio de "no critico" que el paso anterior.
   console.log(`[${new Date().toISOString()}] Completando pedidos sin asociar desde NetSuite ("Creado desde")...`);
+  actualizarProgreso({ paso: 4, totalPasos: 4, nombrePaso: 'Completando pedidos de facturas', detalle: null });
   try {
-    const stdoutPedidos = await ejecutarComando(process.execPath, ['--env-file=.env', COMPLETAR_PEDIDOS_SCRIPT], 1800000);
+    const stdoutPedidos = await ejecutarComandoProgreso(process.execPath, ['--env-file=.env', COMPLETAR_PEDIDOS_SCRIPT], 1800000, (linea) => {
+      const p = parsearLineaProgreso(linea);
+      if (p) actualizarProgreso(p);
+    });
     lineas.push('', ...stdoutPedidos.split('\n').map((l) => l.trim()).filter(Boolean));
   } catch (e) {
     const salida = e.combinado || e.message || '';
@@ -159,11 +240,15 @@ async function correrSincronizacion(body) {
   return { status: 200, body: { ok: true, resumen: lineas } };
 }
 
-async function correrCompletarPedidos() {
+async function correrCompletarPedidos(body, actualizarProgreso = () => {}) {
   console.log(`[${new Date().toISOString()}] Completando pedidos sin asociar desde NetSuite ("Creado desde")...`);
+  actualizarProgreso({ paso: 1, totalPasos: 1, nombrePaso: 'Completando pedidos de facturas', detalle: null });
   let salida;
   try {
-    salida = await ejecutarComando(process.execPath, ['--env-file=.env', COMPLETAR_PEDIDOS_SCRIPT], 1800000);
+    salida = await ejecutarComandoProgreso(process.execPath, ['--env-file=.env', COMPLETAR_PEDIDOS_SCRIPT], 1800000, (linea) => {
+      const p = parsearLineaProgreso(linea);
+      if (p) actualizarProgreso(p);
+    });
     console.log(salida);
   } catch (e) {
     const combinado = e.combinado || e.message || '';
@@ -205,12 +290,20 @@ async function atenderTrabajo(nombre, req, res) {
     return responderJson(res, 409, { error: msg });
   }
 
-  trabajos[nombre] = { estado: 'corriendo', inicio: new Date().toISOString() };
+  trabajos[nombre] = { estado: 'corriendo', inicio: new Date().toISOString(), progreso: null };
   // Los scripts hijos (completar_direccion_envio_ordenes.js, completar_pedidos_desde_netsuite.js)
   // revisan esta variable para NO pedir el candado otra vez - ya lo tiene este mismo trabajo para
   // toda su duracion (ver ejecutarComando, que siempre hereda process.env a los hijos).
   process.env.NETSUITE_CANDADO_HEREDADO = '1';
-  const promesa = EJECUTORES[nombre](body)
+  // El medidor de avance: cada EJECUTOR llama a esto con {paso, totalPasos, nombrePaso, detalle}
+  // (los campos que no cambian de una llamada a otra se pueden omitir, se van mezclando) y queda
+  // disponible de inmediato via GET /<nombre>/estado para que el frontend lo muestre.
+  const actualizarProgreso = (parcial) => {
+    if (trabajos[nombre]) {
+      trabajos[nombre].progreso = { ...trabajos[nombre].progreso, ...parcial };
+    }
+  };
+  const promesa = EJECUTORES[nombre](body, actualizarProgreso)
     .catch((e) => ({ status: 500, body: { error: `Error inesperado: ${e.message || e}` } }))
     .then((resultado) => {
       trabajos[nombre] = {

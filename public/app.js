@@ -1065,6 +1065,16 @@ form.addEventListener('submit', async (e) => {
 btnCancelar.addEventListener('click', cerrarFormulario);
 btnMostrarForm.addEventListener('click', abrirFormulario);
 
+// Arma el texto del medidor de avance a partir de progreso = {paso, totalPasos, nombrePaso,
+// detalle} que manda GET /<trabajo>/estado (ver actualizarProgreso en servicio_agente_netsuite.js).
+// Ej.: "Paso 3/4: Completando Hotel/Contacto/Entrega — 12/337 (2:15)"
+function textoMedidorNetsuite(progreso, tiempo) {
+  if (!progreso || !progreso.nombrePaso) return `Descargando de NetSuite... (${tiempo})`;
+  const pasoTexto = progreso.totalPasos > 1 ? `Paso ${progreso.paso}/${progreso.totalPasos}: ` : '';
+  const detalleTexto = progreso.detalle ? ` — ${progreso.detalle}` : '';
+  return `${pasoTexto}${progreso.nombrePaso}${detalleTexto} (${tiempo})`;
+}
+
 // Lanza un trabajo largo en el agente local (sincronizar / completar-pedidos)
 // y consulta su avance cada 3 s. La descarga de NetSuite tarda ~3-4 min y
 // Safari corta un fetch que pasa de ~60 s: antes eso se veía como "el servicio
@@ -1093,7 +1103,7 @@ async function trabajoAgenteNetsuite(nombre, body, alAvanzar) {
       if (fallosSeguidos >= 10) throw new Error('Se perdió la conexión con el servicio del agente NetSuite mientras trabajaba.');
       continue;
     }
-    if (alAvanzar) alAvanzar(Math.round((Date.now() - inicio) / 1000));
+    if (alAvanzar) alAvanzar(Math.round((Date.now() - inicio) / 1000), estado.progreso || null);
     if ((estado.estado === 'ok' || estado.estado === 'error') && estado.resultado) {
       return { status: estado.resultado.status, data: estado.resultado.body || {} };
     }
@@ -1109,8 +1119,9 @@ async function sincronizarNetsuiteConAgente(passwordOpcional = '') {
     let res;
     let data;
     try {
-      const r = await trabajoAgenteNetsuite('sincronizar', passwordOpcional ? { password: passwordOpcional } : {}, (seg) => {
-        btnActualizarOrdenesNetsuite.textContent = `Descargando de NetSuite... ${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}`;
+      const r = await trabajoAgenteNetsuite('sincronizar', passwordOpcional ? { password: passwordOpcional } : {}, (seg, progreso) => {
+        const tiempo = `${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}`;
+        btnActualizarOrdenesNetsuite.textContent = textoMedidorNetsuite(progreso, tiempo);
       });
       res = { status: r.status, ok: r.status >= 200 && r.status < 300 };
       data = r.data;

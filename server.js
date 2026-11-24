@@ -3277,6 +3277,21 @@ app.get('/api/ordenes/anios', requirePermiso('ordenes', 'ver'), ar(async (req, r
   res.json(filas.map((f) => f.anio));
 }));
 
+// Ordenes a las que les falta Hotel/Local, Contacto o Entrega (estado) - normalmente las que
+// acaban de llegar de NetSuite via el reporte masivo, que no trae esos 3 campos (solo viven en
+// "Direccion de envio" del registro individual de cada orden). Usado por
+// scripts/completar_direccion_envio_ordenes.js para saber que ordenes consultar en NetSuite.
+// Debe ir antes de '/api/ordenes/:id' (mismo motivo que '/api/ordenes/anios' arriba): si no,
+// Express la interpreta como :id = "sin-direccion-envio" y nunca llega aqui.
+app.get('/api/ordenes/sin-direccion-envio', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
+  const filas = await db.prepare(`
+    SELECT id FROM ordenes
+    WHERE destino_id IS NULL OR contacto_id IS NULL OR estado_entrega_id IS NULL
+    ORDER BY fecha DESC
+  `).all();
+  res.json(filas.map((f) => f.id));
+}));
+
 app.get('/api/ordenes/:id', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
   const row = await db.prepare(`${SELECT_ORDENES} WHERE o.id = ?`).get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Orden no encontrada' });
@@ -3334,19 +3349,6 @@ app.post('/api/ordenes/:id/comprometido', requirePermiso('ordenes', 'editar'), a
 
   const rows = await db.prepare('SELECT * FROM comprometido_orden WHERE orden_id = ? ORDER BY id').all(req.params.id);
   res.json(rows);
-}));
-
-// Ordenes a las que les falta Hotel/Local, Contacto o Entrega (estado) - normalmente las que
-// acaban de llegar de NetSuite via el reporte masivo, que no trae esos 3 campos (solo viven en
-// "Direccion de envio" del registro individual de cada orden). Usado por
-// scripts/completar_direccion_envio_ordenes.js para saber que ordenes consultar en NetSuite.
-app.get('/api/ordenes/sin-direccion-envio', requirePermiso('ordenes', 'ver'), ar(async (req, res) => {
-  const filas = await db.prepare(`
-    SELECT id FROM ordenes
-    WHERE destino_id IS NULL OR contacto_id IS NULL OR estado_entrega_id IS NULL
-    ORDER BY fecha DESC
-  `).all();
-  res.json(filas.map((f) => f.id));
 }));
 
 // Completa Hotel/Local, Contacto y/o Entrega (estado) de UNA orden a partir del texto de

@@ -529,9 +529,19 @@ def consultar_direccion_envio(page, numero_so: str) -> dict:
     time.sleep(2)
 
     # Busca, en cualquier frame, el elemento MAS PEQUEÑO (menos texto envolvente) cuyo texto
-    # empiece con "ENVÍO A" - esa es la etiqueta visible justo arriba del bloque de direccion
-    # (confirmado contra captura real). No depende de un id/clase especifico de NetSuite, que
-    # puede variar entre cuentas/versiones.
+    # empiece con "ENVÍO A" Y que tambien contenga algo mas que la sola etiqueta (de ahi el limite
+    # inferior de longitud): la etiqueta "ENVÍO A" suele vivir en su propio nodo hoja, hermano del
+    # bloque con las lineas de la direccion, no ancestro de el - sin el limite inferior, el
+    # candidato "mas pequeño" termina siendo esa etiqueta sola (texto vacio tras quitarla).
+    # No depende de un id/clase especifico de NetSuite, que puede variar entre cuentas/versiones.
+    #
+    # El renglon se arma a partir del innerHTML (no de innerText): en la pagina real, "Contacto",
+    # "Hotel" y cada linea de la calle/ciudad/estado viven en elementos hermanos SIN separador de
+    # linea real entre ellos (confirmado: innerText devolvio todo pegado en un solo renglon, ej.
+    # "Liz Gomez 664 634 3100Hotel Real del RioJosé..."), asi que se reconstruyen saltos de linea
+    # a mano insertando '\n' donde cierra cada <div>/<p>/<li>/<tr>/<td> o hay un <br>, y se decodifican
+    # entidades (&nbsp;, etc.) reinyectando ese HTML modificado en un <div> temporal y leyendo su
+    # textContent.
     texto_bloque = None
     deadline = time.time() + 20
     while time.time() < deadline and not texto_bloque:
@@ -539,12 +549,19 @@ def consultar_direccion_envio(page, numero_so: str) -> dict:
             try:
                 texto_bloque = frame.evaluate("""() => {
                     const candidatos = Array.from(document.querySelectorAll('body *')).filter(el => {
-                        const t = (el.innerText || '').trim();
-                        return /^env[ií]o a\\b/i.test(t) && t.length < 400;
+                        const t = (el.innerText || el.textContent || '').trim();
+                        return /^env[ií]o a\\b/i.test(t) && t.length > 20 && t.length < 500;
                     });
                     if (!candidatos.length) return null;
-                    candidatos.sort((a, b) => (a.innerText || '').length - (b.innerText || '').length);
-                    return candidatos[0].innerText;
+                    candidatos.sort((a, b) => (a.innerText || a.textContent || '').length - (b.innerText || b.textContent || '').length);
+                    const el = candidatos[0];
+                    const htmlConSaltos = el.innerHTML
+                        .replace(/<br\\s*\\/?>/gi, '\\n')
+                        .replace(/<\\/(div|p|li|tr|td|th)>/gi, '\\n')
+                        .replace(/<[^>]+>/g, '');
+                    const tmp = document.createElement('div');
+                    tmp.innerHTML = htmlConSaltos;
+                    return tmp.textContent;
                 }""")
             except Exception:
                 continue
@@ -560,6 +577,8 @@ def consultar_direccion_envio(page, numero_so: str) -> dict:
         return resultado
 
     datos = parsear_direccion_envio(texto_bloque)
+    if not (datos['contacto'] or datos['hotel'] or datos['estado']):
+        print(f"-> Se encontró el bloque pero no se pudo deducir nada de {numero_so}. Texto crudo (diagnóstico): {texto_bloque!r}")
     print(f"✅ Dirección de envío de {numero_so}: contacto={datos['contacto']!r} hotel={datos['hotel']!r} estado={datos['estado']!r}")
     resultado = {"orden": numero_so, **datos}
     print(f"RESULTADO_JSON:{json.dumps(resultado, ensure_ascii=False)}")

@@ -297,15 +297,86 @@ def actualizar_cache_ids_orden(page):
     print(f"-> Cache de IDs de orden actualizado: {len(pares)} orden(es) en esta página, {len(cache)} en total.")
 
 
-def consultar_comprometido(page, numero_so: str) -> list:
+URL_BUSQUEDA_TRANSACCION = f"https://{APP_HOST}/app/common/search/search.nl?searchtype=Transaction&frame=be"
+
+
+def guardar_id_orden_en_cache(numero_so: str, id_interno: str):
+    cache = {}
+    if CACHE_IDS_ORDEN.exists():
+        try:
+            cache = json.loads(CACHE_IDS_ORDEN.read_text(encoding="utf-8"))
+        except Exception:
+            cache = {}
+    cache[numero_so] = id_interno
+    CACHE_IDS_ORDEN.write_text(json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def buscar_id_interno_orden_por_numero(page, numero_so: str):
     """
-    Abre el registro individual de una orden (salesord.nl?id=...) y lee, de la pestaña
-    "Artículos", la cantidad "Comprometido" por línea de artículo. A diferencia de los otros
-    reportes (masivos, uno por todas las órdenes), esto es una consulta por-orden bajo demanda:
-    "Comprometido" no viene en ningún reporte exportable, solo en el registro individual.
+    Busca el ID interno de una orden por su número de documento (ej. "SO135") usando la Búsqueda
+    de Transacción de NetSuite (campo "NÚMERO/ID DE TRANSACCIÓN", name="Transaction_TRANSACTIONNUMBERTEXT"),
+    que encuentra CUALQUIER orden sin importar qué tan vieja sea o si ya no aparece en la lista por
+    defecto de "Vista predeterminada Transacción" (esa lista solo trae ~70 órdenes recientes/activas
+    de una pasada; la Búsqueda de Transacción no tiene ese límite). Se usa como respaldo cuando el
+    cache + esa lista no encuentran el número (confirmado con SO135, de 2024: no aparecía en la
+    lista pero sí via esta búsqueda, ID interno 11204).
+    """
+    asegurar_login(page, URL_BUSQUEDA_TRANSACCION)
+    try:
+        page.wait_for_load_state("networkidle", timeout=20000)
+    except Exception:
+        pass
+    time.sleep(1)
+
+    frame_formulario = None
+    for fr in page.frames:
+        try:
+            if fr.locator("input[name='Transaction_TRANSACTIONNUMBERTEXT']").count() > 0:
+                frame_formulario = fr
+                break
+        except Exception:
+            continue
+    if not frame_formulario:
+        print(f"   (Aviso: no se encontró el formulario de 'Búsqueda de Transacción' para buscar {numero_so})")
+        return None
+
+    frame_formulario.locator("input[name='Transaction_TRANSACTIONNUMBERTEXT']").first.fill(numero_so)
+    try:
+        with page.expect_navigation(timeout=20000):
+            frame_formulario.locator("#submitter").first.click()
+    except Exception as e:
+        print(f"   (Aviso: no se pudo enviar la 'Búsqueda de Transacción' para {numero_so}: {e})")
+        return None
+    time.sleep(1)
+
+    patron_id = re.compile(r"[?&]id=(\d+)")
+    for fr in page.frames:
+        try:
+            href = fr.evaluate(
+                """(numero) => {
+                    const link = Array.from(document.querySelectorAll('a.viewitem, a[aria-label]'))
+                        .find(a => (a.getAttribute('aria-label') || '').includes('#' + numero));
+                    return link ? link.href : null;
+                }""",
+                numero_so,
+            )
+        except Exception:
+            continue
+        if href:
+            m = patron_id.search(href)
+            if m:
+                return m.group(1)
+    return None
+
+
+def resolver_id_interno_orden(page, numero_so: str) -> str:
+    """
+    Traduce "SO1234" a su ID interno (requerido para abrir salesord.nl?id=...), en 3 pasos (del más
+    barato al más caro): (1) cache local, (2) actualizar cache desde la lista "Vista predeterminada
+    Transacción" (solo cubre las órdenes más recientes/activas visibles ahí), (3) 'Búsqueda de
+    Transacción' por número (cubre cualquier orden, aunque es una consulta aparte más lenta).
     """
     numero_so = numero_so.strip().upper()
-
     cache = {}
     if CACHE_IDS_ORDEN.exists():
         try:
@@ -327,10 +398,28 @@ def consultar_comprometido(page, numero_so: str) -> list:
         id_interno = cache.get(numero_so)
 
     if not id_interno:
+        print(f"-> {numero_so} tampoco aparece en 'Vista predeterminada Transacción' (puede ser una orden vieja o ya cerrada); probando la 'Búsqueda de Transacción'...")
+        id_interno = buscar_id_interno_orden_por_numero(page, numero_so)
+        if id_interno:
+            guardar_id_orden_en_cache(numero_so, id_interno)
+
+    if not id_interno:
         raise RuntimeError(
-            f"No se encontró el ID interno de {numero_so} en la lista de Órdenes. "
-            "Verifica que el número sea correcto y que la orden aparezca en 'Vista predeterminada Transacción'."
+            f"No se encontró el ID interno de {numero_so} ni en 'Vista predeterminada Transacción' ni en la 'Búsqueda de Transacción'. "
+            "Verifica que el número sea correcto."
         )
+    return id_interno
+
+
+def consultar_comprometido(page, numero_so: str) -> list:
+    """
+    Abre el registro individual de una orden (salesord.nl?id=...) y lee, de la pestaña
+    "Artículos", la cantidad "Comprometido" por línea de artículo. A diferencia de los otros
+    reportes (masivos, uno por todas las órdenes), esto es una consulta por-orden bajo demanda:
+    "Comprometido" no viene en ningún reporte exportable, solo en el registro individual.
+    """
+    numero_so = numero_so.strip().upper()
+    id_interno = resolver_id_interno_orden(page, numero_so)
 
     url_orden = f"https://{APP_HOST}/app/accounting/transactions/salesord.nl?id={id_interno}&whence="
     print(f"-> Abriendo {numero_so} (ID interno {id_interno}): {url_orden}")
@@ -492,32 +581,7 @@ def consultar_direccion_envio(page, numero_so: str) -> dict:
     predeterminada Transacción", solo en el registro individual de cada orden.
     """
     numero_so = numero_so.strip().upper()
-
-    cache = {}
-    if CACHE_IDS_ORDEN.exists():
-        try:
-            cache = json.loads(CACHE_IDS_ORDEN.read_text(encoding="utf-8"))
-        except Exception:
-            cache = {}
-
-    id_interno = cache.get(numero_so)
-    if not id_interno:
-        print(f"-> {numero_so} no está en el cache de IDs; actualizando desde 'Vista predeterminada Transacción'...")
-        asegurar_login(page, URL_REPORTE_1)
-        try:
-            page.wait_for_load_state("networkidle", timeout=30000)
-        except Exception:
-            pass
-        time.sleep(2)
-        actualizar_cache_ids_orden(page)
-        cache = json.loads(CACHE_IDS_ORDEN.read_text(encoding="utf-8")) if CACHE_IDS_ORDEN.exists() else {}
-        id_interno = cache.get(numero_so)
-
-    if not id_interno:
-        raise RuntimeError(
-            f"No se encontró el ID interno de {numero_so} en la lista de Órdenes. "
-            "Verifica que el número sea correcto y que la orden aparezca en 'Vista predeterminada Transacción'."
-        )
+    id_interno = resolver_id_interno_orden(page, numero_so)
 
     url_orden = f"https://{APP_HOST}/app/accounting/transactions/salesord.nl?id={id_interno}&whence="
     print(f"-> Abriendo {numero_so} (ID interno {id_interno}): {url_orden}")

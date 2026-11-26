@@ -32,7 +32,7 @@ async function iniciarSesion(baseUrl, usuario, password) {
 // corre como hijo de servicio_agente_netsuite.js (via ejecutarComandoProgreso), el agente puede
 // leer el avance ("[12/337] SO1234") linea por linea en vez de hasta que todo termine - es lo que
 // alimenta el medidor de avance del boton "Actualizar".
-function ejecutarPython(args, timeoutMs) {
+function ejecutarPython(args, timeoutMs, alLinea) {
   return new Promise((resolve, reject) => {
     const env = {
       ...process.env,
@@ -42,6 +42,7 @@ function ejecutarPython(args, timeoutMs) {
     let stdout = '';
     let stderr = '';
     let terminado = false;
+    let bufferLinea = '';
 
     const temporizador = setTimeout(() => {
       terminado = true;
@@ -55,6 +56,12 @@ function ejecutarPython(args, timeoutMs) {
     proc.stdout.on('data', (chunk) => {
       stdout += chunk;
       process.stdout.write(chunk);
+      if (alLinea) {
+        bufferLinea += chunk;
+        const lineas = bufferLinea.split('\n');
+        bufferLinea = lineas.pop();
+        for (const linea of lineas) alLinea(linea);
+      }
     });
     proc.stderr.on('data', (chunk) => { stderr += chunk; });
 
@@ -129,25 +136,16 @@ async function correr(baseUrl, usuario, password) {
   const timeoutMs = sinDireccion.length * 45000 + 120000;
   console.log(`-> Consultando 'Dirección de envío' en NetSuite (tope de tiempo: ${Math.round(timeoutMs / 60000)} min)...`);
 
-  let salida;
-  try {
-    salida = await ejecutarPython(['-u', PY_SCRIPT, '--direccion-envio-lote', sinDireccion.join(','), '--headless'], timeoutMs);
-  } catch (e) {
-    // throw (no process.exit) para que el try/finally de arriba libere el candado antes de salir.
-    throw new Error(`Error al consultar NetSuite: ${e.combinado || e.message}`);
-  }
-  console.log(salida);
-
-  const resultados = salida
-    .split('\n')
-    .filter((l) => l.startsWith('RESULTADO_JSON:'))
-    .map((l) => { try { return JSON.parse(l.slice('RESULTADO_JSON:'.length)); } catch { return null; } })
-    .filter(Boolean);
-
+  // Se guarda cada orden EN CUANTO se lee (no hasta que termine todo el lote): si el proceso se
+  // interrumpe a medio camino (ver incidentes de bateria/sueno del 2026-11-25 y 26, que mataron
+  // el proceso 2 veces sin guardar nada de lo ya escrapeado), solo se pierde lo que faltaba por
+  // leer, no el avance ya hecho.
   let completadas = 0;
   let sinDatos = 0;
-  for (const r of resultados) {
-    if (!r.contacto && !r.hotel && !r.estado) { sinDatos++; continue; }
+  let errores = 0;
+  const pendientes = [];
+
+  const guardarUno = async (r) => {
     try {
       const res = await fetch(`${baseUrl}/api/ordenes/${encodeURIComponent(r.orden)}/completar-direccion-envio`, {
         method: 'POST',
@@ -159,9 +157,37 @@ async function correr(baseUrl, usuario, password) {
       completadas++;
       console.log(`  ✅ ${r.orden} -> hotel=${r.hotel || '(vacio)'} contacto=${r.contacto || '(vacio)'} estado=${r.estado || '(vacio)'}`);
     } catch (e) {
+      errores++;
       console.log(`  ❌ ${r.orden} -> error al guardar: ${e.message}`);
     }
-  }
+  };
 
-  console.log(`\nTotal consultadas: ${resultados.length} | Completadas: ${completadas} | Sin "Dirección de envío": ${sinDatos}`);
+  const procesarLinea = (linea) => {
+    if (!linea.startsWith('RESULTADO_JSON:')) return;
+    let r;
+    try {
+      r = JSON.parse(linea.slice('RESULTADO_JSON:'.length));
+    } catch {
+      return;
+    }
+    if (!r || !r.orden) return;
+    if (!r.contacto && !r.hotel && !r.estado) {
+      sinDatos++;
+      return;
+    }
+    pendientes.push(guardarUno(r));
+  };
+
+  try {
+    await ejecutarPython(['-u', PY_SCRIPT, '--direccion-envio-lote', sinDireccion.join(','), '--headless'], timeoutMs, procesarLinea);
+  } catch (e) {
+    // Aunque truene (timeout, sueno del equipo, etc.), se espera a que terminen de guardarse las
+    // que ya se alcanzaron a leer antes de propagar el error hacia arriba.
+    await Promise.allSettled(pendientes);
+    throw new Error(`Error al consultar NetSuite: ${e.combinado || e.message}`);
+  }
+  await Promise.allSettled(pendientes);
+
+  const total = completadas + sinDatos + errores;
+  console.log(`\nTotal consultadas: ${total} | Completadas: ${completadas} | Sin "Dirección de envío": ${sinDatos}${errores ? ` | Errores al guardar: ${errores}` : ''}`);
 }

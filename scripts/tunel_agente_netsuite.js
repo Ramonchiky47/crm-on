@@ -11,6 +11,14 @@
  * arranca. Por eso este script: (1) lanza cloudflared, (2) lee su salida para capturar la URL
  * asignada, (3) la registra en el CRM, y (4) si cloudflared se cae, lo vuelve a lanzar y repite.
  *
+ * Tambien vigila su propia salud (ver vigilarSalud): varias veces (2026-11-25, 26 y 27) cloudflared
+ * se quedo en un bucle de "context canceled"/"control stream encountered a failure" SIN que el
+ * proceso llegara a salir (tras una caida de red por la Mac quedandose sin bateria y durmiendo) -
+ * el tunel quedaba "conectado" pero sin servir trafico real, y como el proceso nunca salia, la
+ * logica de "si cloudflared se cae, se relanza" nunca se disparaba sola; habia que notarlo y
+ * reiniciar el servicio a mano. Ahora un chequeo periodico pega directo a la URL publica y, si
+ * falla varias veces seguidas, mata el proceso para forzar el relanzamiento.
+ *
  * Requiere AGENTE_NETSUITE_SECRET en .env (el mismo valor que en las variables de entorno de
  * Vercel) y el binario `cloudflared` instalado (`brew install cloudflared`).
  *
@@ -34,6 +42,8 @@ const URL_REGISTRO = 'https://crm-on.vercel.app/api/agente-netsuite/registrar';
 // en esta Mac), asi que se usa la ruta absoluta salvo que se indique otra por entorno.
 const CLOUDFLARED_BIN = process.env.CLOUDFLARED_BIN || '/Users/ramonvillanueva/bin/cloudflared';
 const REINTENTO_MS = 10000;
+const INTERVALO_SALUD_MS = 2 * 60 * 1000;
+const TOPE_FALLOS_SALUD = 2;
 
 function registrarUrl(url) {
   return new Promise((resolve, reject) => {
@@ -67,6 +77,32 @@ function registrarUrl(url) {
 
 function marca() {
   return new Date().toISOString();
+}
+
+// Pega directo a la URL PUBLICA (no a 127.0.0.1): asi el chequeo es representativo de lo que
+// realmente experimenta el frontend/CRM, no solo de si el agente local sigue vivo.
+function comprobarSalud(urlBase) {
+  return new Promise((resolve, reject) => {
+    const destino = new URL(`${urlBase}/health`);
+    const req = https.get(
+      {
+        hostname: destino.hostname,
+        path: destino.pathname,
+        headers: { Authorization: `Bearer ${SECRETO}` },
+        timeout: 15000,
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (c) => { data += c; });
+        res.on('end', () => {
+          if (res.statusCode === 200) return resolve();
+          reject(new Error(`status ${res.statusCode}`));
+        });
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+  });
 }
 
 // cloudflared imprime la URL asignada en stderr, en una linea como:
@@ -107,17 +143,39 @@ function lanzarTunel() {
   // Cloudflare cierra la conexion del tunel cada tanto (mantenimiento, red, etc.); cuando
   // cloudflared muere, se relanza con una URL nueva y se vuelve a registrar.
   proceso.on('exit', (code) => {
+    clearInterval(intervaloRegistro);
+    clearInterval(intervaloSalud);
     console.error(`[${marca()}] cloudflared termino (codigo ${code}); reintentando en ${REINTENTO_MS / 1000}s...`);
     setTimeout(lanzarTunel, REINTENTO_MS);
   });
 
   // Re-registra la URL cada 5 minutos por si el CRM perdio el dato (reinicio, migracion, etc.)
   // aunque el tunel siga vivo.
-  setInterval(() => {
+  const intervaloRegistro = setInterval(() => {
     if (urlRegistrada) {
       registrarUrl(urlRegistrada).catch((e) => console.error(`[${marca()}] Reintento de registro fallo:`, e.message));
     }
   }, 5 * 60 * 1000);
+
+  // Vigilante: cloudflared puede quedarse "vivo" pero atascado reintentando su conexion interna
+  // sin servir trafico real (confirmado varias veces: logs llenos de "context canceled" sin que
+  // el proceso llegara a salir solo). Si la URL publica deja de responder varias veces seguidas,
+  // se mata el proceso a la fuerza para que el handler de 'exit' de arriba lo relance con una
+  // URL/conexion nueva.
+  let fallosSalud = 0;
+  const intervaloSalud = setInterval(() => {
+    if (!urlRegistrada) return;
+    comprobarSalud(urlRegistrada)
+      .then(() => { fallosSalud = 0; })
+      .catch((e) => {
+        fallosSalud += 1;
+        console.error(`[${marca()}] Chequeo de salud del tunel falló (${fallosSalud}/${TOPE_FALLOS_SALUD}): ${e.message}`);
+        if (fallosSalud >= TOPE_FALLOS_SALUD) {
+          console.error(`[${marca()}] El tunel parece atascado (vivo pero sin responder); forzando reinicio...`);
+          proceso.kill('SIGKILL');
+        }
+      });
+  }, INTERVALO_SALUD_MS);
 }
 
 lanzarTunel();

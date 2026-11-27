@@ -389,6 +389,28 @@ function similitudTrigramas(a, b) {
   return (2 * interseccion) / (ta.size + tb.size);
 }
 
+// El catalogo de Contactos mezcla nombre y telefono en el mismo campo de texto libre "nombre" (ej.
+// "Fulano Perez 5512345678"), asi que comparar nombres de contacto significa separar ambas cosas
+// primero: confirmado que esta misma automatizacion ya habia creado 2 contactos distintos para la
+// misma persona (mismo nombre y telefono, solo con distinto formato: "Nombre 5512345678" vs.
+// "Nombre. Cel: 55 1234 5678") antes de este fix.
+function normalizarNombreContacto(texto) {
+  return quitarAcentos(String(texto || ''))
+    .toUpperCase()
+    .replace(/\b(CEL(ULAR)?|TEL(EFONO)?|EXT(ENSION)?|OFICINA|WHATSAPP|WSP)\b\.?:?/g, ' ')
+    .replace(/[\d+().\-]{5,}/g, ' ')
+    .replace(/[^A-Z ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Ultimos 10 digitos (ignora codigo de pais/variaciones de formato) o null si no trae suficientes
+// digitos como para ser un telefono.
+function extraerTelefonoContacto(texto) {
+  const digitos = String(texto || '').replace(/\D/g, '');
+  return digitos.length >= 10 ? digitos.slice(-10) : null;
+}
+
 // Cuenta cuantas ordenes usan un valor de catalogo, para bloquear el borrado con un
 // mensaje claro en vez de dejar que falle en silencio por la restriccion de llave foranea.
 async function contarOrdenesQueUsan(columna, id) {
@@ -633,11 +655,37 @@ async function obtenerOCrearDestino(nombre, fuente = db, creados, opciones = {},
 
 // usuarioId es obligatorio para la fila nueva (contactos.usuario_id es NOT NULL, igual que en el
 // alta manual de POST /api/contactos) - sin el, el INSERT truena con "violates not-null constraint".
-async function obtenerOCrearContacto(nombre, fuente = db, creados, usuarioId = null) {
+// opciones.fuzzy: SOLO lo usa /api/ordenes/:id/completar-direccion-envio. A diferencia de
+// obtenerOCrearDestino, en modo fuzzy esta funcion NO crea un contacto nuevo cuando no encuentra
+// nada parecido (decision explicita: para Hoteles/Local se prefiere crear tal cual venga de
+// NetSuite, pero para Contactos se prefiere dejarlo pendiente de revision humana en vez de poblar
+// el catalogo con mas variantes de la misma persona) - devuelve null y el que llama se encarga de
+// avisar que quedo pendiente (ver completar-direccion-envio).
+async function obtenerOCrearContacto(nombre, fuente = db, creados, usuarioId = null, opciones = {}) {
   const limpio = String(nombre || '').trim();
   if (!limpio) return null;
   const existente = await fuente.prepare('SELECT id_contacto FROM contactos WHERE nombre = ?').get(limpio);
   if (existente) return existente.id_contacto;
+
+  if (opciones.fuzzy) {
+    const nombreBuscado = normalizarNombreContacto(limpio);
+    const telefonoBuscado = extraerTelefonoContacto(limpio);
+    const candidatos = await fuente.prepare('SELECT id_contacto, nombre FROM contactos').all();
+    let mejor = null;
+    let mejorPuntaje = 0;
+    for (const c of candidatos) {
+      const telefonoC = extraerTelefonoContacto(c.nombre);
+      // Si ambos traen telefono y NO coinciden, se descarta aunque el nombre sea identico: muy
+      // probable que sean 2 personas distintas con el mismo nombre comun (el telefono es la unica
+      // senal confiable para distinguirlas, ya que el catalogo no separa nombre de cuenta/hotel).
+      if (telefonoBuscado && telefonoC && telefonoBuscado !== telefonoC) continue;
+      const puntaje = similitudTrigramas(nombreBuscado, normalizarNombreContacto(c.nombre));
+      if (puntaje > mejorPuntaje) { mejorPuntaje = puntaje; mejor = c; }
+    }
+    if (mejor && mejorPuntaje >= 0.85) return mejor.id_contacto;
+    return null;
+  }
+
   const info = await fuente.prepare("INSERT INTO contactos (id_publico, nombre, usuario_id, creado_en) VALUES (?, ?, ?, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))").run(await generarIdContacto(), limpio, usuarioId);
   if (creados) creados.add(limpio);
   return info.lastInsertRowid;
@@ -3424,23 +3472,38 @@ app.post('/api/ordenes/:id/completar-direccion-envio', requirePermiso('ordenes',
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
 
   const cambios = {};
+  let contactoPendiente = null;
   if (!orden.destino_id && req.body.hotel) {
     cambios.destino_id = await obtenerOCrearDestino(req.body.hotel, db, undefined, { fuzzy: true }, req.session.usuarioId);
   }
   if (!orden.contacto_id && req.body.contacto) {
-    cambios.contacto_id = await obtenerOCrearContacto(req.body.contacto, db, undefined, req.session.usuarioId);
+    const contactoId = await obtenerOCrearContacto(req.body.contacto, db, undefined, req.session.usuarioId, { fuzzy: true });
+    if (contactoId) {
+      cambios.contacto_id = contactoId;
+    } else {
+      // No se encontro un contacto ya existente lo bastante parecido (ver obtenerOCrearContacto):
+      // en vez de crear uno nuevo a ciegas y arriesgar otro duplicado de la misma persona, se deja
+      // anotado en la orden para que alguien lo revise y decida (crear el contacto correcto o
+      // reusar uno existente con el nombre bien escrito).
+      contactoPendiente = req.body.contacto;
+      const notaActual = orden.nota || '';
+      const lineaNota = `Contacto pendiente de revisar (NetSuite): "${contactoPendiente}"`;
+      if (!notaActual.includes(lineaNota)) {
+        cambios.nota = notaActual ? `${notaActual}\n${lineaNota}` : lineaNota;
+      }
+    }
   }
   if (!orden.estado_entrega_id && req.body.estado) {
     cambios.estado_entrega_id = await obtenerOCrearEstadoEntrega(req.body.estado);
   }
 
-  if (!Object.keys(cambios).length) return res.json({ ok: true, sinCambios: true });
+  if (!Object.keys(cambios).length) return res.json({ ok: true, sinCambios: true, contactoPendiente });
 
   const campos = Object.keys(cambios);
   await db.prepare(`UPDATE ordenes SET ${campos.map((c) => `${c} = @${c}`).join(', ')} WHERE id = @id`)
     .run({ ...cambios, id: req.params.id });
 
-  res.json({ ok: true, cambios });
+  res.json({ ok: true, cambios, contactoPendiente });
 }));
 
 // Cotizaciones candidatas para asociar a esta orden (la direccion inversa de "Marcar como

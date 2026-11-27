@@ -143,6 +143,7 @@ async function correr(baseUrl, usuario, password) {
   let completadas = 0;
   let sinDatos = 0;
   let errores = 0;
+  const contactosPendientes = [];
   const pendientes = [];
 
   const guardarUno = async (r) => {
@@ -155,7 +156,12 @@ async function correr(baseUrl, usuario, password) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `status ${res.status}`);
       completadas++;
-      console.log(`  ✅ ${r.orden} -> hotel=${r.hotel || '(vacio)'} contacto=${r.contacto || '(vacio)'} estado=${r.estado || '(vacio)'}`);
+      if (data.contactoPendiente) {
+        contactosPendientes.push({ orden: r.orden, contacto: data.contactoPendiente });
+        console.log(`  ⚠️  ${r.orden} -> hotel=${r.hotel || '(vacio)'} contacto=PENDIENTE DE REVISAR ("${data.contactoPendiente}") estado=${r.estado || '(vacio)'}`);
+      } else {
+        console.log(`  ✅ ${r.orden} -> hotel=${r.hotel || '(vacio)'} contacto=${r.contacto || '(vacio)'} estado=${r.estado || '(vacio)'}`);
+      }
     } catch (e) {
       errores++;
       console.log(`  ❌ ${r.orden} -> error al guardar: ${e.message}`);
@@ -190,4 +196,10 @@ async function correr(baseUrl, usuario, password) {
 
   const total = completadas + sinDatos + errores;
   console.log(`\nTotal consultadas: ${total} | Completadas: ${completadas} | Sin "Dirección de envío": ${sinDatos}${errores ? ` | Errores al guardar: ${errores}` : ''}`);
+  if (contactosPendientes.length) {
+    console.log(`\nContactos pendientes de revisar (sin coincidencia confiable en el catálogo, no se crearon solos):`);
+    for (const p of contactosPendientes) {
+      console.log(`  ${p.orden}: "${p.contacto}"`);
+    }
+  }
 }
